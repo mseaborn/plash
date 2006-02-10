@@ -211,9 +211,11 @@ sub gen {
     print $out "  assert(in_obj);\n";
     print $out "  assert($min_code <= in_obj->variant && in_obj->variant < $max_code);\n";
     print $out "  if(in_obj->variant == $v_number) {\n";
-    print $out "    struct $desc->{Name}_$v_name *x = (void *) in_obj;\n";
-    foreach my $n (@$args) {
-      print $out "    if(out_$n->{Name}) *out_$n->{Name} = x->$n->{Name};\n";
+    if(scalar(@$args) > 0) {
+      print $out "    struct $desc->{Name}_$v_name *x = (void *) in_obj;\n";
+      foreach my $n (@$args) {
+	print $out "    if(out_$n->{Name}) *out_$n->{Name} = x->$n->{Name};\n";
+      }
     }
     print $out "    return 1;\n";
     print $out "  }\n";

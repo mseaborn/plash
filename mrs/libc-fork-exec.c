@@ -31,6 +31,7 @@
 #include "region.h"
 #include "comms.h"
 #include "libc-comms.h"
+#include "cap-protocol.h"
 
 
 /* EXPORT: new_fork => WEAK:fork WEAK:__fork WEAK:vfork WEAK:__vfork __libc_fork __GI___fork __GI___vfork */
@@ -57,6 +58,25 @@ pid_t new_fork(void)
       region_free(r);
       pid = fork();
       if(pid == 0) {
+#ifdef SIMPLE_SERVER
+	comm_free(comm);
+	comm = 0;
+#else
+	/* This is generally necessary.  Even though the socket will be
+	   closed by being overwritten by dup below, that doesn't remove
+	   the entry from the connection list, and we'd end up having
+	   two entries with the same socket FD number!  Freeing fs_server
+	   won't close the connection if there are return continuations
+	   that the server failed to deallocate, in the case of server
+	   bugs.  And of course it won't close other connections. */
+	cap_close_all_connections();
+	/* This needs to be done after clearing out the connection list.
+	   Otherwise, dropping this reference could result in sending
+	   a "drop" message which will mess up the parent process's
+	   connection. */
+	filesys_obj_free(fs_server);
+	fs_server = 0;
+#endif
 	/* Re-assign the forked FD to the FD slot used by the parent
 	   process.  That saves us having to change the environment
 	   variable COMM_FD. */
@@ -65,8 +85,6 @@ pid_t new_fork(void)
 	  comm_sock = -2;
 	}
 	close(fd);
-	comm_free(comm);
-	comm = 0;
 	return 0;
       }
       else if(pid < 0) {

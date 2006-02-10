@@ -44,39 +44,49 @@ OPTS_C="-Wall -nostdlib \
 ./mrs/make-config-h.sh
 
 if [ $BUILD_SERVER = yes ]; then
-  OPTS_S="-Wall -g `pkg-config gtk+-2.0 --cflags`"
+  OPTS_S="-O1 -Wall -g `pkg-config gtk+-2.0 --cflags`"
 
   # Server: compiled with glibc
   # Doesn't have to be position-independent (though that doesn't hurt)
   # I used to use dietlibc for this, but then I wanted to link with readline
-  $CC $OPTS_S '-DHALF_NAME="server"' -c mrs/comms.c -o mrs/comms.o
   $CC $OPTS_S -c mrs/region.c -o mrs/region.o
+  $CC $OPTS_S '-DHALF_NAME="server"' -c mrs/comms.c -o mrs/comms.o
+  $CC $OPTS_S -c mrs/cap-protocol.c -o mrs/cap-protocol.o
+  $CC $OPTS_S -c mrs/cap-call-return.c -o mrs/cap-call-return.o
   $CC $OPTS_S -c mrs/utils.c -o mrs/utils.o
   $CC $OPTS_S -c mrs/parse-filename.c -o mrs/parse-filename.o
   $CC $OPTS_S -c mrs/filesysobj.c -o mrs/filesysobj.o
+  $CC $OPTS_S -c mrs/filesysobj-real.c -o mrs/filesysobj-real.o
   $CC $OPTS_S -c mrs/filesysobj-fab.c -o mrs/filesysobj-fab.o
   $CC $OPTS_S -c mrs/filesysslot.c -o mrs/filesysslot.o
   $CC $OPTS_S -c mrs/build-fs.c -o mrs/build-fs.o
-  $CC $OPTS_S -c mrs/shell.c -o mrs/shell.o
   $CC $OPTS_S -DUSE_GTK -c mrs/shell.c -o mrs/shell.o
   $CC $OPTS_S -c mrs/shell.c -o mrs/shell-nogtk.o
-  $CC $OPTS_S -c mrs/shell-parse.c -o mrs/shell-parse.o
+  $CC $OPTS_S -Wno-unused -c mrs/shell-parse.c -o mrs/shell-parse.o
   $CC $OPTS_S -c mrs/shell-variants.c -o mrs/shell-variants.o
   $CC $OPTS_S -c mrs/shell-globbing.c -o mrs/shell-globbing.o
+  $CC $OPTS_S -c mrs/resolve-filename.c -o mrs/resolve-filename.o
+  $CC $OPTS_S -c mrs/fs-operations.c -o mrs/fs-operations.o
   $CC $OPTS_S -c mrs/server.c -o mrs/server.o
   # To link server with dietlibc, you need to do:
   # $CC $OPTS $DIET/bin-i386/start.o ...files... \
   #     $DIET/bin-i386/dietlibc.a -lgcc -o mrs/driver
+  SHELL_OBJS="mrs/server.o mrs/fs-operations.o mrs/resolve-filename.o
+	mrs/cap-call-return.o mrs/cap-protocol.o
+	mrs/filesysslot.o mrs/filesysobj-fab.o mrs/filesysobj-real.o
+	mrs/filesysobj.o
+	mrs/parse-filename.o mrs/comms.o mrs/region.o mrs/utils.o"
   $CC $OPTS_S  \
 	mrs/build-fs.o mrs/shell.o mrs/shell-parse.o mrs/shell-variants.o mrs/shell-globbing.o \
-	mrs/server.o mrs/filesysslot.o mrs/filesysobj-fab.o mrs/filesysobj.o \
-	mrs/parse-filename.o mrs/comms.o mrs/region.o mrs/utils.o \
+	$SHELL_OBJS \
 	-lreadline -ltermcap `pkg-config gtk+-2.0 --libs` -o mrs/shell
   $CC $OPTS_S  \
 	mrs/build-fs.o mrs/shell-nogtk.o mrs/shell-parse.o mrs/shell-variants.o mrs/shell-globbing.o \
-	mrs/server.o mrs/filesysslot.o mrs/filesysobj-fab.o mrs/filesysobj.o \
-	mrs/parse-filename.o mrs/comms.o mrs/region.o mrs/utils.o \
+	$SHELL_OBJS \
 	-lreadline -ltermcap -o mrs/shell-nogtk
+
+  $CC $OPTS_S	\
+	mrs/test-caps.c mrs/filesysobj.o mrs/cap-call-return.o mrs/cap-protocol.o mrs/comms.o mrs/region.o mrs/utils.o -o mrs/test-caps
 fi
 
 
@@ -87,12 +97,18 @@ if [ $BUILD_LIBC = yes -o $BUILD_LDSO = yes ]; then
   $CC $OPTS_C '-DHALF_NAME="client"' -c mrs/comms.c -o mrs/comms.os
   $CC $OPTS_C '-DHALF_NAME="client"' -DIN_RTLD -c mrs/comms.c -o mrs/rtld-comms.os
   $CC $OPTS_C -c mrs/region.c -o mrs/region.os
+  $CC $OPTS_C -c mrs/cap-protocol.c -o mrs/cap-protocol.os
+  $CC $OPTS_C -DIN_RTLD -c mrs/cap-protocol.c -o mrs/rtld-cap-protocol.os
+  $CC $OPTS_C -c mrs/cap-call-return.c -o mrs/cap-call-return.os
   $CC $OPTS_C -c mrs/dont-free.c -o mrs/dont-free.os
+  $CC $OPTS_C -c mrs/filesysobj.c -o mrs/filesysobj.os
   $CC $OPTS_C -c mrs/libc-misc.c -o mrs/libc-misc.os
   $CC $OPTS_C -c mrs/libc-comms.c -o mrs/libc-comms.os
   $CC $OPTS_C -c mrs/libc-fork-exec.c -o mrs/libc-fork-exec.os
   $CC $OPTS_C -c mrs/libc-connect.c -o mrs/libc-connect.os
   $CC $OPTS_C -c mrs/libc-getuid.c -o mrs/libc-getuid.os
+  $CC $OPTS_C -c mrs/libc-utime.c -o mrs/libc-utime.os
+  $CC $OPTS_C -c mrs/libc-truncate.c -o mrs/libc-truncate.os
 
   echo
   # NB. ordering of object files is important
@@ -106,7 +122,8 @@ if [ $BUILD_LIBC = yes -o $BUILD_LDSO = yes ]; then
   # correct headers, will get an inline version instead that refers
   # to io/fxstat.os.  io/xstat64.os is needed to provide __have_no_stat64.
   echo Linking combined.os
-  ld -r mrs/libc-misc.os mrs/libc-fork-exec.os mrs/libc-connect.os mrs/libc-getuid.os mrs/libc-comms.os mrs/comms.os mrs/region.os \
+  ld -r mrs/libc-misc.os mrs/libc-fork-exec.os mrs/libc-connect.os mrs/libc-getuid.os mrs/libc-utime.os mrs/libc-truncate.os \
+	mrs/libc-comms.os mrs/cap-call-return.os mrs/cap-protocol.os mrs/filesysobj.os mrs/comms.os mrs/region.os \
 	posix/getuid.os posix/getgid.os \
 	posix/fork.os posix/execve.os socket/connect.os socket/bind.os \
 	io/fstat.oS io/fxstat.os io/xstat64.os io/xstatconv.os \
@@ -115,7 +132,8 @@ if [ $BUILD_LIBC = yes -o $BUILD_LDSO = yes ]; then
   EXTRA="mrs/combined.os mrs/sysdeps/not-cancel.os"
 
   echo Linking rtld-combined.os
-  ld -r mrs/libc-misc.os mrs/libc-comms.os mrs/rtld-comms.os mrs/region.os \
+  ld -r mrs/libc-misc.os mrs/libc-getuid.os \
+	mrs/libc-comms.os mrs/cap-call-return.os mrs/rtld-cap-protocol.os mrs/filesysobj.os mrs/rtld-comms.os mrs/region.os \
 	mrs/dont-free.os \
 	socket/rtld-recvmsg.os socket/rtld-sendmsg.os socket/rtld-send.os socket/cmsg_nxthdr.os \
 	io/rtld-fstat.os io/rtld-fxstat.os io/rtld-xstat64.os io/rtld-xstatconv.os \
@@ -288,7 +306,7 @@ case $GLIBC_VERSION in
 	-Wl,-rpath-link=.:math:elf:dlfcn:nss:nis:rt:resolv:crypt:linuxthreads \
 	-o libc.so.new \
 	csu/abi-note.o -Wl,--verbose -lgcc 2>&1 | sed -e '/^=========/,/^=========/!d;/^=========/d' -e 's/^.*\.hash[ 	]*:.*$/  .note.ABI-tag : { *(.note.ABI-tag) } &/' > mrs/libc.so.lds
-    echo Linking
+    echo Linking libc.so
     # args not used (says gcc): -Bsysdeps/../csu/
     $CC -shared -Wl,-O1 \
 	-Wl,-dynamic-linker=/usr/local/lib/ld-linux.so.2 \
@@ -314,7 +332,7 @@ case $GLIBC_VERSION in
 	 PROVIDE(__start___libc_freeres_ptrs = .); \
 	 *(__libc_freeres_ptrs) \
 	 PROVIDE(__stop___libc_freeres_ptrs = .);/'
-    echo Linking
+    echo Linking libc.so
     echo NB. removed -Wl,-O1
     $CC -Wl,--stats,--no-keep-memory \
 	-shared -static-libgcc -Wl,-z,defs \

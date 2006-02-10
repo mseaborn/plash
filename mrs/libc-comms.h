@@ -22,13 +22,17 @@
 
 #include "region.h"
 #include "comms.h"
+#include "filesysobj.h"
 
+
+int new_open(const char *filename, int flags, ...);
 
 
 #define __set_errno(x) (errno = (x))
 
 extern int comm_sock;
 extern struct comm *comm;
+extern cap_t fs_server;
 
 int send_req(region_t r, seqt_t msg);
 int get_reply(seqf_t *msg, fds_t *fds);

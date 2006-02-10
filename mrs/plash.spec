@@ -1,6 +1,6 @@
 Summary: Principle of Least Authority Shell (Plash)
 Name: plash
-Version: 1.3
+Version: 1.4
 Release: 1
 Packager: Mark Seaborn <mseaborn@jhu.edu>
 Copyright: GPL and LGPL

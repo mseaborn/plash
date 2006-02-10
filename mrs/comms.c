@@ -79,7 +79,7 @@ int recv_with_fds(int sock, char *buffer, int buffer_size,
   }
 
   for(cmsg = CMSG_FIRSTHDR(&msghdr); cmsg; cmsg = CMSG_NXTHDR(&msghdr, cmsg)) {
-    int *data = CMSG_DATA(cmsg);
+    int *data = (void *) CMSG_DATA(cmsg);
     int len = cmsg->cmsg_len - CMSG_LEN(0);
     assert(len >= 0);
     if(cmsg->cmsg_level == SOL_SOCKET &&

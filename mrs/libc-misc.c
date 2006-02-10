@@ -27,10 +27,7 @@
 #include <unistd.h>
 /* #include <dirent.h> We have our own types */
 #include <sys/stat.h>
-#include <sys/socket.h>
 #include <sys/un.h>
-#include <sys/time.h>
-#include <utime.h>
 
 #include "region.h"
 #include "comms.h"
@@ -1072,105 +1069,6 @@ int new_lchown(const char *pathname, unsigned int owner, unsigned int group)
 {
   __set_errno(ENOSYS);
   return -1;
-}
-
-int my_utimes(int nofollow, const char *pathname,
-	      struct timeval *atime, struct timeval *mtime)
-{
-  region_t r = region_make();
-  seqf_t reply;
-  if(!pathname || !atime || !mtime) {
-    __set_errno(EINVAL);
-    goto error;
-  }
-  if(req_and_reply(r,
-		   cat4(r, mk_string(r, "Utim"),
-			mk_int(r, nofollow),
-			cat4(r,
-			  mk_int(r, atime->tv_sec), mk_int(r, atime->tv_usec),
-			  mk_int(r, mtime->tv_sec), mk_int(r, mtime->tv_usec)),
-			mk_string(r, pathname)), &reply) < 0) goto error;
-  {
-    seqf_t msg = reply;
-    int ok = 1;
-    m_str(&ok, &msg, "RUtm");
-    m_end(&ok, &msg);
-    if(ok) {
-      region_free(r);
-      return 0;
-    }
-  }
-  {
-    seqf_t msg = reply;
-    int err;
-    int ok = 1;
-    m_str(&ok, &msg, "Fail");
-    m_int(&ok, &msg, &err);
-    if(ok) {
-      __set_errno(err);
-      goto error;
-    }
-  }
-
-  __set_errno(ENOSYS);
- error:
-  region_free(r);
-  return -1;
-}
-
-/* EXPORT: new_utime => WEAK:utime __utime __GI_utime */
-int new_utime(const char *path, struct utimbuf *buf)
-{
-  if(buf) {
-    struct timeval atime, mtime;
-    atime.tv_sec = buf->actime;
-    atime.tv_usec = 0;
-    mtime.tv_sec = buf->modtime;
-    mtime.tv_usec = 0;
-    return my_utimes(0 /* nofollow */, path, &atime, &mtime);
-  }
-  else {
-    struct timeval time;
-    if(gettimeofday(&time, 0) < 0) return -1;
-    return my_utimes(0 /* nofollow */, path, &time, &time);
-  }
-}
-
-/* EXPORT: new_utimes => WEAK:utimes __utimes */
-int new_utimes(const char *path, struct timeval times[2])
-{
-  if(times) {
-    return my_utimes(0 /* nofollow */, path, &times[0], &times[1]);
-  }
-  else {
-    struct timeval time;
-    if(gettimeofday(&time, 0) < 0) return -1;
-    return my_utimes(0 /* nofollow */, path, &time, &time);
-  }
-}
-
-/* EXPORT: new_lutimes => WEAK:lutimes __lutimes */
-int new_lutimes(const char *path, struct timeval times[2])
-{
-  if(times) {
-    return my_utimes(1 /* nofollow */, path, &times[0], &times[1]);
-  }
-  else {
-    struct timeval time;
-    if(gettimeofday(&time, 0) < 0) return -1;
-    return my_utimes(1 /* nofollow */, path, &time, &time);
-  }
-}
-
-/* EXPORT: new_truncate => truncate __GI_truncate */
-int new_truncate(const char *path, off_t length)
-{
-  int rc;
-  int fd = new_open(path, O_WRONLY, 0);
-  if(fd < 0) return -1;
-  rc = ftruncate(fd, length);
-  close(fd);
-  return rc;
 }
 
 /* EXPORT: new_rename => rename __GI_rename */

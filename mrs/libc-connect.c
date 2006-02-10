@@ -38,13 +38,16 @@ int new_connect(int sock_fd, const struct sockaddr *addr, socklen_t addr_len)
 {
   if(!addr) { __set_errno(EINVAL); return -1; }
   if(addr->sa_family == AF_LOCAL) {
-    region_t r = region_make();
+    region_t r;
     seqf_t reply;
     fds_t reply_fds;
     struct sockaddr_un *addr2 = (void *) addr;
+    int sock_fd_copy = dup(sock_fd);
+    if(sock_fd_copy < 0) return -1;
+    r = region_make();
     if(req_and_reply_with_fds2(r, cat2(r, mk_string(r, "Fcon"),
 				       mk_string(r, addr2->sun_path)),
-			       mk_fds1(r, sock_fd),
+			       mk_fds1(r, sock_fd_copy),
 			       &reply, &reply_fds) < 0) goto error;
     close_fds(reply_fds);
     {
@@ -85,13 +88,16 @@ int new_bind(int sock_fd, struct sockaddr *addr, socklen_t addr_len)
 {
   if(!addr) { __set_errno(EINVAL); return -1; }
   if(addr->sa_family == AF_LOCAL) {
-    region_t r = region_make();
+    region_t r;
     seqf_t reply;
     fds_t reply_fds;
     struct sockaddr_un *addr2 = (void *) addr;
+    int sock_fd_copy = dup(sock_fd);
+    if(sock_fd_copy < 0) return -1;
+    r = region_make();
     if(req_and_reply_with_fds2(r, cat2(r, mk_string(r, "Fbnd"),
 				       mk_string(r, addr2->sun_path)),
-			       mk_fds1(r, sock_fd),
+			       mk_fds1(r, sock_fd_copy),
 			       &reply, &reply_fds) < 0) goto error;
     close_fds(reply_fds);
     {

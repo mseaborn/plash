@@ -174,7 +174,7 @@ seqt_t mk_repeat(region_t r, char c, int n)
 static char *flatten_aux(char *data, struct seq_tree_node *node)
 {
   /* Remember, the subtree count is negated */
-  if(node->subtree_count <= 0) {
+  if(node->subtree_count < 0) {
     int i;
     for(i = 0; i < -node->subtree_count; i++) {
       data = flatten_aux(data, node->subtrees[i]);
@@ -182,7 +182,7 @@ static char *flatten_aux(char *data, struct seq_tree_node *node)
     return data;
   }
   else {
-    struct seq_tree_leaf *leaf = (void*) node;
+    struct seq_tree_leaf *leaf = (void *) node;
     memcpy(data, leaf->data, leaf->size);
     return data + leaf->size;
   }
@@ -209,6 +209,18 @@ seqf_t flatten0(region_t r, seqt_t seq)
   flatten_aux(buf, seq.t);
   buf[seq.size] = 0;
   return flat;
+}
+
+seqf_t flatten_reuse(region_t r, seqt_t seq)
+{
+  if(seq.t->subtree_count < 0) {
+    return flatten(r, seq);
+  }
+  else {
+    struct seq_tree_leaf *leaf = (void *) seq.t;
+    seqf_t flat = { leaf->data, leaf->size };
+    return flat;
+  }
 }
 
 void close_fds(fds_t fds)

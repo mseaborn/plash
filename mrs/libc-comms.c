@@ -22,13 +22,11 @@
 #include "region.h"
 #include "comms.h"
 #include "libc-comms.h"
+#include "cap-protocol.h"
 
 
 char *glibc_getenv(const char *name);
 
-
-int comm_sock = -1;
-struct comm *comm = 0;
 
 static int my_atoi(const char *str)
 {
@@ -39,6 +37,12 @@ static int my_atoi(const char *str)
   }
   return x;
 }
+
+
+#ifdef SIMPLE_SERVER
+
+int comm_sock = -1;
+struct comm *comm = 0;
 
 static int init()
 {
@@ -54,19 +58,6 @@ static int init()
   if(!comm) {
     comm = comm_init(comm_sock);
   }
-  return 0;
-}
-
-int send_req(region_t r, seqt_t msg)
-{
-  if(init() < 0) { return -1; }
-  return comm_send(r, comm_sock, msg, fds_empty);
-}
-
-int get_reply(seqf_t *msg, fds_t *fds)
-{
-  if(init() < 0) { return -1; }
-  if(comm_get(comm, msg, fds) <= 0) { return -1; }
   return 0;
 }
 
@@ -94,3 +85,61 @@ int req_and_reply(region_t r, seqt_t msg, seqf_t *reply)
   close_fds(fds);
   return 0;
 }
+
+#else
+
+int comm_sock = -1;
+cap_t fs_server = 0;
+
+static int init()
+{
+  if(!fs_server) {
+    region_t r;
+    cap_t *caps;
+    
+    char *var = glibc_getenv("COMM_FD");
+    if(!var) { __set_errno(ENOSYS); return -1; }
+    comm_sock = my_atoi(var);
+
+    r = region_make();
+    caps = cap_make_connection(r, comm_sock, caps_empty, 1, "to-server");
+    fs_server = caps[0];
+    region_free(r);
+  }
+  return 0;
+}
+
+int req_and_reply(region_t r, seqt_t msg, seqf_t *reply)
+{
+  seqt_t reply1;
+  cap_seq_t reply_caps;
+  fds_t reply_fds;
+  init();
+  fs_server->vtable->cap_call(fs_server, r, msg, caps_empty, fds_empty,
+			      &reply1, &reply_caps, &reply_fds);
+  caps_free(reply_caps);
+  close_fds(reply_fds);
+  *reply = flatten_reuse(r, reply1);
+  return 0;
+}
+
+int req_and_reply_with_fds2(region_t r, seqt_t msg, fds_t fds,
+			    seqf_t *reply, fds_t *reply_fds)
+{
+  seqt_t reply1;
+  cap_seq_t reply_caps;
+  init();
+  fs_server->vtable->cap_call(fs_server, r, msg, caps_empty, fds,
+			      &reply1, &reply_caps, reply_fds);
+  caps_free(reply_caps);
+  *reply = flatten_reuse(r, reply1);
+  return 0;
+}
+
+int req_and_reply_with_fds(region_t r, seqt_t msg,
+			   seqf_t *reply, fds_t *reply_fds)
+{
+  return req_and_reply_with_fds2(r, msg, fds_empty, reply, reply_fds);
+}
+
+#endif

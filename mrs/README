@@ -431,6 +431,10 @@ Shared between client (libc) and server:
        one go.
      * An abstraction for building messages using concatenation.
   comms.[ch] -- Send and receive messages (with FDs) across sockets
+  cap-protocol.[ch] -- Object-capability protocol, for transferring
+	references to objects and FDs across a socket
+  cap-call-return.c -- Implements the convention for receiving results
+	from invoking an object using the object-capability protocol
 
 libc:
   make-link-def.sh
@@ -439,22 +443,29 @@ libc:
     comments in C files.
   files-to-link.sh
   libc-comms.[ch]
-  libc-connect.c -- provides the connect() function
+  libc-connect.c -- provides the connect() and bind() functions
   libc-fork-exec.c -- provides fork() and execve()
+  libc-utime.c -- utime(), utimes(), lutimes()
+  libc-truncate.c -- truncate()
   libc-misc.c -- provides all the other functions to put into libc
 
 server:
   parse-filename.[ch]
-  filesysobj.h -- Filesystem object abstraction: files, dirs, symlinks
-  filesysobj.c -- Implements "real" filesystem objects, ie. those based
+  filesysobj.[ch] -- Filesystem object abstraction: files, dirs, symlinks.
+	Also provides a more general object model for use via the
+	object-capability protocol.
+  filesysobj-real.c -- Implements "real" filesystem objects, ie. those based
                   on objects implemented by the kernel
   filesysobj-fab.[ch] -- "Fabricated" objects, implemented entirely in
                   the server, which may contain references to other
                   objects.
   filesysslot.[ch] -- "Slot" objects: these are used to represent a
                   single entry in a directory.
-  server.[ch]
-    Handles filename resolution, and connections to clients.
+  resolve-filename.[ch] -- Traverses the filesystem to look up a pathname
+	and return a filesystem object.
+  fs-operations.[ch] -- Implements all of the Unix filesystem operations
+	(open() etc.) in terms of the filesystem objects above.
+  server.[ch] -- Earlier version of the protocol.
 
 shell:
   build-fs.[ch] -- Constructs a filesystem given the files that are to

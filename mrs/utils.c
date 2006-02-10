@@ -18,6 +18,7 @@
    USA.  */
 
 #include <stdio.h>
+#include <stdarg.h>
 
 #include "region.h"
 
@@ -53,4 +54,17 @@ void fprint_data(FILE *fp, seqf_t b)
 void fprint_d(FILE *fp, seqf_t b)
 {
   fwrite(b.data, b.size, 1, fp);
+}
+
+seqt_t mk_printf(region_t r, const char *fmt, ...)
+{
+  char buf[256], *x;
+  va_list args;
+  int got;
+
+  va_start(args, fmt);
+  got = vsnprintf(buf, sizeof(buf), fmt, args);
+  x = region_alloc(r, got);
+  memcpy(x, buf, got);
+  return mk_leaf2(r, x, got);
 }

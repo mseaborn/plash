@@ -104,7 +104,7 @@ void fab_dir_free(struct filesys_obj *obj1)
 /* Device number reported by stat.  FIXME: avoid clashes? */
 #define STAT_DEVICE 100
 
-int fab_dir_stat(struct filesys_obj *obj, struct stat *st)
+int fab_dir_stat(struct filesys_obj *obj, struct stat *st, int *err)
 {
   struct fab_dir *dir = (void *) obj;
   st->st_dev = STAT_DEVICE;
@@ -157,11 +157,14 @@ int fab_dir_list(struct filesys_obj *obj, region_t r, seqt_t *result, int *err)
 struct filesys_obj_vtable fab_dir_vtable = {
   /* .type = */ OBJT_DIR,
   /* .free = */ fab_dir_free,
+  /* .cap_invoke = */ 0,
+  /* .cap_call = */ 0,
+  /* .single_use = */ 0,
   /* .stat = */ fab_dir_stat,
   /* .utimes = */ refuse_utimes,
   /* .chmod = */ refuse_chmod,
   /* .open = */ dummy_open,
-  /* .connect = */ dummy_connect,
+  /* .socket_connect = */ dummy_socket_connect,
   /* .traverse = */ fab_dir_traverse,
   /* .list = */ fab_dir_list,
   /* .create_file = */ refuse_create_file,
@@ -183,7 +186,7 @@ void fab_symlink_free(struct filesys_obj *obj1)
   free((char *) obj->dest.data);
 }
 
-int fab_symlink_stat(struct filesys_obj *obj, struct stat *st)
+int fab_symlink_stat(struct filesys_obj *obj, struct stat *st, int *err)
 {
   struct fab_symlink *sym = (void *) obj;
   st->st_dev = STAT_DEVICE;
@@ -212,11 +215,14 @@ int fab_symlink_readlink(struct filesys_obj *obj, region_t r, seqf_t *result, in
 struct filesys_obj_vtable fab_symlink_vtable = {
   /* .type = */ OBJT_SYMLINK,
   /* .free = */ fab_symlink_free,
+  /* .cap_invoke = */ 0,
+  /* .cap_call = */ 0,
+  /* .single_use = */ 0,
   /* .stat = */ fab_symlink_stat,
   /* .utimes = */ refuse_utimes,
   /* .chmod = */ dummy_chmod,
   /* .open = */ dummy_open,
-  /* .connect = */ dummy_connect,
+  /* .socket_connect = */ dummy_socket_connect,
   /* .traverse = */ dummy_traverse,
   /* .list = */ dummy_list,
   /* .create_file = */ dummy_create_file,
@@ -246,7 +252,7 @@ void s_fab_dir_free(struct filesys_obj *obj1)
   }
 }
 
-int s_fab_dir_stat(struct filesys_obj *obj, struct stat *st)
+int s_fab_dir_stat(struct filesys_obj *obj, struct stat *st, int *err)
 {
   struct s_fab_dir *dir = (void *) obj;
   st->st_dev = STAT_DEVICE;
@@ -382,11 +388,14 @@ int s_fab_dir_socket_bind(struct filesys_obj *obj, const char *leaf,
 struct filesys_obj_vtable s_fab_dir_vtable = {
   /* .type = */ OBJT_DIR,
   /* .free = */ s_fab_dir_free,
+  /* .cap_invoke = */ 0,
+  /* .cap_call = */ 0,
+  /* .single_use = */ 0,
   /* .stat = */ s_fab_dir_stat,
   /* .utimes = */ refuse_utimes,
   /* .chmod = */ refuse_chmod,
   /* .open = */ dummy_open,
-  /* .connect = */ dummy_connect,
+  /* .socket_connect = */ dummy_socket_connect,
   /* .traverse = */ s_fab_dir_traverse,
   /* .list = */ s_fab_dir_list,
   /* .create_file = */ s_fab_dir_create_file,

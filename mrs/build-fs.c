@@ -62,6 +62,23 @@ struct node *make_empty_node()
   return n;
 }
 
+void free_node(struct node *node)
+{
+  struct node_list *l = node->children;
+  while(l) {
+    struct node_list *next = l->next;
+    free(l->name);
+    free_node(l->node);
+    free(l);
+    l = next;
+  }
+
+  if(node->attach_ro_obj) filesys_obj_free(node->attach_ro_obj);
+  if(node->attach_rw_obj) filesys_slot_free(node->attach_rw_obj);
+  if(node->symlink_dest) free(node->symlink_dest);
+  free(node);
+}
+
 /* Move down the filesystem being constructed.  Create a new node
    if necessary. */
 struct node *tree_traverse(struct node *node, const char *name)
@@ -126,6 +143,10 @@ void dirnode_stack_free(struct dirnode_stack *st)
   }
 }
 
+/* Converts a dir_stack to a dirnode_stack, populating the filesystem
+   tree as it goes. */
+/* Arguments `root' and `cwd' are taken as non-owning references.
+   Returns an owning reference. */
 struct dirnode_stack *cwd_populate(struct dirnode_stack *root,
 				   struct dir_stack *cwd)
 {
@@ -357,6 +378,7 @@ int resolve_populate
 
 static int next_inode = 1;
 
+/* Returns an owning reference. */
 struct filesys_slot *build_fs(struct node *node)
 {
   if(node->symlink_dest) {
@@ -368,8 +390,14 @@ struct filesys_slot *build_fs(struct node *node)
     sym->inode = next_inode++;
     return make_read_only_slot((struct filesys_obj *) sym);
   }
-  else if(node->attach_rw_obj) return node->attach_rw_obj;
-  else if(node->attach_ro_obj) return make_read_only_slot(node->attach_ro_obj);
+  else if(node->attach_rw_obj) {
+    node->attach_rw_obj->refcount++;
+    return node->attach_rw_obj;
+  }
+  else if(node->attach_ro_obj) {
+    node->attach_ro_obj->refcount++;
+    return make_read_only_slot(node->attach_ro_obj);
+  }
   else {
     /* Construct directory */
     struct s_fab_dir *dir = amalloc(sizeof(struct fab_dir));

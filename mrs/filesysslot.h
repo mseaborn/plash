@@ -31,10 +31,13 @@ struct filesys_slot {
 struct filesys_slot_vtable {
   void (*free)(struct filesys_slot *obj);
   struct filesys_obj *(*get)(struct filesys_slot *obj); /* Returns 0 if slot is currently empty */
-  int (*create_file)(struct filesys_slot *obj, int flags, int mode, int *err);
-  int (*mkdir)(struct filesys_slot *slot, int mode, int *err);
-  int (*unlink)(struct filesys_slot *slot, int *err);
-  int (*rmdir)(struct filesys_slot *slot, int *err);
+  int (*slot_create_file)(struct filesys_slot *obj, int flags, int mode,
+			  int *err);
+  int (*slot_mkdir)(struct filesys_slot *slot, int mode, int *err);
+  int (*slot_symlink)(struct filesys_slot *slot, const char *oldpath, int *err);
+  int (*slot_unlink)(struct filesys_slot *slot, int *err);
+  int (*slot_rmdir)(struct filesys_slot *slot, int *err);
+  int (*slot_socket_bind)(struct filesys_slot *slot, int sock_fd, int *err);
   int sentinel; /* For type checking purposes */
 };
 

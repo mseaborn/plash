@@ -44,6 +44,7 @@
 #include "shell-variants.h"
 #include "shell.h"
 #include "build-fs.h"
+#include "shell-globbing.h"
 
 int f_command(region_t r, const char *pos_in1, const char *end,
 	      const char **pos_out_p, void **ok_val_p);
@@ -101,16 +102,30 @@ struct process_desc {
   const char **argv; /* Array needs to include null terminator */
   fds_t fds;
 };
+struct process_desc_sec {
+  struct process_desc d;
+  int comm_fd;
+};
 struct process_desc_nosec {
   struct process_desc d;
   /* For processes started the conventional way, we need to set the cwd
      to the shell's logical cwd. */
   int cwd_fd;
 };
-void set_up_sec_process(struct process_desc *desc) {
-  /* char buf[10];
-     snprintf(buf, sizeof(buf), "%i", socks[1]); */
-  setenv("COMM_FD", "3", 1);
+void set_up_sec_process(struct process_desc *desc1) {
+  struct process_desc_sec *desc = (void *) desc1;
+  char buf[10];
+
+  snprintf(buf, sizeof(buf), "%i", getuid());
+  setenv("PLASH_FAKE_UID", buf, 1);
+  setenv("PLASH_FAKE_EUID", buf, 1);
+  snprintf(buf, sizeof(buf), "%i", getgid());
+  setenv("PLASH_FAKE_GID", buf, 1);
+  setenv("PLASH_FAKE_EGID", buf, 1);
+
+  snprintf(buf, sizeof(buf), "%i", desc->comm_fd);
+  setenv("COMM_FD", buf, 1);
+
   /* Necessary for security when using run-as-nobody, otherwise the
      process can be left in a directory with read/write access which
      might not be reachable from the root directory. */
@@ -183,18 +198,44 @@ seqf_t flatten_charlist(region_t r, struct char_cons *list)
   return result;
 }
 
-struct str_list {
-  struct str_list *prev;
-  char *str;
+/* FD array.  An entry of -1 means that the FD is not open. */
+/* This is allocated in a region.  Resizing doesn't reallocate the old
+   array. */
+/* Like struct seq_fds, but intended to be writable. */
+struct fd_array {
+  int *fds;
+  int count;
 };
+
+void array_set_fd(region_t r, struct fd_array *array, int j, int x) {
+  /* Enlarge file descriptor array if necessary. */
+  if(j >= array->count) {
+    int i;
+    int new_size = j + 1 + 10;
+    int *fds_new = region_alloc(r, new_size * sizeof(int));
+    memcpy(fds_new, array->fds, array->count * sizeof(int));
+    for(i = array->count; i < new_size; i++) fds_new[i] = -1;
+    array->fds = fds_new;
+    array->count = new_size;
+  }
+  array->fds[j] = x;
+}
+int array_get_free_index(struct fd_array *array) {
+  int i;
+  for(i = 0; i < array->count; i++) {
+    if(array->fds[i] < 0) return i;
+  }
+  return array->count;
+}
+
 struct flatten_params {
-  struct str_list *got;
+  struct str_list **got_end;
   struct filesys_obj *root_dir;
-  struct node *tree;
   struct dir_stack *cwd;
-};
-struct flatten_params_nosec {
-  struct str_list *got;
+  /* This is zero if we're not constructing a filesystem.
+     Used for the `!!' syntax. */
+  struct node *tree;
+  struct fd_array fds;
 };
 
 /* Returns 0 if ok, non-zero for an error. */
@@ -225,7 +266,11 @@ int flatten_args(region_t r, struct flatten_params *p,
   {
     struct arg_list *a;
     if(m_arg_ambient(args, &a)) {
-      return flatten_args(r, p, rw, 1, a);
+      if(p->tree) return flatten_args(r, p, rw, 1, a);
+      else {
+	printf("plash: ambient args list ignored\n");
+	return 0;
+      }
     }
   }
   {
@@ -233,27 +278,80 @@ int flatten_args(region_t r, struct flatten_params *p,
     if(m_arg_filename(args, &f)) {
       seqf_t filename = tilde_expansion(r, flatten_charlist(r, f));
       int err;
-      
-      if(resolve_populate(p->root_dir, p->tree, p->cwd,
-			  filename, rw /* create */, &err) < 0) {
-	printf("plash: error in resolving filename `");
-	fprint_d(stdout, filename);
-	printf("'\n");
+
+      if(p->tree) {
+	if(resolve_populate(p->root_dir, p->tree, p->cwd,
+			    filename, rw /* create */, &err) < 0) {
+	  printf("plash: error in resolving filename `");
+	  fprint_d(stdout, filename);
+	  printf("'\n");
+	}
       }
       if(!ambient) {
 	struct str_list *l = region_alloc(r, sizeof(struct str_list));
-	l->str = (char*) filename.data;
-	l->prev = p->got;
-	p->got = l;
+	l->str = (char *) filename.data;
+	l->next = 0;
+	*p->got_end = l;
+	p->got_end = &l->next;
       }
       return 0;
     }
   }
   {
-    struct char_cons *f;
+    struct glob_path *f;
     if(m_arg_glob_filename(args, &f)) {
-      printf("plash: globbing not implemented\n");
-      return 1;
+      seqt_t filename1;
+      if(filename_of_glob_path(r, f, &filename1) >= 0) {
+	seqf_t filename = flatten0(r, filename1);
+	int err;
+
+	if(p->tree) {
+	  if(resolve_populate(p->root_dir, p->tree, p->cwd,
+			      filename, rw /* create */, &err) < 0) {
+	    printf("plash: error in resolving filename `");
+	    fprint_d(stdout, filename);
+	    printf("'\n");
+	  }
+	}
+	if(!ambient) {
+	  struct str_list *l = region_alloc(r, sizeof(struct str_list));
+	  l->str = (char *) filename.data;
+	  l->next = 0;
+	  *p->got_end = l;
+	  p->got_end = &l->next;
+	}
+	return 0;
+      }
+      else {
+	struct glob_params gp;
+	struct str_list *args_got = 0, *l;
+	int err;
+      
+	gp.got_end = &args_got;
+	glob_resolve(r, p->root_dir, p->cwd, f, &gp);
+
+	if(p->tree) {
+	  for(l = args_got; l; l = l->next) {
+	    if(resolve_populate(p->root_dir, p->tree, p->cwd,
+				seqf_string(l->str), rw /* create */, &err) < 0) {
+	      /* This error shouldn't happen unless the filesystem changes
+		 underneath us. */
+	      printf("plash: error in resolving globbed filename `%s'\n", l->str);
+	    }
+	  }
+	}
+	if(args_got) {
+	  if(!ambient) {
+	    /* This only works if the list to be added is non-empty. */
+	    *p->got_end = args_got;
+	    p->got_end = gp.got_end;
+	  }
+	}
+	else {
+	  printf("plash: glob pattern matched nothing\n");
+	}
+	return 0;
+      }
     }
   }
   {
@@ -263,8 +361,9 @@ int flatten_args(region_t r, struct flatten_params *p,
       if(!ambient) {
 	struct str_list *l = region_alloc(r, sizeof(struct str_list));
 	l->str = (char*) string.data;
-	l->prev = p->got;
-	p->got = l;
+	l->next = 0;
+	*p->got_end = l;
+	p->got_end = &l->next;
       }
       else {
 	printf("warning: string argument \"%s\" in ambient arg list (ignored)\n", string.data);
@@ -272,67 +371,64 @@ int flatten_args(region_t r, struct flatten_params *p,
       return 0;
     }
   }
-  assert(0);
-  return 1;
-}
+  {
+    struct char_cons *fd;
+    int type;
+    struct redir_dest *dest;
+    if(m_arg_redirection(args, &fd, &type, &dest)) {
+      struct char_cons *dest_fd, *dest_file;
+      int fd_no, fd_dest;
+      if(fd) {
+	seqf_t string = flatten_charlist(r, fd);
+	fd_no = atoi(string.data);
+      }
+      else {
+	switch(type) {
+	  case REDIR_IN: fd_no = 0; break;
+	  case REDIR_OUT_TRUNC: fd_no = 1; break;
+	  case REDIR_OUT_APPEND: fd_no = 1; break;
+	  case REDIR_IN_OUT: fd_no = 0; /* Odd, but it's what bash does */ break;
+	  default: assert(0); return 1;
+	}
+      }
+      
+      if(m_dest_fd(dest, &dest_fd)) {
+	/* The redirection type (>, >> or <) is ignored in this case. */
+	/* FIXME: check FD, as bash does, to see whether it's opened
+	   for reading/writing, and it least warn if not. */
+	seqf_t string = flatten_charlist(r, dest_fd);
+	int i = atoi(string.data);
+	if(i < p->fds.count && p->fds.fds[i] >= 0) {
+	  fd_dest = p->fds.fds[i];
+	}
+	else {
+	  printf("plash: file descriptor %i not open\n", i);
+	  return 1;
+	}
+      }
+      else if(m_dest_file(dest, &dest_file)) {
+	seqf_t filename = flatten_charlist(r, dest_file);
+	int flags, err;
+	switch(type) {
+	  case REDIR_IN: flags = O_RDONLY; break;
+	  case REDIR_OUT_TRUNC: flags = O_WRONLY | O_CREAT | O_TRUNC; break;
+	  case REDIR_OUT_APPEND: flags = O_WRONLY | O_CREAT | O_APPEND; break;
+	  case REDIR_IN_OUT: flags = O_RDWR | O_CREAT; break;
+	  default: assert(0); return 1;
+	}
+	fd_dest = process_open(p->root_dir, p->cwd, filename,
+			       flags, 0666, &err);
+	if(fd_dest < 0) {
+	  printf("plash: couldn't open `");
+	  fprint_d(stdout, filename);
+	  printf("' for redirection\n");
+	  return 1;
+	}
+	region_add_finaliser(r, finalise_close_fd, (void *) fd_dest);
+      }
+      else { assert(0); return 1; }
 
-int flatten_args_nosec(region_t r, struct flatten_params_nosec *p,
-		       struct arg_list *args)
-{
-  if(m_arg_empty(args)) return 0;
-  {
-    struct arg_list *a1, *a2;
-    if(m_arg_cat(args, &a1, &a2)) {
-      return
-	flatten_args_nosec(r, p, a1) ||
-	flatten_args_nosec(r, p, a2);
-    }
-  }
-  {
-    struct arg_list *a;
-    if(m_arg_read(args, &a)) {
-      return flatten_args_nosec(r, p, a);
-    }
-  }
-  {
-    struct arg_list *a;
-    if(m_arg_write(args, &a)) {
-      return flatten_args_nosec(r, p, a);
-    }
-  }
-  {
-    struct arg_list *a;
-    if(m_arg_ambient(args, &a)) {
-      printf("plash: ambient args list ignored\n");
-      return 0;
-    }
-  }
-  {
-    struct char_cons *f;
-    if(m_arg_filename(args, &f)) {
-      seqf_t filename = tilde_expansion(r, flatten_charlist(r, f));
-      struct str_list *l = region_alloc(r, sizeof(struct str_list));
-      l->str = (char*) filename.data;
-      l->prev = p->got;
-      p->got = l;
-      return 0;
-    }
-  }
-  {
-    struct char_cons *f;
-    if(m_arg_glob_filename(args, &f)) {
-      printf("plash: globbing not implemented\n");
-      return 1;
-    }
-  }
-  {
-    struct char_cons *s;
-    if(m_arg_string(args, &s)) {
-      seqf_t string = flatten_charlist(r, s);
-      struct str_list *l = region_alloc(r, sizeof(struct str_list));
-      l->str = (char*) string.data;
-      l->prev = p->got;
-      p->got = l;
+      array_set_fd(r, &p->fds, fd_no, fd_dest);
       return 0;
     }
   }
@@ -370,7 +466,7 @@ void exec_elf_program_from_filename(const char *cmd, int argc, const char **argv
       
   argv2 = alloca((argc + extra_args + 1) * sizeof(char *));
   argv2[0] = argv[0];
-  cmd2 = BIN_INSTALL "/run-as-nobody";
+  cmd2 = BIN_INSTALL "/run-as-anonymous";
   argv2[1] = BIN_INSTALL "/ld-linux.so.2";
   argv2[2] = "--library-path";
   argv2[3] = PLASH_LD_LIBRARY_PATH;
@@ -394,7 +490,11 @@ void args_to_exec_elf_program_from_fd
   argv2 = region_alloc(r, (argc + extra_args + 1) * sizeof(char *));
   argv2[0] = argv[0];
 #ifdef USE_CHROOT
+ #if 1
+  *cmd_out = BIN_INSTALL "/run-as-anonymous";
+ #else
   *cmd_out = BIN_INSTALL "/run-as-nobody+chroot";
+ #endif
   argv2[1] = "/special/ld-linux.so.2";
 #else
   *cmd_out = BIN_INSTALL "/run-as-nobody";
@@ -616,19 +716,23 @@ int spawn_job(region_t sock_r,
 	if(max_fd < proc->fds.fds[i] + 1) max_fd = proc->fds.fds[i] + 1;
       }
       for(i = 0; i < proc->fds.count; i++) {
-	/* printf("dup2(%i, %i)\n", proc->fds.fds[i], max_fd + i); */
-	if(dup2(proc->fds.fds[i], max_fd + i) < 0) {
-	  perror("plash/client: dup2 (first)");
-	  exit(1);
+	if(proc->fds.fds[i] >= 0) {
+	  /* printf("dup2(%i, %i)\n", proc->fds.fds[i], max_fd + i); */
+	  if(dup2(proc->fds.fds[i], max_fd + i) < 0) {
+	    perror("plash/client: dup2 (first)");
+	    exit(1);
+	  }
+	  if(set_close_on_exec_flag(max_fd + i, 1) < 0) perror("cloexec");
 	}
-	if(set_close_on_exec_flag(max_fd + i, 1) < 0) perror("cloexec");
       }
       /* Now they are copied back to their real position. */
       for(i = 0; i < proc->fds.count; i++) {
-	/* printf("dup2(%i, %i)\n", max_fd + i, i); */
-	if(dup2(max_fd + i, i) < 0) {
-	  perror("plash/client: dup2 (second)");
-	  exit(1);
+	if(proc->fds.fds[i] >= 0) {
+	  /* printf("dup2(%i, %i)\n", max_fd + i, i); */
+	  if(dup2(max_fd + i, i) < 0) {
+	    perror("plash/client: dup2 (second)");
+	    exit(1);
+	  }
 	}
       }
 
@@ -901,22 +1005,31 @@ struct process_desc *command_invocation
   }
 
   if(no_sec) {
-    struct flatten_params_nosec p;
-    struct str_list *l;
+    struct flatten_params p;
+    struct str_list *args_got, *l;
     int arg_count;
     const char **argv;
     int i;
     struct process_desc_nosec *proc;
     
     /* Process the arguments. */
-    p.got = 0;
-    if(flatten_args_nosec(r, &p, args)) return 0;
+    args_got = 0;
+    p.got_end = &args_got;
+    p.root_dir = state->root;
+    p.cwd = state->cwd;
+    p.tree = 0;
+    p.fds.count = 3;
+    p.fds.fds = region_alloc(r, p.fds.count * sizeof(int));
+    p.fds.fds[0] = fd_stdin;
+    p.fds.fds[1] = fd_stdout;
+    p.fds.fds[2] = STDERR_FILENO;
+    if(flatten_args(r, &p, 0 /* rw */, 0 /* ambient */, args)) return 0;
 
     /* Copy the arguments from the list into an array. */
-    for(l = p.got, arg_count = 0; l; l = l->prev) arg_count++;
+    for(l = args_got, arg_count = 0; l; l = l->next) arg_count++;
     argv = region_alloc(r, (arg_count+2) * sizeof(char*));
     argv[0] = cmd_filename.data;
-    for(l = p.got, i = arg_count; l; l = l->prev) argv[--i + 1] = l->str;
+    for(l = args_got, i = 0; l; l = l->next, i++) argv[i+1] = l->str;
     argv[arg_count+1] = 0;
     
     proc = region_alloc(r, sizeof(struct process_desc_nosec));
@@ -939,19 +1052,21 @@ struct process_desc *command_invocation
     proc->d.argc = arg_count + 1;
     proc->d.argv = argv;
     {
-      int count = 3;
+      /*int count = 3;
       int *fds = region_alloc(r, count * sizeof(int));
       proc->d.fds.count = count;
       proc->d.fds.fds = fds;
       fds[0] = fd_stdin;
       fds[1] = fd_stdout;
-      fds[2] = STDERR_FILENO;
+      fds[2] = STDERR_FILENO;*/
+      proc->d.fds.fds = p.fds.fds;
+      proc->d.fds.count = p.fds.count;
     }
     return (struct process_desc *) proc;
   }
   else {
     struct flatten_params p;
-    struct str_list *l;
+    struct str_list *args_got, *l;
     int i;
     int arg_count;
     const char **argv;
@@ -965,10 +1080,16 @@ struct process_desc *command_invocation
     int err;
 
     /* Process the arguments. */
-    p.got = 0;
+    args_got = 0;
+    p.got_end = &args_got;
     p.root_dir = state->root;
-    p.tree = make_empty_node();
     p.cwd = state->cwd;
+    p.tree = make_empty_node();
+    p.fds.count = 3;
+    p.fds.fds = region_alloc(r, p.fds.count * sizeof(int));
+    p.fds.fds[0] = fd_stdin;
+    p.fds.fds[1] = fd_stdout;
+    p.fds.fds[2] = STDERR_FILENO;
     if(flatten_args(r, &p, 0 /* rw */, 0 /* ambient */, args)) return 0;
       
     /* FIXME: check for errors */
@@ -1001,9 +1122,9 @@ struct process_desc *command_invocation
 
     /* Create the root directory. */
     root_slot = build_fs(p.tree);
+    free_node(p.tree);
     root = root_slot->vtable->get(root_slot);
     assert(root);
-    root->refcount++;
     filesys_slot_free(root_slot);
     
     /* Set the process's cwd. */
@@ -1030,10 +1151,10 @@ struct process_desc *command_invocation
     }
 
     /* Copy the arguments from the list into an array. */
-    for(l = p.got, arg_count = 0; l; l = l->prev) arg_count++;
+    for(l = args_got, arg_count = 0; l; l = l->next) arg_count++;
     argv = region_alloc(r, (arg_count+1) * sizeof(char*));
     argv[0] = cmd_filename.data;
-    for(l = p.got, i = arg_count; l; l = l->prev) argv[--i + 1] = l->str;
+    for(l = args_got, i = 0; l; l = l->next, i++) argv[i+1] = l->str;
 
     /* Handle scripts using the `#!' syntax. */
     if(exec_for_scripts(r, root, cwd,
@@ -1066,8 +1187,16 @@ struct process_desc *command_invocation
       add_process(server_state, server_proc);
     
       {
-	struct process_desc *proc =
-	  region_alloc(r, sizeof(struct process_desc));
+	int proc_sock_fd, proc_exec_fd;
+	struct process_desc_sec *proc;
+	
+	proc_sock_fd = array_get_free_index(&p.fds);
+	array_set_fd(r, &p.fds, proc_sock_fd, socks[1]);
+	proc_exec_fd = array_get_free_index(&p.fds);
+	array_set_fd(r, &p.fds, proc_exec_fd, executable_fd2);
+	
+	proc = region_alloc(r, sizeof(struct process_desc_sec));
+	/*
 	int count = 5;
 	int *fds = region_alloc(r, count * sizeof(int));
 	proc->fds.count = count;
@@ -1077,11 +1206,15 @@ struct process_desc *command_invocation
 	fds[2] = STDERR_FILENO;
 	fds[3] = socks[1];
 	fds[4] = executable_fd2;
+	*/
+	proc->d.fds.count = p.fds.count;
+	proc->d.fds.fds = p.fds.fds;
+	proc->comm_fd = proc_sock_fd;
 	args_to_exec_elf_program_from_fd
-	  (r, 4 /* executable_fd */, argc2, argv2,
-	   &proc->cmd, &proc->argc, &proc->argv);
-	proc->set_up_process = set_up_sec_process;
-	return proc;
+	  (r, proc_exec_fd /* executable_fd */, argc2, argv2,
+	   &proc->d.cmd, &proc->d.argc, &proc->d.argv);
+	proc->d.set_up_process = set_up_sec_process;
+	return (struct process_desc *) proc;
       }
     }
   }

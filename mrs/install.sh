@@ -35,14 +35,23 @@ if [ "$1" = "--root" ]; then
 	     $PREFIX$BIN_INSTALL \
 	     $PREFIX$LIB_INSTALL \
 	     $PREFIX$MAIN_BIN_INSTALL
-elif [ "$1" = "--local" ]; then
+elif [ "$1" = "--local-link" ]; then
   PREFIX=''
   MAIN_BIN_INSTALL=''
   INST=inst_hard_link
+elif [ "$1" = "--local-cp" ]; then
+  PREFIX=''
+  MAIN_BIN_INSTALL=''
+  INST=inst_cp
 else
   echo "Usage: install [ --root | --local ]"
   exit 1
 fi
+
+inst_cp () {
+  echo Installing $PREFIX$2
+  cp $1 $PREFIX$2
+}
 
 inst_hard_link () {
   echo Installing $PREFIX$2
@@ -54,13 +63,6 @@ inst_strip () {
   echo $2
   strip $1 -o $PREFIX$2
 }
-
-# You can use elf/ld.so for BIN_INSTALL; it's much less useful for JAIL_INSTALL
-$INST mrs/ld.so $JAIL_INSTALL/ld-linux.so.2
-chmod +x $PREFIX$JAIL_INSTALL/ld-linux.so.2
-# $INST elf/ld.so $BIN_INSTALL/ld-linux.so.2
-$INST mrs/run-as-nobody $BIN_INSTALL/run-as-nobody
-$INST mrs/run-as-nobody+chroot $BIN_INSTALL/run-as-nobody+chroot
 
 if [ -n "$MAIN_BIN_INSTALL" ]; then
   $INST mrs/shell $MAIN_BIN_INSTALL/plash
@@ -79,3 +81,10 @@ $INST resolv/libresolv.so $LIB_INSTALL/libresolv.so.2
 $INST resolv/libnss_dns.so $LIB_INSTALL/libnss_dns.so.2
 $INST rt/librt.so $LIB_INSTALL/librt.so.1
 $INST login/libutil.so $LIB_INSTALL/libutil.so.1
+
+# You can use elf/ld.so for BIN_INSTALL; it's much less useful for JAIL_INSTALL
+$INST mrs/ld.so $JAIL_INSTALL/ld-linux.so.2
+chmod +x $PREFIX$JAIL_INSTALL/ld-linux.so.2
+# $INST elf/ld.so $BIN_INSTALL/ld-linux.so.2
+$INST mrs/run-as-nobody $BIN_INSTALL/run-as-nobody
+$INST mrs/run-as-nobody+chroot $BIN_INSTALL/run-as-nobody+chroot

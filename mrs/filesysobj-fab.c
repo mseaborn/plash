@@ -39,6 +39,55 @@ int refuse_chmod(struct filesys_obj *obj, int mode, int *err)
   return -1;
 }
 
+int refuse_utimes(struct filesys_obj *obj, const struct timeval *atime,
+		  const struct timeval *mtime, int *err)
+{
+  *err = EACCES;
+  return -1;
+}
+
+int refuse_create_file(struct filesys_obj *obj, const char *leaf,
+		       int flags, int mode, int *err)
+{
+  *err = EACCES;
+  return -1;
+}
+int refuse_mkdir(struct filesys_obj *obj, const char *leaf,
+		 int mode, int *err)
+{
+  *err = EACCES;
+  return -1;
+}
+int refuse_symlink(struct filesys_obj *obj, const char *leaf,
+		   const char *oldpath, int *err)
+{
+  *err = EACCES;
+  return -1;
+}
+int refuse_rename_or_link
+  (struct filesys_obj *obj, const char *leaf,
+   struct filesys_obj *dest_dir, const char *dest_leaf, int *err)
+{
+  *err = EACCES;
+  return -1;
+}
+int refuse_unlink(struct filesys_obj *obj, const char *leaf, int *err)
+{
+  *err = EACCES;
+  return -1;
+}
+int refuse_rmdir(struct filesys_obj *obj, const char *leaf, int *err)
+{
+  *err = EACCES;
+  return -1;
+}
+int refuse_socket_bind(struct filesys_obj *obj, const char *leaf,
+		       int sock_fd, int *err)
+{
+  *err = EACCES;
+  return -1;
+}
+
 void fab_dir_free(struct filesys_obj *obj1)
 {
   struct fab_dir *obj = (void *) obj1;
@@ -105,42 +154,24 @@ int fab_dir_list(struct filesys_obj *obj, region_t r, seqt_t *result, int *err)
   return 0;
 }
 
-int fab_dir_create_file(struct filesys_obj *obj, const char *leaf,
-			int flags, int mode, int *err)
-{
-  *err = EACCES;
-  return -1;
-}
-int fab_dir_mkdir(struct filesys_obj *obj, const char *leaf,
-		  int mode, int *err)
-{
-  *err = EACCES;
-  return -1;
-}
-int fab_dir_unlink(struct filesys_obj *obj, const char *leaf, int *err)
-{
-  *err = EACCES;
-  return -1;
-}
-int fab_dir_rmdir(struct filesys_obj *obj, const char *leaf, int *err)
-{
-  *err = EACCES;
-  return -1;
-}
-
 struct filesys_obj_vtable fab_dir_vtable = {
   /* .type = */ OBJT_DIR,
   /* .free = */ fab_dir_free,
   /* .stat = */ fab_dir_stat,
+  /* .utimes = */ refuse_utimes,
   /* .chmod = */ refuse_chmod,
   /* .open = */ dummy_open,
   /* .connect = */ dummy_connect,
   /* .traverse = */ fab_dir_traverse,
   /* .list = */ fab_dir_list,
-  /* .create_file = */ fab_dir_create_file,
-  /* .mkdir = */ fab_dir_mkdir,
-  /* .unlink = */ fab_dir_unlink,
-  /* .rmdir = */ fab_dir_rmdir,
+  /* .create_file = */ refuse_create_file,
+  /* .mkdir = */ refuse_mkdir,
+  /* .symlink = */ refuse_symlink,
+  /* .rename = */ refuse_rename_or_link,
+  /* .link = */ refuse_rename_or_link,
+  /* .unlink = */ refuse_unlink,
+  /* .rmdir = */ refuse_rmdir,
+  /* .socket_bind = */ refuse_socket_bind,
   /* .readlink = */ dummy_readlink,
   1
 };
@@ -182,6 +213,7 @@ struct filesys_obj_vtable fab_symlink_vtable = {
   /* .type = */ OBJT_SYMLINK,
   /* .free = */ fab_symlink_free,
   /* .stat = */ fab_symlink_stat,
+  /* .utimes = */ refuse_utimes,
   /* .chmod = */ dummy_chmod,
   /* .open = */ dummy_open,
   /* .connect = */ dummy_connect,
@@ -189,8 +221,12 @@ struct filesys_obj_vtable fab_symlink_vtable = {
   /* .list = */ dummy_list,
   /* .create_file = */ dummy_create_file,
   /* .mkdir = */ dummy_mkdir,
+  /* .symlink = */ dummy_symlink,
+  /* .rename = */ dummy_rename_or_link,
+  /* .link = */ dummy_rename_or_link,
   /* .unlink = */ dummy_unlink,
   /* .rmdir = */ dummy_rmdir,
+  /* .socket_bind = */ dummy_socket_bind,
   /* .readlink = */ fab_symlink_readlink,
   1
 };
@@ -267,7 +303,7 @@ int s_fab_dir_create_file(struct filesys_obj *obj, const char *leaf,
   struct s_fab_dir *dir = (void *) obj;
   struct slot_list *l = (void *) assoc((void *) dir->entries, leaf);
   if(l) {
-    return l->slot->vtable->create_file(l->slot, flags, mode, err);
+    return l->slot->vtable->slot_create_file(l->slot, flags, mode, err);
   }
   else {
     *err = EACCES;
@@ -281,7 +317,21 @@ int s_fab_dir_mkdir(struct filesys_obj *obj, const char *leaf,
   struct s_fab_dir *dir = (void *) obj;
   struct slot_list *l = (void *) assoc((void *) dir->entries, leaf);
   if(l) {
-    return l->slot->vtable->mkdir(l->slot, mode, err);
+    return l->slot->vtable->slot_mkdir(l->slot, mode, err);
+  }
+  else {
+    *err = EACCES;
+    return -1;
+  }
+}
+
+int s_fab_dir_symlink(struct filesys_obj *obj, const char *leaf,
+		      const char *oldpath, int *err)
+{
+  struct s_fab_dir *dir = (void *) obj;
+  struct slot_list *l = (void *) assoc((void *) dir->entries, leaf);
+  if(l) {
+    return l->slot->vtable->slot_symlink(l->slot, oldpath, err);
   }
   else {
     *err = EACCES;
@@ -294,7 +344,7 @@ int s_fab_dir_unlink(struct filesys_obj *obj, const char *leaf, int *err)
   struct s_fab_dir *dir = (void *) obj;
   struct slot_list *l = (void *) assoc((void *) dir->entries, leaf);
   if(l) {
-    return l->slot->vtable->unlink(l->slot, err);
+    return l->slot->vtable->slot_unlink(l->slot, err);
   }
   else {
     *err = EACCES;
@@ -307,7 +357,21 @@ int s_fab_dir_rmdir(struct filesys_obj *obj, const char *leaf, int *err)
   struct s_fab_dir *dir = (void *) obj;
   struct slot_list *l = (void *) assoc((void *) dir->entries, leaf);
   if(l) {
-    return l->slot->vtable->rmdir(l->slot, err);
+    return l->slot->vtable->slot_rmdir(l->slot, err);
+  }
+  else {
+    *err = EACCES;
+    return -1;
+  }
+}
+
+int s_fab_dir_socket_bind(struct filesys_obj *obj, const char *leaf,
+			  int sock_fd, int *err)
+{
+  struct s_fab_dir *dir = (void *) obj;
+  struct slot_list *l = (void *) assoc((void *) dir->entries, leaf);
+  if(l) {
+    return l->slot->vtable->slot_socket_bind(l->slot, sock_fd, err);
   }
   else {
     *err = EACCES;
@@ -319,6 +383,7 @@ struct filesys_obj_vtable s_fab_dir_vtable = {
   /* .type = */ OBJT_DIR,
   /* .free = */ s_fab_dir_free,
   /* .stat = */ s_fab_dir_stat,
+  /* .utimes = */ refuse_utimes,
   /* .chmod = */ refuse_chmod,
   /* .open = */ dummy_open,
   /* .connect = */ dummy_connect,
@@ -326,8 +391,12 @@ struct filesys_obj_vtable s_fab_dir_vtable = {
   /* .list = */ s_fab_dir_list,
   /* .create_file = */ s_fab_dir_create_file,
   /* .mkdir = */ s_fab_dir_mkdir,
+  /* .symlink = */ s_fab_dir_symlink,
+  /* .rename = */ refuse_rename_or_link,
+  /* .link = */ refuse_rename_or_link,
   /* .unlink = */ s_fab_dir_unlink,
   /* .rmdir = */ s_fab_dir_rmdir,
+  /* .socket_bind = */ s_fab_dir_socket_bind,
   /* .readlink = */ dummy_readlink,
   1
 };

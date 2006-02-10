@@ -29,6 +29,8 @@
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/time.h>
+#include <utime.h>
 
 #include "region.h"
 #include "comms.h"
@@ -353,6 +355,39 @@ struct dirent *new_readdir(DIR *dir)
     }
     else {
       __set_errno(EIO); return 0;
+    }
+  }
+}
+
+/* EXPORT: new_readdir_r => WEAK:readdir_r __readdir_r */
+int new_readdir_r(DIR *dir, struct dirent *ent, struct dirent **result)
+{
+  seqf_t buf;
+  if(!dir) { __set_errno(EBADF); return -1; }
+  buf.data = dir->data.data + dir->offset;
+  buf.size = dir->data.size - dir->offset;
+  if(buf.size == 0) { *result = 0; return 0; } /* end of directory */
+  {
+    int inode, type;
+    seqf_t name;
+    int ok = 1;
+    m_int(&ok, &buf, &inode);
+    m_int(&ok, &buf, &type);
+    m_lenblock(&ok, &buf, &name);
+    if(ok) {
+      int rec_size = offsetof(struct dirent, d_name) + name.size + 1;
+      ent->d_ino = inode;
+      ent->d_off = 0; /* shouldn't be used */
+      ent->d_reclen = rec_size; /* shouldn't be used */
+      ent->d_type = type;
+      memcpy(ent->d_name, name.data, name.size);
+      ent->d_name[name.size] = 0;
+      dir->offset = dir->data.size - buf.size;
+      *result = ent;
+      return 0;
+    }
+    else {
+      __set_errno(EIO); return -1;
     }
   }
 }
@@ -1025,7 +1060,7 @@ int new_lchmod(const char *pathname, unsigned int mode)
   return -1;
 }
 
-/* EXPORT: new_chown => chown __chown __GI___chown */
+/* EXPORT: new_chown => DEFVER:chown,GLIBC_2.1 VER:chown,GLIBC_2.0 __chown __GI___chown */
 int new_chown(const char *pathname, unsigned int owner, unsigned int group)
 {
   __set_errno(ENOSYS);
@@ -1039,24 +1074,186 @@ int new_lchown(const char *pathname, unsigned int owner, unsigned int group)
   return -1;
 }
 
-/* EXPORT: new_utime => WEAK:utime __utime __GI_utime */
-int new_utime(const char *oldpath, void *buf) // struct utimbuf *buf
+int my_utimes(int nofollow, const char *pathname,
+	      struct timeval *atime, struct timeval *mtime)
 {
+  region_t r = region_make();
+  seqf_t reply;
+  if(!pathname || !atime || !mtime) {
+    __set_errno(EINVAL);
+    goto error;
+  }
+  if(req_and_reply(r,
+		   cat4(r, mk_string(r, "Utim"),
+			mk_int(r, nofollow),
+			cat4(r,
+			  mk_int(r, atime->tv_sec), mk_int(r, atime->tv_usec),
+			  mk_int(r, mtime->tv_sec), mk_int(r, mtime->tv_usec)),
+			mk_string(r, pathname)), &reply) < 0) goto error;
+  {
+    seqf_t msg = reply;
+    int ok = 1;
+    m_str(&ok, &msg, "RUtm");
+    m_end(&ok, &msg);
+    if(ok) {
+      region_free(r);
+      return 0;
+    }
+  }
+  {
+    seqf_t msg = reply;
+    int err;
+    int ok = 1;
+    m_str(&ok, &msg, "Fail");
+    m_int(&ok, &msg, &err);
+    if(ok) {
+      __set_errno(err);
+      goto error;
+    }
+  }
+
   __set_errno(ENOSYS);
+ error:
+  region_free(r);
+  return -1;
+}
+
+/* EXPORT: new_utime => WEAK:utime __utime __GI_utime */
+int new_utime(const char *path, struct utimbuf *buf)
+{
+  if(buf) {
+    struct timeval atime, mtime;
+    atime.tv_sec = buf->actime;
+    atime.tv_usec = 0;
+    mtime.tv_sec = buf->modtime;
+    mtime.tv_usec = 0;
+    return my_utimes(0 /* nofollow */, path, &atime, &mtime);
+  }
+  else {
+    struct timeval time;
+    if(gettimeofday(&time, 0) < 0) return -1;
+    return my_utimes(0 /* nofollow */, path, &time, &time);
+  }
+}
+
+/* EXPORT: new_utimes => WEAK:utimes __utimes */
+int new_utimes(const char *path, struct timeval times[2])
+{
+  if(times) {
+    return my_utimes(0 /* nofollow */, path, &times[0], &times[1]);
+  }
+  else {
+    struct timeval time;
+    if(gettimeofday(&time, 0) < 0) return -1;
+    return my_utimes(0 /* nofollow */, path, &time, &time);
+  }
+}
+
+/* EXPORT: new_lutimes => WEAK:lutimes __lutimes */
+int new_lutimes(const char *path, struct timeval times[2])
+{
+  if(times) {
+    return my_utimes(1 /* nofollow */, path, &times[0], &times[1]);
+  }
+  else {
+    struct timeval time;
+    if(gettimeofday(&time, 0) < 0) return -1;
+    return my_utimes(1 /* nofollow */, path, &time, &time);
+  }
+}
+
+/* EXPORT: new_truncate => truncate __GI_truncate */
+int new_truncate(const char *path, off_t length)
+{
+  int rc;
+  int fd = new_open(path, O_WRONLY, 0);
+  if(fd < 0) return -1;
+  rc = ftruncate(fd, length);
+  close(fd);
+  return rc;
+}
+
+/* EXPORT: new_rename => rename __GI_rename */
+int new_rename(const char *oldpath, const char *newpath)
+{
+  region_t r = region_make();
+  seqf_t reply;
+  if(!oldpath || !newpath) {
+    __set_errno(EINVAL);
+    goto error;
+  }
+  if(req_and_reply(r, cat4(r, mk_string(r, "Renm"),
+			   mk_int(r, strlen(newpath)),
+			   mk_string(r, newpath),
+			   mk_string(r, oldpath)), &reply) < 0) goto error;
+  {
+    seqf_t msg = reply;
+    int ok = 1;
+    m_str(&ok, &msg, "RRnm");
+    m_end(&ok, &msg);
+    if(ok) {
+      region_free(r);
+      return 0;
+    }
+  }
+  {
+    seqf_t msg = reply;
+    int err;
+    int ok = 1;
+    m_str(&ok, &msg, "Fail");
+    m_int(&ok, &msg, &err);
+    m_end(&ok, &msg);
+    if(ok) {
+      __set_errno(err);
+      goto error;
+    }
+  }
+
+  __set_errno(ENOSYS);
+ error:
+  region_free(r);
   return -1;
 }
 
 /* EXPORT: new_link => WEAK:link __link __GI_link __GI___link */
 int new_link(const char *oldpath, const char *newpath)
 {
-  __set_errno(ENOSYS);
-  return -1;
-}
+  region_t r = region_make();
+  seqf_t reply;
+  if(!oldpath || !newpath) {
+    __set_errno(EINVAL);
+    goto error;
+  }
+  if(req_and_reply(r, cat4(r, mk_string(r, "Link"),
+			   mk_int(r, strlen(newpath)),
+			   mk_string(r, newpath),
+			   mk_string(r, oldpath)), &reply) < 0) goto error;
+  {
+    seqf_t msg = reply;
+    int ok = 1;
+    m_str(&ok, &msg, "RLnk");
+    m_end(&ok, &msg);
+    if(ok) {
+      region_free(r);
+      return 0;
+    }
+  }
+  {
+    seqf_t msg = reply;
+    int err;
+    int ok = 1;
+    m_str(&ok, &msg, "Fail");
+    m_int(&ok, &msg, &err);
+    m_end(&ok, &msg);
+    if(ok) {
+      __set_errno(err);
+      goto error;
+    }
+  }
 
-/* EXPORT: new_truncate => truncate __GI_truncate */
-int new_truncate(const char *path, int length)
-{
   __set_errno(ENOSYS);
+ error:
+  region_free(r);
   return -1;
 }
 
@@ -1232,6 +1429,68 @@ int new_rmdir(const char *pathname)
 
 /* EXPORT: new_statfs => WEAK:statfs __statfs __GI_statfs __GI___statfs */
 int new_statfs(const char *path, void *buf) // struct statfs *buf
+{
+  __set_errno(ENOSYS);
+  return -1;
+}
+
+
+/* EXPORT: new_setxattr => setxattr __GI_setxattr */
+int new_setxattr(const char *path, const char *name,
+		 const void *value, size_t size, int flags)
+{
+  __set_errno(ENOSYS);
+  return -1;
+}
+
+/* EXPORT: new_getxattr => getxattr __GI_getxattr */
+ssize_t new_getxattr(const char *path, const char *name,
+		     void *value, size_t size)
+{
+  __set_errno(ENOSYS);
+  return -1;
+}
+
+/* EXPORT: new_listxattr => listxattr __GI_listxattr */
+ssize_t new_listxattr(const char *path, char *list, size_t size)
+{
+  __set_errno(ENOSYS);
+  return -1;
+}
+
+/* EXPORT: new_removexattr => removexattr __GI_removexattr */
+int new_removexattr(const char *path, const char *name)
+{
+  __set_errno(ENOSYS);
+  return -1;
+}
+
+
+/* EXPORT: new_lsetxattr => lsetxattr __GI_lsetxattr */
+int new_lsetxattr(const char *path, const char *name,
+		  const void *value, size_t size, int flags)
+{
+  __set_errno(ENOSYS);
+  return -1;
+}
+
+/* EXPORT: new_lgetxattr => lgetxattr __GI_lgetxattr */
+ssize_t new_lgetxattr(const char *path, const char *name,
+		      void *value, size_t size)
+{
+  __set_errno(ENOSYS);
+  return -1;
+}
+
+/* EXPORT: new_llistxattr => llistxattr __GI_llistxattr */
+ssize_t new_llistxattr(const char *path, char *list, size_t size)
+{
+  __set_errno(ENOSYS);
+  return -1;
+}
+
+/* EXPORT: new_lremovexattr => lremovexattr __GI_lremovexattr */
+int new_lremovexattr(const char *path, const char *name)
 {
   __set_errno(ENOSYS);
   return -1;

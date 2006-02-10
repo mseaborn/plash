@@ -34,6 +34,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/select.h>
+#include <sys/time.h>
 
 #include "region.h"
 #include "server.h"
@@ -175,17 +176,98 @@ int real_dir_chmod(struct filesys_obj *obj, int mode, int *err)
   return 0;
 }
 
-/* FIXME: check that leafnames don't contain '/' in any of the "real" functions */
+/* NB. This is vulnerable to race conditions.  The utimes() syscall will
+   follow symlinks, so someone could replace a file with a symlink.
+   This is not a serious problem, as it won't grant access to files
+   (except under contrived circumstances).
+   This could be fixed by using lutimes(), but that syscall is not
+   implemented. */
+int real_file_utimes(struct filesys_obj *obj, const struct timeval *atime,
+		     const struct timeval *mtime, int *err)
+{
+  struct real_file *file = (void *) obj;
+  struct timeval times[2];
+  /* Couldn't open the directory; we don't have an FD for it. */
+  if(!file->dir_fd) { *err = EIO; return -1; }
+  if(fchdir(file->dir_fd->fd) < 0) { *err = errno; return -1; }
+  times[0] = *atime;
+  times[1] = *mtime;
+#ifdef HAVE_LUTIMES
+  if(lutimes(file->leaf, times) < 0) {
+    if(errno == ENOSYS) {
+      if(utimes(file->leaf, times) < 0) { *err = errno; return -1; }
+      return 0;
+    }
+    *err = errno;
+    return -1;
+  }
+#else
+  if(utimes(file->leaf, times) < 0) { *err = errno; return -1; }
+  return 0;
+#endif
+  return 0;
+}
+
+int real_dir_utimes(struct filesys_obj *obj, const struct timeval *atime,
+		    const struct timeval *mtime, int *err)
+{
+  struct real_dir *dir = (void *) obj;
+  struct timeval times[2];
+  /* Couldn't open the directory; we don't have an FD for it. */
+  if(!dir->fd) { *err = EIO; return -1; }
+  if(fchdir(dir->fd->fd) < 0) { *err = errno; return -1; }
+  times[0] = *atime;
+  times[1] = *mtime;
+  if(utimes(".", times) < 0) { *err = errno; return -1; }
+  return 0;
+}
+
+/* Won't work in practice, because lutimes() is not implemented. */
+int real_symlink_utimes(struct filesys_obj *obj, const struct timeval *atime,
+			const struct timeval *mtime, int *err)
+{
+#ifdef HAVE_LUTIMES
+  struct real_symlink *symlink = (void *) obj;
+  struct timeval times[2];
+  /* Couldn't open the directory; we don't have an FD for it. */
+  if(!symlink->dir_fd) { *err = EIO; return -1; }
+  if(fchdir(symlink->dir_fd->fd) < 0) { *err = errno; return -1; }
+  times[0] = atime;
+  times[1] = mtime;
+  if(lutimes(symlink->leaf, times) < 0) { *err = errno; return -1; }
+  return 0;
+#else
+  *err = ENOSYS;
+  return -1;
+#endif
+}
+
+/* Check that leafnames don't contain '/', and aren't "." or "..".
+   These are treated specially by the pathname resolver functions and
+   will not get passed to the functions here when client programs refer
+   to pathnames.  But when using an object-based interface, the client
+   could pass these leafnames. */
+int leafname_ok(const char *leaf)
+{
+  const char *c;
+  
+  /* Disallow the leaf names "." and "..".  In practice, these are
+     treated specially by the pathname resolver functions, and will
+     never get passed here. */
+  if(leaf[0] == '.' && (!leaf[1] || (leaf[1] == '.' && !leaf[2]))) return 0;
+
+  for(c = leaf; *c; c++) {
+    if(*c == '/') return 0;
+  }
+  return 1;
+}
 
 struct filesys_obj *real_dir_traverse(struct filesys_obj *obj, const char *leaf)
 {
   struct real_dir *dir = (void *) obj;
   struct stat stat;
 
-  /* Disallow the leaf names "." and "..".  In practice, these are
-     treated specially by the pathname resolver functions, and will
-     never get passed here. */
-  if(leaf[0] == '.' && (!leaf[1] || (leaf[1] == '.' && !leaf[2]))) return 0;
+  if(!leafname_ok(leaf)) return 0;
 
   /* Couldn't open the directory; we don't have an FD for it. */
   if(!dir->fd) { return 0; }
@@ -283,6 +365,8 @@ int real_dir_mkdir(struct filesys_obj *obj, const char *leaf, int mode, int *err
 {
   struct real_dir *dir = (void *) obj;
 
+  if(!leafname_ok(leaf)) { *err = ENOENT; return -1; }
+
   /* Couldn't open the directory; we don't have an FD for it. */
   if(!dir->fd) { *err = EIO; return -1; }
   
@@ -291,9 +375,77 @@ int real_dir_mkdir(struct filesys_obj *obj, const char *leaf, int mode, int *err
   return 0;
 }
 
+int real_dir_symlink(struct filesys_obj *obj, const char *leaf,
+		     const char *oldpath, int *err)
+{
+  struct real_dir *dir = (void *) obj;
+
+  if(!leafname_ok(leaf)) { *err = ENOENT; return -1; }
+
+  /* Couldn't open the directory; we don't have an FD for it. */
+  if(!dir->fd) { *err = EIO; return -1; }
+  
+  if(fchdir(dir->fd->fd) < 0) { *err = errno; return -1; }
+  if(symlink(oldpath, leaf) < 0) { *err = errno; return -1; }
+  return 0;
+}
+
+int real_dir_rename(struct filesys_obj *obj, const char *leaf,
+		    struct filesys_obj *dest_dir1, const char *dest_leaf,
+		    int *err)
+{
+  struct real_dir *dir = (void *) obj;
+
+  if(!leafname_ok(leaf) || !leafname_ok(dest_leaf)) { *err = ENOENT; return -1; }
+
+  /* Handle the same-directory case only. */
+  if(dir == (void *) dest_dir1) {
+    /* Couldn't open the directory; we don't have an FD for it. */
+    if(!dir->fd) { *err = EIO; return -1; }
+    
+    if(fchdir(dir->fd->fd) < 0) { *err = errno; return -1; }
+    if(rename(leaf, dest_leaf) < 0) { *err = errno; return -1; }
+    return 0;
+  }
+  else {
+    *err = EXDEV;
+    return -1;
+  }
+  /*
+  if(dest_dir1->vtable == &real_dir_vtable) {
+    struct real_dir *dest_dir = (void *) dest_dir1;
+  }
+  */
+}
+
+int real_dir_link(struct filesys_obj *obj, const char *leaf,
+		  struct filesys_obj *dest_dir1, const char *dest_leaf,
+		  int *err)
+{
+  struct real_dir *dir = (void *) obj;
+
+  if(!leafname_ok(leaf) || !leafname_ok(dest_leaf)) { *err = ENOENT; return -1; }
+
+  /* Handle the same-directory case only. */
+  if(dir == (void *) dest_dir1) {
+    /* Couldn't open the directory; we don't have an FD for it. */
+    if(!dir->fd) { *err = EIO; return -1; }
+    
+    if(fchdir(dir->fd->fd) < 0) { *err = errno; return -1; }
+    if(link(leaf, dest_leaf) < 0) { *err = errno; return -1; }
+    return 0;
+  }
+  else {
+    *err = EXDEV;
+    return -1;
+  }
+}
+
 int real_dir_unlink(struct filesys_obj *obj, const char *leaf, int *err)
 {
   struct real_dir *dir = (void *) obj;
+
+  if(!leafname_ok(leaf)) { *err = ENOENT; return -1; }
 
   /* Couldn't open the directory; we don't have an FD for it. */
   if(!dir->fd) { *err = EIO; return -1; }
@@ -306,6 +458,8 @@ int real_dir_unlink(struct filesys_obj *obj, const char *leaf, int *err)
 int real_dir_rmdir(struct filesys_obj *obj, const char *leaf, int *err)
 {
   struct real_dir *dir = (void *) obj;
+
+  if(!leafname_ok(leaf)) { *err = ENOENT; return -1; }
 
   /* Couldn't open the directory; we don't have an FD for it. */
   if(!dir->fd) { *err = EIO; return -1; }
@@ -332,6 +486,8 @@ int real_dir_create_file(struct filesys_obj *obj, const char *leaf,
   struct real_dir *dir = (void *) obj;
   int fd;
   struct stat st;
+
+  if(!leafname_ok(leaf)) { *err = ENOENT; return -1; }
 
   if(flags &
      ~(O_ACCMODE | O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC | O_APPEND |
@@ -423,8 +579,39 @@ int real_file_connect(struct filesys_obj *obj, int sock_fd, int *err)
   memcpy(name.sun_path, file->leaf, len);
   name.sun_path[len] = 0;
   if(connect(sock_fd, &name,
-	     offsetof(struct sockaddr_un, sun_path) + len + 1) < 0)
-    { *err = errno; return -1; }
+	     offsetof(struct sockaddr_un, sun_path) + len + 1) < 0) {
+    *err = errno;
+    return -1;
+  }
+  return 0;
+}
+
+int real_dir_socket_bind(struct filesys_obj *obj, const char *leaf,
+			 int sock_fd, int *err)
+{
+  struct real_dir *dir = (void *) obj;
+  struct sockaddr_un name;
+
+  int len = strlen(leaf);
+  if(len + 1 > sizeof(name.sun_path)) {
+    *err = ENAMETOOLONG;
+    return -1;
+  }
+
+  if(!leafname_ok(leaf)) { *err = ENOENT; return -1; }
+  
+  /* Couldn't open the directory; we don't have an FD for it. */
+  if(!dir->fd) { *err = EIO; return -1; }
+  
+  if(fchdir(dir->fd->fd) < 0) { *err = errno; return -1; }
+  name.sun_family = AF_LOCAL;
+  memcpy(name.sun_path, leaf, len);
+  name.sun_path[len] = 0;
+  if(bind(sock_fd, &name,
+	  offsetof(struct sockaddr_un, sun_path) + len + 1) < 0) {
+    *err = errno;
+    return -1;
+  }
   return 0;
 }
 
@@ -473,6 +660,13 @@ int real_symlink_readlink(struct filesys_obj *obj, region_t r, seqf_t *result, i
   return 0;
 }
 
+int dummy_utimes(struct filesys_obj *obj, const struct timeval *atime,
+		 const struct timeval *mtime, int *err)
+{
+  *err = ENOSYS;
+  return -1;
+}
+
 int dummy_chmod(struct filesys_obj *obj, int mode, int *err)
 {
   *err = ENOSYS;
@@ -503,6 +697,21 @@ int dummy_mkdir(struct filesys_obj *obj, const char *leaf, int mode, int *err)
   return -1;
 }
 
+int dummy_symlink(struct filesys_obj *obj, const char *leaf,
+		  const char *oldpath, int *err)
+{
+  *err = ENOSYS;
+  return -1;
+}
+
+int dummy_rename_or_link(struct filesys_obj *obj, const char *leaf,
+			 struct filesys_obj *dest_dir, const char *dest_leaf,
+			 int *err)
+{
+  *err = ENOSYS;
+  return -1;
+}
+
 int dummy_unlink(struct filesys_obj *obj, const char *leaf, int *err)
 {
   *err = ENOSYS;
@@ -510,6 +719,12 @@ int dummy_unlink(struct filesys_obj *obj, const char *leaf, int *err)
 }
 
 int dummy_rmdir(struct filesys_obj *obj, const char *leaf, int *err)
+{
+  *err = ENOSYS;
+  return -1;
+}
+
+int dummy_socket_bind(struct filesys_obj *obj, const char *leaf, int sock_fd, int *err)
 {
   *err = ENOSYS;
   return -1;
@@ -538,6 +753,7 @@ struct filesys_obj_vtable real_dir_vtable = {
   /* .type = */ OBJT_DIR,
   /* .free = */ real_dir_free,
   /* .stat = */ real_dir_stat,
+  /* .utimes = */ real_dir_utimes,
   /* .chmod = */ real_dir_chmod,
   /* .open = */ dummy_open,
   /* .connect = */ dummy_connect,
@@ -545,8 +761,12 @@ struct filesys_obj_vtable real_dir_vtable = {
   /* .list = */ real_dir_list,
   /* .create_file = */ real_dir_create_file,
   /* .mkdir = */ real_dir_mkdir,
+  /* .symlink = */ real_dir_symlink,
+  /* .rename = */ real_dir_rename,
+  /* .link = */ real_dir_link,
   /* .unlink = */ real_dir_unlink,
   /* .rmdir = */ real_dir_rmdir,
+  /* .socket_bind = */ real_dir_socket_bind,
   /* .readlink = */ dummy_readlink,
   1
 };
@@ -555,6 +775,7 @@ struct filesys_obj_vtable real_file_vtable = {
   /* .type = */ OBJT_FILE,
   /* .free = */ real_file_free,
   /* .stat = */ real_file_stat,
+  /* .utimes = */ real_file_utimes,
   /* .chmod = */ real_file_chmod,
   /* .open = */ real_file_open,
   /* .connect = */ real_file_connect,
@@ -562,8 +783,12 @@ struct filesys_obj_vtable real_file_vtable = {
   /* .list = */ dummy_list,
   /* .create_file = */ dummy_create_file,
   /* .mkdir = */ dummy_mkdir,
+  /* .symlink = */ dummy_symlink,
+  /* .rename = */ dummy_rename_or_link,
+  /* .link = */ dummy_rename_or_link,
   /* .unlink = */ dummy_unlink,
   /* .rmdir = */ dummy_rmdir,
+  /* .socket_bind = */ dummy_socket_bind,
   /* .readlink = */ dummy_readlink,
   1
 };
@@ -572,6 +797,7 @@ struct filesys_obj_vtable real_symlink_vtable = {
   /* .type = */ OBJT_SYMLINK,
   /* .free = */ real_symlink_free,
   /* .stat = */ real_symlink_stat,
+  /* .utimes = */ real_symlink_utimes,
   /* .chmod = */ dummy_chmod,
   /* .open = */ dummy_open,
   /* .connect = */ dummy_connect,
@@ -579,8 +805,12 @@ struct filesys_obj_vtable real_symlink_vtable = {
   /* .list = */ dummy_list,
   /* .create_file = */ dummy_create_file,
   /* .mkdir = */ dummy_mkdir,
+  /* .symlink = */ dummy_symlink,
+  /* .rename = */ dummy_rename_or_link,
+  /* .link = */ dummy_rename_or_link,
   /* .unlink = */ dummy_unlink,
   /* .rmdir = */ dummy_rmdir,
+  /* .socket_bind = */ dummy_socket_bind,
   /* .readlink = */ real_symlink_readlink,
   1
 };

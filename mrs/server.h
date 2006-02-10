@@ -53,6 +53,9 @@ int exec_for_scripts
    int *exec_fd_out, int *argc_out, const char ***argv_out,
    int *err);
 
+int process_open(struct filesys_obj *root, struct dir_stack *cwd,
+		 seqf_t pathname, int flags, int mode, int *err);
+
 
 struct process {
   int sock_fd;

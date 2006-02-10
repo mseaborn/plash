@@ -54,8 +54,19 @@ arglist4 = c_open l:arglist1 c_close {{ l }}
 
 arg = s:option {{ mk_arg_string(r, s) }}
     / s:string_literal {{ mk_arg_string(r, s) }}
-    / f:pathname {{ mk_arg_filename(r, f) }};
-#    / f:glob_pathname {{ mk_arg_glob_filename(r, f) }};
+    / redirection
+#    / f:pathname {{ mk_arg_filename(r, f) }};
+    / f:glob_pathname {{ mk_arg_glob_filename(r, f) }};
+
+redirection =
+  fd:(n:number ws {{ n }} / null {{ 0 }})
+  type:(">>" {{ REDIR_OUT_APPEND }}
+        / ">" {{ REDIR_OUT_TRUNC }}
+        / "<>" {{ REDIR_IN_OUT }}
+        / "<" {{ REDIR_IN }}) ws
+  dest:('&' n:number ws {{ mk_dest_fd(r, n) }}
+        / p:pathname {{ mk_dest_file(r, p) }})
+  {{ mk_arg_redirection(r, fd, type, dest) }};
 
 # pathname = s:(!wschar c:char {{ (void*) c }})+ ws;
 pathname = !(![a-zA-Z0-9_/.~]) s:pathname_aux ws {{ s }};
@@ -63,10 +74,28 @@ pathname_aux = c:(!(wschar / [&|*]) c:char {{ (void*) c }})
                rest:(pathname_aux / null {{ 0 }})
                {{ char_cons(r, (int) c, rest) }};
 
-glob_pathname = !(![a-zA-Z0-9_/.~*]) s:glob_pathname_aux ws {{ s }};
-glob_pathname_aux = c:(!(wschar / [&|]) c:char {{ (void*) c }})
-               rest:(glob_pathname_aux / null {{ 0 }})
-               {{ char_cons(r, (int) c, rest) }};
+glob_pathname =
+	!(![a-zA-Z0-9_/.~*])
+	p:('/'+ p:glob_pathname_aux3
+		{{ mk_glob_path(r, mk_start_root(r), p) }}
+           / '~' user:(user_name / null {{ 0 }}) p:glob_pathname_aux2
+		{{ mk_glob_path(r, mk_start_home(r, user), p) }}
+           / p:glob_pathname_aux1
+		{{ mk_glob_path(r, mk_start_cwd(r), p) }})
+	ws {{ p }};
+glob_pathname_aux1 = name:glob_leafname rest:glob_pathname_aux2
+			{{ mk_glob_path_cons(r, name, rest) }};
+glob_pathname_aux2 = '/'+ x:glob_pathname_aux3 {{ x }}
+		     / null {{ mk_glob_path_end(r, 0 /* slash */) }};
+glob_pathname_aux3 = glob_pathname_aux1 / null
+			{{ mk_glob_path_end(r, 1 /* slash */) }};
+glob_leafname =
+	c:(!(wschar / [&|/*]) c:char {{ (void*) c }}
+	   / '*' {{ (void*) GLOB_STAR }})
+	rest:(glob_leafname / null {{ 0 }})
+	{{ char_cons(r, (int) c, rest) }};
+user_name = !(wschar / [&|*/]) c:char rest:(user_name / null {{ 0 }})
+		{{ char_cons(r, (int) c, rest) }};
 
 
 string_literal =
@@ -84,6 +113,7 @@ char = '\\' '\\' {{ (void*) '\\' }}
      / '\\' ' ' {{ (void*) ' ' }}
      / '\\' 'n' {{ (void*) '\n' }}
      / '\\' 't' {{ (void*) '\t' }}
+     / '\\' c:[&|*+{}] {{ (void*) c }}
      / !('\\' .) c:. {{ (void*) c }};
 
 number = c:[0-9] rest:(number / null {{ 0 }}) {{ char_cons(r, (int) c, rest) }};

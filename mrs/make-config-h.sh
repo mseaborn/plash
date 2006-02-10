@@ -29,4 +29,7 @@
   echo "#define BIN_INSTALL \"$BIN_INSTALL\""
   echo "#define LIB_INSTALL \"$LIB_INSTALL\""
   echo "#define PLASH_LD_LIBRARY_PATH \"$PLASH_LD_LIBRARY_PATH\""
+  echo "#define UID_RANGE_START $UID_RANGE_START"
+  echo "#define UID_RANGE_END $UID_RANGE_END"
+  echo "#define UID_LOCK_DIR \"$UID_LOCK_DIR\""
 ) >mrs/config.h

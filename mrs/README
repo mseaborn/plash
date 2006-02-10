@@ -27,10 +27,12 @@ This is implemented by modifying GNU libc and replacing the system
 calls that use filenames.  For example, open() is changed so that it
 sends a message to a file server via a socket.  If the request is
 successful, the server sends the client a file descriptor via the
-socket as a result.  Processes are run as the user `nobody', and in a
-chroot jail, so that they can't access any files using the usual
-system calls, and must go through the file server instead.  This
-approach doesn't require modifying the kernel at all.
+socket as a result.
+
+Processes are run in a chroot jail, under freshly-allocated user IDs.
+They can't access any files using the usual system calls and so must
+go through the file server instead.  This approach doesn't require
+modifying the kernel at all.
 
 Plash can run Linux binaries unmodified, provided they are dynamically
 linked with libc, which is almost always the case.
@@ -106,10 +108,14 @@ cd directory
 
   Changing directory works as before.
 
-Many standard shell features are not implemented yet.  This includes:
- * redirecting file descriptors to files
- * globbing (wildcards in filenames)
- * expanding and setting environment variables
+Redirecting file descriptors to files and to other FDs works as in
+Bash.  Globbing is also implemented: you can use `*' as a wildcard in
+filenames.  It does not function as a wildcard in quoted strings.
+(The `{...}' wildcard is not implemented.)
+
+A number of standard shell features are not implemented yet.  This
+includes expanding and setting environment variables.
+
 
 Shell semantics
 ---------------
@@ -152,9 +158,9 @@ Architecture overview
 =====================
 
 Plash limits the ability of a process to open files by running it in a
-chroot environment, as the user "nobody".  The chroot environment only
-contains one file, an executable to exec to start the program running
-in the process.
+chroot environment, under dynamically-allocated user IDs.  The chroot
+environment only contains one file, an executable to exec to start the
+program running in the process.
 
 Rather than using the open() syscall to open files, the client process
 sends messages to a server process.  One of the file descriptors that
@@ -187,6 +193,20 @@ enters.  The shell and the file server are linked into the same
 executable and the shell uses the same filesystem object abstraction.
 The shell simply uses fork() to start a new server.
 
+User IDs are allocated by the setuid program `run-as-anonymous'.  It
+picks IDs in the range 0x100000 to 0x200000 (configurable by changing
+config.sh), and opens lock files in the lock directory
+"/usr/lib/plash-chroot-jail/plash-uid-locks" so that the same UID is
+not allocated twice.  The lock directory goes inside the chroot jail
+so that the sandboxed processes can also spawn processes with reduced
+authority (though this is not done yet).  Therefore `chroot-jail'
+needs to go on a writable filesystem, so you may need to move it.
+
+The setuid program `gc-uid-locks' will garbage collect and remove UID
+lock files for UIDs that are no longer in use.  It works by scanning
+the `/proc' filesystem to list currently-running processes and their
+UIDs.  In future it will be run automatically by the shell.
+
 
 Installation
 ============
@@ -195,8 +215,7 @@ The simplest way to install Plash is to install the Debian or RPM
 packages.  Installation is straightforward because these only depend
 on libreadline.
 
-  http://www.cs.jhu.edu/~seaborn/plash/plash_1.0_i386.deb
-  http://www.cs.jhu.edu/~seaborn/plash/plash-1.0-1.i386.rpm
+See <http://www.cs.jhu.edu/~seaborn/plash/> for the packages.
 
 Although Plash includes a copy of libc, this does not replace or
 interfere with your existing installation of libc.  Plash installs it
@@ -444,8 +463,16 @@ shell:
   shell.gram -- Grammar (lexerless) for shell; produces a packrat parser
                 (actually, the packrat bit isn't done: there's no caching
                 of results).
+  shell-globbing.c -- Deals with wildcard expansion in filenames.
   make-variants.pl, shell-variants.[ch]
     -- Type definition for shell's abstract syntax.
+
+setuid programs:
+  run-as-nobody.c -- changes UID to "nobody" before running program.
+  run-as-nobody+chroot.c -- changes UID to "nobody" and chroot()s before
+			running program.
+  run-as-anonymous.c -- allocates a new UID and chroot()s.
+  gc-uid-locks.c -- deletes lock files for unused UIDs.
 
 other files:
   config.sh -- Says where files are installed
@@ -467,9 +494,8 @@ FDs).
 Setuid executables do not run setuid.
 This should be replaced by another mechanism.
 
-Many common shell features are not yet implemented.
-FD redirection and globbing would be straightforward.
-Other features raise questions about the direction Plash should take
+A number of common shell features are not yet implemented.
+Some features raise questions about the direction Plash should take
 as a language.  Should it become a full programming language?
 
 Plash now handles job control.
@@ -488,8 +514,21 @@ The X protocol allows X clients to interfere with each other.
 Implement a proxy for the X protocol to prevent this.
 
 Prevent the client from making system calls other than recvmsg,
-sendmsg etc. (using something like Systrace, which requires changing
-the kernel).
+sendmsg etc.  There are a number of possible mechanisms for doing
+this:
+ * Use ptrace().  Unfortunately, this doesn't work securely with fork().
+   It's also very slow.
+ * Systrace.  Requires a kernel patch.  It's more complicated than
+   necessary, because it allows another process to handle the syscall.
+   That makes it less maintainable and less likely to be available for
+   the kernel version you want.
+ * Andrea Archangeli's /proc/PID/seccomp which is in 2.6.something.
+   This only allows read(), write() and close() to work (and maybe one
+   syscall for signals).  That's too restrictive.  The patch looks very
+   simple to modify, though, except perhaps for handling fork().
+   I'm not sure how easy it would be to adapt to Linux 2.4.
+ * Ostia's kernel module.  This has the advantage that it's a module,
+   so it would be simpler to build and load.
 
 Provide a facility for building namespaces (filesystems) in the shell.
 Provide a C API for doing this.

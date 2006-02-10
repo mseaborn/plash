@@ -50,6 +50,8 @@ struct filesys_obj_vtable {
   int type;
   void (*free)(struct filesys_obj *obj);
   int (*stat)(struct filesys_obj *obj, struct stat *buf);
+  int (*utimes)(struct filesys_obj *obj, const struct timeval *atime,
+		const struct timeval *mtime, int *err);
   /* Files and directories only, not symlinks: */
   int (*chmod)(struct filesys_obj *obj, int mode, int *err);
   
@@ -63,8 +65,16 @@ struct filesys_obj_vtable {
   int (*create_file)(struct filesys_obj *obj, const char *leaf,
 		     int flags, int mode, int *err);
   int (*mkdir)(struct filesys_obj *obj, const char *leaf, int mode, int *err);
+  int (*symlink)(struct filesys_obj *obj, const char *leaf,
+		 const char *oldpath, int *err);
+  int (*rename)(struct filesys_obj *obj, const char *leaf,
+		struct filesys_obj *dest_dir, const char *dest_leaf, int *err);
+  int (*link)(struct filesys_obj *obj, const char *leaf,
+	      struct filesys_obj *dest_dir, const char *dest_leaf, int *err);
   int (*unlink)(struct filesys_obj *obj, const char *leaf, int *err);
   int (*rmdir)(struct filesys_obj *obj, const char *leaf, int *err);
+  int (*socket_bind)(struct filesys_obj *obj, const char *leaf,
+		     int sock_fd, int *err);
   
   /* Symlinks only: */
   int (*readlink)(struct filesys_obj *obj, region_t r, seqf_t *result, int *err);
@@ -103,14 +113,22 @@ extern struct filesys_obj_vtable real_symlink_vtable;
 
 void filesys_obj_free(struct filesys_obj *obj);
 
+int dummy_utimes(struct filesys_obj *obj, const struct timeval *atime,
+		 const struct timeval *mtime, int *err);
 int dummy_chmod(struct filesys_obj *obj, int mode, int *err);
 struct filesys_obj *dummy_traverse(struct filesys_obj *obj, const char *leaf);
 int dummy_list(struct filesys_obj *obj, region_t r, seqt_t *result, int *err);
 int dummy_create_file(struct filesys_obj *obj, const char *leaf,
 		      int flags, int mode, int *err);
 int dummy_mkdir(struct filesys_obj *obj, const char *leaf, int mode, int *err);
+int dummy_symlink(struct filesys_obj *obj, const char *leaf,
+		  const char *oldpath, int *err);
+int dummy_rename_or_link(struct filesys_obj *obj, const char *leaf,
+			 struct filesys_obj *dest_dir, const char *dest_leaf,
+			 int *err);
 int dummy_unlink(struct filesys_obj *obj, const char *leaf, int *err);
 int dummy_rmdir(struct filesys_obj *obj, const char *leaf, int *err);
+int dummy_socket_bind(struct filesys_obj *obj, const char *leaf, int sock_fd, int *err);
 int dummy_readlink(struct filesys_obj *obj, region_t r, seqf_t *result, int *err);
 int dummy_open(struct filesys_obj *obj, int flags, int *err);
 int dummy_connect(struct filesys_obj *obj, int sock_fd, int *err);

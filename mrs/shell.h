@@ -21,19 +21,34 @@
 #define shell_h
 
 #include "region.h"
+#include "parse-filename.h"
 
+
+#define GLOB_STAR -1
+
+#define REDIR_OUT_TRUNC		1
+#define REDIR_OUT_APPEND	2
+#define REDIR_IN		3
+#define REDIR_IN_OUT		4
 
 struct char_cons {
-  char c;
+  int c; /* Usually a char; may also be GLOB_STAR */
   struct char_cons *next;
 };
-static inline struct char_cons *char_cons(region_t r, char c, struct char_cons *next)
+static inline struct char_cons *char_cons(region_t r, int c, struct char_cons *next)
 {
   struct char_cons *n = region_alloc(r, sizeof(struct char_cons));
   n->c = c;
   n->next = next;
   return n;
 }
+
+seqf_t flatten_charlist(region_t r, struct char_cons *list);
+
+struct str_list {
+  char *str;
+  struct str_list *next;
+};
 
 
 #endif

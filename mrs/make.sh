@@ -62,17 +62,18 @@ if [ $BUILD_SERVER = yes ]; then
   $CC $OPTS_S -c mrs/shell.c -o mrs/shell-nogtk.o
   $CC $OPTS_S -c mrs/shell-parse.c -o mrs/shell-parse.o
   $CC $OPTS_S -c mrs/shell-variants.c -o mrs/shell-variants.o
+  $CC $OPTS_S -c mrs/shell-globbing.c -o mrs/shell-globbing.o
   $CC $OPTS_S -c mrs/server.c -o mrs/server.o
   # To link server with dietlibc, you need to do:
   # $CC $OPTS $DIET/bin-i386/start.o ...files... \
   #     $DIET/bin-i386/dietlibc.a -lgcc -o mrs/driver
   $CC $OPTS_S  \
-	mrs/build-fs.o mrs/shell.o mrs/shell-parse.o mrs/shell-variants.o \
+	mrs/build-fs.o mrs/shell.o mrs/shell-parse.o mrs/shell-variants.o mrs/shell-globbing.o \
 	mrs/server.o mrs/filesysslot.o mrs/filesysobj-fab.o mrs/filesysobj.o \
 	mrs/parse-filename.o mrs/comms.o mrs/region.o mrs/utils.o \
 	-lreadline -ltermcap `pkg-config gtk+-2.0 --libs` -o mrs/shell
   $CC $OPTS_S  \
-	mrs/build-fs.o mrs/shell-nogtk.o mrs/shell-parse.o mrs/shell-variants.o \
+	mrs/build-fs.o mrs/shell-nogtk.o mrs/shell-parse.o mrs/shell-variants.o mrs/shell-globbing.o \
 	mrs/server.o mrs/filesysslot.o mrs/filesysobj-fab.o mrs/filesysobj.o \
 	mrs/parse-filename.o mrs/comms.o mrs/region.o mrs/utils.o \
 	-lreadline -ltermcap -o mrs/shell-nogtk
@@ -91,6 +92,7 @@ if [ $BUILD_LIBC = yes -o $BUILD_LDSO = yes ]; then
   $CC $OPTS_C -c mrs/libc-comms.c -o mrs/libc-comms.os
   $CC $OPTS_C -c mrs/libc-fork-exec.c -o mrs/libc-fork-exec.os
   $CC $OPTS_C -c mrs/libc-connect.c -o mrs/libc-connect.os
+  $CC $OPTS_C -c mrs/libc-getuid.c -o mrs/libc-getuid.os
 
   echo
   # NB. ordering of object files is important
@@ -104,8 +106,9 @@ if [ $BUILD_LIBC = yes -o $BUILD_LDSO = yes ]; then
   # correct headers, will get an inline version instead that refers
   # to io/fxstat.os.  io/xstat64.os is needed to provide __have_no_stat64.
   echo Linking combined.os
-  ld -r mrs/libc-misc.os mrs/libc-fork-exec.os mrs/libc-connect.os mrs/libc-comms.os mrs/comms.os mrs/region.os \
-	posix/fork.os posix/execve.os socket/connect.os \
+  ld -r mrs/libc-misc.os mrs/libc-fork-exec.os mrs/libc-connect.os mrs/libc-getuid.os mrs/libc-comms.os mrs/comms.os mrs/region.os \
+	posix/getuid.os posix/getgid.os \
+	posix/fork.os posix/execve.os socket/connect.os socket/bind.os \
 	io/fstat.oS io/fxstat.os io/xstat64.os io/xstatconv.os \
 	-o mrs/combined.os
   #ld -r mrs/combined1.os $DIET/bin-i386/dietlibc.a -o mrs/combined.os
@@ -139,19 +142,23 @@ if [ $BUILD_LIBC = yes -o $BUILD_LDSO = yes ]; then
 	io/unlink.os io/rmdir.os
 	io/statfs.os
 	io/utime.os
+	stdio-common/rename.os
 	misc/utimes.os misc/lutimes.os
 	misc/truncate.os
-	socket/connect.os
+	socket/connect.os socket/bind.os
 	posix/fork.os posix/vfork.os posix/execve.os
 	dirent/opendir.os dirent/closedir.os
 	dirent/readdir.os dirent/readdir64.os
 	dirent/readdir_r.os dirent/readdir64_r.os
 	dirent/getdents.os dirent/getdents64.os
 	dirent/rewinddir.os dirent/seekdir.os dirent/telldir.os
+	dirent/dirfd.os
 	misc/getxattr.os misc/setxattr.os
 	misc/lgetxattr.os misc/lsetxattr.os
 	misc/listxattr.os misc/removexattr.os
-	misc/llistxattr.os misc/lremovexattr.os"
+	misc/llistxattr.os misc/lremovexattr.os
+	posix/getuid.os posix/getgid.os
+	posix/geteuid.os posix/getegid.os"
   # privileged things that operate on filenames:
   # misc/mount.os misc/umount.os misc/chroot.os misc/pivot_root.os
 
@@ -334,4 +341,4 @@ if [ ! -e mrs/run-as-nobody ]; then
   echo You need to compile run-as-nobody and make it setuid root
 fi
 
-./mrs/install.sh
+# ./mrs/install.sh

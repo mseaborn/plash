@@ -65,11 +65,9 @@ my $defs =
        ['arg_ambient', ['f arg_list']],
        ['arg_string', ['s char_cons']],
        ['arg_filename', ['f char_cons']],
-       ['arg_glob_filename', ['f char_cons']],
+       ['arg_glob_filename', ['f glob_path']],
+       ['arg_redirection', ['fd char_cons', 'type T int', 'd redir_dest']],
       ]
-  },
-  { Name => 'file_list',
-    Variants => []
   },
   { Name => 'command',
     Variants =>
@@ -88,6 +86,29 @@ my $defs =
   { Name => 'invocation',
     Variants =>
       [['invocation', ['no_sec T int', 'c char_cons', 'a arg_list']]]
+  },
+  { Name => 'glob_path',
+    Variants =>
+      [['glob_path', ['start path_start', 'p glob_path_aux']]]
+  },
+  { Name => 'glob_path_aux',
+    Variants =>
+      [['glob_path_cons', ['c char_cons', 'rest glob_path_aux']],
+       ['glob_path_end', ['slash T int']],
+      ]
+  },
+  { Name => 'path_start',
+    Variants =>
+      [['start_root', []],
+       ['start_cwd', []],
+       ['start_home', ['user char_cons']],
+      ]
+  },
+  { Name => 'redir_dest',
+    Variants =>
+      [['dest_fd', ['number char_cons']],
+       ['dest_file', ['path char_cons']],
+      ]
   },
 ];
 
@@ -153,6 +174,7 @@ sub gen_header {
 sub gen {
   my ($out, $desc) = @_;
 
+  # Generate struct
   print $out "struct $desc->{Name} { int variant; };\n";
   my $type_code = $count++;
   my $min_code = $type_code * 1000;
@@ -164,12 +186,14 @@ sub gen {
     my $args = process_args($v);
 
     print $out "\n";
-    
+
+    # Generate a struct for each variant
     print $out "struct $desc->{Name}_$v_name {\n";
     print $out "  int variant;\n";
     foreach my $n (@$args) { print $out "  $n->{Type}$n->{Name};\n"; }
     print $out "};\n";
 
+    # Generate constructor function
     print $out "struct $desc->{Name} *mk_$v_name(region_t r".
       join('', map { ", $_->{Type}$_->{Name}" } @$args).")\n";
     print $out "{\n";
@@ -180,6 +204,7 @@ sub gen {
     print $out "  return (struct $desc->{Name} *) new_obj;\n";
     print $out "}\n";
 
+    # Generate matching function
     print $out "int m_$v_name(struct $desc->{Name} *in_obj".
       join('', map { ", $_->{Type}*out_$_->{Name}" } @$args).")\n";
     print $out "{\n";
@@ -187,7 +212,9 @@ sub gen {
     print $out "  assert($min_code <= in_obj->variant && in_obj->variant < $max_code);\n";
     print $out "  if(in_obj->variant == $v_number) {\n";
     print $out "    struct $desc->{Name}_$v_name *x = (void *) in_obj;\n";
-    foreach my $n (@$args) { print $out "    *out_$n->{Name} = x->$n->{Name};\n"; }
+    foreach my $n (@$args) {
+      print $out "    if(out_$n->{Name}) *out_$n->{Name} = x->$n->{Name};\n";
+    }
     print $out "    return 1;\n";
     print $out "  }\n";
     print $out "  else return 0;\n";

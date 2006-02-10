@@ -31,25 +31,31 @@ binary-arch:	checkroot
 	install -d debian/tmp/DEBIAN \
 		-d debian/tmp/usr/share/doc/$(package) \
 		-d $(chroot_jail)/special \
+		-d $(chroot_jail)/plash-uid-locks \
 		-d $(libdir) \
 		-d debian/tmp/usr/bin
-	cp -a debian/copyright debian/tmp/usr/share/doc/$(package)/
-	cp -a debian/changelog debian/tmp/usr/share/doc/$(package)/changelog.Debian
-	cp -a README debian/tmp/usr/share/doc/$(package)/
+	cp debian/copyright debian/tmp/usr/share/doc/$(package)/
+	cp debian/changelog debian/tmp/usr/share/doc/$(package)/changelog.Debian
+	cp README protocols.txt debian/tmp/usr/share/doc/$(package)/
 	# Could use "cp -a A B" instead of "strip A -o B"
 	strip ../mrs/shell -o debian/tmp/usr/bin/plash
 	strip ../mrs/shell-nogtk -o debian/tmp/usr/bin/plash-nogtk
 	strip ../mrs/run-as-nobody -o debian/tmp/usr/lib/plash/run-as-nobody
 	strip ../mrs/run-as-nobody+chroot -o debian/tmp/usr/lib/plash/run-as-nobody+chroot
+	strip ../mrs/run-as-anonymous -o debian/tmp/usr/lib/plash/run-as-anonymous
+	strip ../mrs/gc-uid-locks -o debian/tmp/usr/lib/plash/gc-uid-locks
 	strip ../mrs/ld.so -o $(chroot_jail)/special/ld-linux.so.2
-	cp -av inst_stripped/lib/* $(libdir)/
+	cp -rv inst_stripped/lib/* $(libdir)/
 	dpkg-shlibdeps shell shell-nogtk
 	dpkg-gencontrol -isp
 	chown -R root.root debian/tmp
 	chmod -R g-ws debian/tmp
+	chmod go-rwx $(chroot_jail)/plash-uid-locks
 	chmod +x $(chroot_jail)/special/ld-linux.so.2
 	chmod +s debian/tmp/usr/lib/plash/run-as-nobody
 	chmod +s debian/tmp/usr/lib/plash/run-as-nobody+chroot
+	chmod +s debian/tmp/usr/lib/plash/run-as-anonymous
+	chmod +s debian/tmp/usr/lib/plash/gc-uid-locks
 	dpkg --build debian/tmp ..
 
 define checkdir

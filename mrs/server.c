@@ -23,6 +23,7 @@
 
 #include <errno.h>
 #include <unistd.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <fcntl.h>
@@ -503,6 +504,87 @@ int resolve_obj(region_t r, struct filesys_obj *root, struct dir_stack *cwd,
   return RESOLVED_DIR;
 }
 
+/* Returns a file or dir object (no dirstacks), or possibly a symlink
+   object if nofollow is true. */
+struct filesys_obj *resolve_obj_simple
+  (struct filesys_obj *root, struct dir_stack *cwd,
+   seqf_t pathname, int symlink_limit, int nofollow, int *err)
+{
+  region_t r = region_make();
+  void *result;
+  int rc = resolve_obj(r, root, cwd, pathname, symlink_limit, nofollow,
+		       0 /* create */, &result, err);
+  region_free(r);
+  if(rc == RESOLVED_DIR) {
+    struct dir_stack *ds = result;
+    struct filesys_obj *dir = ds->dir;
+    dir->refcount++;
+    dir_stack_free(ds);
+    return dir;
+  }
+  else if(rc == RESOLVED_FILE_OR_SYMLINK) {
+    return result;
+  }
+  else if(rc <= 0) return 0;
+  *err = EIO;
+  return 0;
+}
+
+/* Used by mkdir, symlink and bind. */
+struct resolved_slot *resolve_empty_slot
+  (struct filesys_obj *root, struct dir_stack *cwd,
+   seqf_t pathname, int symlink_limit, int *err)
+{
+  region_t r = region_make();
+  void *result;
+  int rc =
+    resolve_obj(r, root, cwd, pathname, SYMLINK_LIMIT,
+		1 /* nofollow */, 1 /* create */, &result, err);
+  region_free(r);
+  if(rc == RESOLVED_DIR) {
+    dir_stack_free(result);
+    *err = EEXIST;
+    return 0;
+  }
+  else if(rc == RESOLVED_FILE_OR_SYMLINK) {
+    filesys_obj_free(result);
+    *err = EEXIST;
+    return 0;
+  }
+  else if(rc == RESOLVED_EMPTY_SLOT) {
+    return result;
+  }
+  else if(rc <= 0) { return 0; }
+  *err = EIO;
+  return 0;
+}
+
+/* Used by unlink, rmdir, rename and link. */
+struct resolved_slot *resolve_any_slot
+  (struct filesys_obj *root, struct dir_stack *cwd,
+   seqf_t pathname, int symlink_limit, int *err)
+{
+  region_t r = region_make();
+  void *result;
+  int rc =
+    resolve_obj(r, root, cwd, pathname, SYMLINK_LIMIT,
+		1 /* nofollow */, CREATE_ONLY /* create */, &result, err);
+  region_free(r);
+  if(rc == RESOLVED_EMPTY_SLOT) {
+    return result;
+  }
+  /* This case should only happen for the root directory: */
+  else if(rc == RESOLVED_DIR) {
+    dir_stack_free(result);
+    *err = EACCES; /* EISDIR would also be appropriate */
+    return 0;
+  }
+  else if(rc <= 0) { return 0; }
+  *err = EIO;
+  return 0;
+}
+
+
 struct filesys_obj *initial_dir(const char *pathname)
 {
   struct stat stat;
@@ -574,12 +656,13 @@ int process_chdir(struct process *p, seqf_t pathname, int *err)
   }
 }
 
-int process_open(struct process *p, seqf_t pathname, int flags, int mode, int *err)
+int process_open(struct filesys_obj *root, struct dir_stack *cwd,
+		 seqf_t pathname, int flags, int mode, int *err)
 {
   region_t r = region_make();
   void *result;
   int rc =
-    resolve_obj(r, p->root, p->cwd, pathname, SYMLINK_LIMIT,
+    resolve_obj(r, root, cwd, pathname, SYMLINK_LIMIT,
 		((flags & O_NOFOLLOW) || (flags & O_EXCL)) ? 1:0,
 		(flags & O_CREAT) ? 1:0,
 		&result, err);
@@ -639,106 +722,117 @@ int process_open(struct process *p, seqf_t pathname, int flags, int mode, int *e
    link and create the destination. */
 int process_mkdir(struct process *p, seqf_t pathname, int mode, int *err)
 {
-  region_t r = region_make();
-  void *result;
-  int rc =
-    resolve_obj(r, p->root, p->cwd, pathname, SYMLINK_LIMIT,
-		1 /* nofollow */, 1 /* create */, &result, err);
-  region_free(r);
-  if(rc == RESOLVED_DIR) {
-    dir_stack_free(result);
-    *err = EEXIST;
-    return -1;
-  }
-  else if(rc == RESOLVED_FILE_OR_SYMLINK) {
-    filesys_obj_free(result);
-    *err = EEXIST;
-    return -1;
-  }
-  else if(rc == RESOLVED_EMPTY_SLOT) {
-    struct resolved_slot *slot = result;
-    int r = slot->dir->vtable->mkdir(slot->dir, slot->leaf, mode, err);
-    free_resolved_slot(slot);
-    return r;
-  }
-  else if(rc <= 0) { return -1; }
-  *err = EIO;
-  return -1;
+  int r;
+  struct resolved_slot *slot =
+    resolve_empty_slot(p->root, p->cwd, pathname, SYMLINK_LIMIT, err);
+  if(!slot) return -1;
+  r = slot->dir->vtable->mkdir(slot->dir, slot->leaf, mode, err);
+  free_resolved_slot(slot);
+  return r;
 }
 
-int process_chmod(struct process *p, seqf_t pathname, int mode, int *err)
+int process_symlink(struct process *p, seqf_t newpath, seqf_t oldpath, int *err)
 {
-  region_t r = region_make();
-  void *result;
-  /* chmod does follow symlinks.  Symlinks do not have permissions of
-     their own. */
-  int rc = resolve_obj(r, p->root, p->cwd, pathname, SYMLINK_LIMIT,
-		       0 /* nofollow */, 0 /* create */, &result, err);
-  region_free(r);
-  if(rc == RESOLVED_DIR) {
-    struct dir_stack *ds = result;
-    int r = ds->dir->vtable->chmod(ds->dir, mode, err);
-    dir_stack_free(ds);
-    return r;
+  char *oldpath1;
+  int r;
+  struct resolved_slot *slot =
+    resolve_empty_slot(p->root, p->cwd, newpath, SYMLINK_LIMIT, err);
+  if(!slot) return -1;
+  oldpath1 = strdup_seqf(oldpath);
+  r = slot->dir->vtable->symlink(slot->dir, slot->leaf, oldpath1, err);
+  free(oldpath1);
+  free_resolved_slot(slot);
+  return r;
+}
+
+int process_rename(struct process *p, seqf_t oldpath, seqf_t newpath, int *err)
+{
+  struct resolved_slot *slot_src, *slot_dest;
+  int rc;
+  slot_src = resolve_any_slot(p->root, p->cwd, oldpath, SYMLINK_LIMIT, err);
+  if(!slot_src) return -1;
+  slot_dest = resolve_any_slot(p->root, p->cwd, newpath, SYMLINK_LIMIT, err);
+  if(!slot_dest) {
+    free_resolved_slot(slot_src);
+    return -1;
   }
-  else if(rc == RESOLVED_FILE_OR_SYMLINK) {
-    struct filesys_obj *obj = result;
-    int r = obj->vtable->chmod(obj, mode, err);
-    filesys_obj_free(obj);
-    return r;
+  rc = slot_src->dir->vtable->rename(slot_src->dir, slot_src->leaf,
+				     slot_dest->dir, slot_dest->leaf,
+				     err);
+  free_resolved_slot(slot_src);
+  free_resolved_slot(slot_dest);
+  return rc;
+}
+
+int process_link(struct process *p, seqf_t oldpath, seqf_t newpath, int *err)
+{
+  struct resolved_slot *slot_src, *slot_dest;
+  int rc;
+  slot_src = resolve_any_slot(p->root, p->cwd, oldpath, SYMLINK_LIMIT, err);
+  if(!slot_src) return -1;
+  slot_dest = resolve_any_slot(p->root, p->cwd, newpath, SYMLINK_LIMIT, err);
+  if(!slot_dest) {
+    free_resolved_slot(slot_src);
+    return -1;
   }
-  else if(rc <= 0) { return -1; }
-  *err = EIO;
-  return -1;
+  rc = slot_src->dir->vtable->link(slot_src->dir, slot_src->leaf,
+				   slot_dest->dir, slot_dest->leaf,
+				   err);
+  free_resolved_slot(slot_src);
+  free_resolved_slot(slot_dest);
+  return rc;
 }
 
 int process_unlink(struct process *p, seqf_t pathname, int *err)
 {
-  region_t r = region_make();
-  void *result;
-  int rc = resolve_obj(r, p->root, p->cwd, pathname, SYMLINK_LIMIT,
-		       1 /* nofollow */, CREATE_ONLY /* create */, &result, err);
-  region_free(r);
-  if(rc == RESOLVED_EMPTY_SLOT) {
-    struct resolved_slot *slot = result;
-    int r = slot->dir->vtable->unlink(slot->dir, slot->leaf, err);
-    free_resolved_slot(slot);
-    return r;
-  }
-  /* This case should only happen for the root directory: */
-  else if(rc == RESOLVED_DIR) {
-    dir_stack_free(result);
-    *err = EACCES; /* EISDIR would also be appropriate */
-    return -1;
-  }
-  else if(rc <= 0) { return -1; }
-  *err = EIO;
-  return -1;
+  int rc;
+  struct resolved_slot *slot =
+    resolve_any_slot(p->root, p->cwd, pathname, SYMLINK_LIMIT, err);
+  if(!slot) return -1;
+  rc = slot->dir->vtable->unlink(slot->dir, slot->leaf, err);
+  free_resolved_slot(slot);
+  return rc;
 }
 
 int process_rmdir(struct process *p, seqf_t pathname, int *err)
 {
-  region_t r = region_make();
-  void *result;
-  int rc = resolve_obj(r, p->root, p->cwd, pathname, SYMLINK_LIMIT,
-		       1 /* nofollow */, CREATE_ONLY /* create */, &result, err);
-  region_free(r);
-  if(rc == RESOLVED_EMPTY_SLOT) {
-    struct resolved_slot *slot = result;
-    int r = slot->dir->vtable->rmdir(slot->dir, slot->leaf, err);
-    free_resolved_slot(slot);
-    return r;
-  }
-  /* This case should only happen for the root directory: */
-  else if(rc == RESOLVED_DIR) {
-    dir_stack_free(result);
-    *err = EACCES; /* EBUSY could also be appropriate */
-    return -1;
-  }
-  else if(rc <= 0) { return -1; }
-  *err = EIO;
-  return -1;
+  int rc;
+  struct resolved_slot *slot =
+    resolve_any_slot(p->root, p->cwd, pathname, SYMLINK_LIMIT, err);
+  if(!slot) return -1;
+  rc = slot->dir->vtable->rmdir(slot->dir, slot->leaf, err);
+  free_resolved_slot(slot);
+  return rc;
 }
+
+int process_chmod(struct process *p, seqf_t pathname, int mode, int *err)
+{
+  int rc;
+  /* chmod does follow symlinks.  Symlinks do not have permissions of
+     their own. */
+  struct filesys_obj *obj =
+    resolve_obj_simple(p->root, p->cwd, pathname, SYMLINK_LIMIT,
+		       0 /* nofollow */, err);
+  if(!obj) return -1;
+  rc = obj->vtable->chmod(obj, mode, err);
+  filesys_obj_free(obj);
+  return rc;
+}
+
+int process_utimes(struct process *p, seqf_t pathname, int nofollow,
+		   const struct timeval *atime, const struct timeval *mtime,
+		   int *err)
+{
+  int rc;
+  struct filesys_obj *obj =
+    resolve_obj_simple(p->root, p->cwd, pathname, SYMLINK_LIMIT,
+		       nofollow, err);
+  if(!obj) return -1;
+  rc = obj->vtable->utimes(obj, atime, mtime, err);
+  filesys_obj_free(obj);
+  return rc;
+}
+
 
 seqt_t string_of_cwd(region_t r, struct dir_stack *dir)
 {
@@ -756,6 +850,7 @@ seqt_t string_of_cwd(region_t r, struct dir_stack *dir)
     return slash;
   }
 }
+
 
 /* Checks for executables that are scripts using the `#!' syntax. */
 /* This is not done recursively.  If there's a script that says it should
@@ -869,12 +964,26 @@ void init_fd_set(struct server_state *state)
   }
 }
 
+seqt_t mk_printf(region_t r, const char *fmt, ...)
+{
+  char buf[256], *x;
+  va_list args;
+  int got;
+
+  va_start(args, fmt);
+  got = vsnprintf(buf, sizeof(buf), fmt, args);
+  x = region_alloc(r, got);
+  memcpy(x, buf, got);
+  return mk_leaf2(r, x, got);
+}
+
 /* This should fill out "reply" ("reply_fds" defaults to being empty),
    and can allocate the message from region r. */
 void process_handle_msg(region_t r, struct server_state *state,
 			struct process *proc,
 			seqf_t msg_orig, fds_t fds_orig,
-			seqt_t *reply, fds_t *reply_fds)
+			seqt_t *reply, fds_t *reply_fds,
+			seqt_t *log_msg, seqt_t *log_reply)
 {
   {
     seqf_t msg = msg_orig;
@@ -886,11 +995,14 @@ void process_handle_msg(region_t r, struct server_state *state,
       struct process *proc2;
       struct process_list *node_new;
       int new_id = state->next_proc_id++;
+
+      *log_msg = mk_string(r, "fork");
       
       if(MOD_DEBUG) fprintf(server_log, MOD_MSG "forking new process, %i\n", new_id);
       if(socketpair(AF_LOCAL, SOCK_STREAM, 0, socks) < 0) {
 	*reply = cat2(r, mk_string(r, "Fail"),
 		      mk_int(r, errno));
+	*log_reply = mk_string(r, "fail");
 	return;
       }
       set_close_on_exec_flag(socks[0], 1);
@@ -910,6 +1022,7 @@ void process_handle_msg(region_t r, struct server_state *state,
       
       *reply = mk_string(r, "RFrk");
       *reply_fds = mk_fds1(r, socks[0]);
+      *log_reply = mk_printf(r, "ok, created #%i", new_id);
       return;
     }
   }
@@ -933,6 +1046,8 @@ void process_handle_msg(region_t r, struct server_state *state,
       int err;
       struct filesys_obj *obj;
       int fd;
+
+      *log_msg = cat2(r, mk_string(r, "exec: "), mk_leaf(r, cmd_filename));
       
       argv = region_alloc(r, argc * sizeof(seqf_t));
       for(i = 0; i < argc; i++) {
@@ -977,11 +1092,13 @@ void process_handle_msg(region_t r, struct server_state *state,
 		      mk_int(r, argc + extra_args),
 		      got);
 	*reply_fds = mk_fds1(r, fd);
+	*log_reply = mk_string(r, "ok");
 	return;
       }
     exec_fail:
       *reply = cat2(r, mk_string(r, "Fail"),
 		    mk_int(r, err));
+      *log_reply = mk_string(r, "fail");
       return;
     }
   exec_error:
@@ -996,27 +1113,21 @@ void process_handle_msg(region_t r, struct server_state *state,
     if(ok) {
       seqf_t pathname = msg;
       int fd, err = 0;
+
+      *log_msg =
+	cat2(r, mk_printf(r, "open: flags=0o%o, mode=0o%o, ", flags, mode),
+	     mk_leaf(r, pathname));
             
-      fd = process_open(proc, pathname, flags, mode, &err);
+      fd = process_open(proc->root, proc->cwd, pathname, flags, mode, &err);
       if(fd >= 0) {
 	*reply = mk_string(r, "ROpn");
 	*reply_fds = mk_fds1(r, fd);
-
-	if(DO_LOG_SUMMARY(state)) {
-	  fprintf(state->log, "open: flags=0o%o, mode=0o%o, ", flags, mode);
-	  fprint_d(state->log, pathname);
-	  fprintf(state->log, ": ok\n");
-	}
+	*log_reply = mk_string(r, "ok");
       }
       else {
 	*reply = cat2(r, mk_string(r, "Fail"),
 		      mk_int(r, err));
-
-	if(DO_LOG_SUMMARY(state)) {
-	  fprintf(state->log, "open: flags=0o%o, mode=0o%o, ", flags, mode);
-	  fprint_d(state->log, pathname);
-	  fprintf(state->log, ": fail errno=%i\n", err);
-	}
+	*log_reply = mk_string(r, "fail");
       }
       return;
     }
@@ -1029,56 +1140,40 @@ void process_handle_msg(region_t r, struct server_state *state,
     m_int(&ok, &msg, &nofollow);
     if(ok) {
       seqf_t pathname = msg;
-      void *result;
-      int rc, err = 0;
+      struct filesys_obj *obj;
+      int err;
       struct stat stat;
-      int got = -1;
-      
-      region_t r2 = region_make();
-      rc = resolve_obj(r2, proc->root, proc->cwd, pathname, SYMLINK_LIMIT, nofollow, 0 /* create */, &result, &err);
-      region_free(r2);
-      if(rc == RESOLVED_DIR) {
-	struct dir_stack *ds = result;
-	got = ds->dir->vtable->stat(ds->dir, &stat);
-	dir_stack_free(ds);
-      }
-      else if(rc == RESOLVED_FILE_OR_SYMLINK) {
-	struct filesys_obj *obj = result;
-	got = obj->vtable->stat(obj, &stat);
-	filesys_obj_free(obj);
-      }
-      if(got >= 0) {
-	*reply = cat4(r, mk_string(r, "RSta"),
-		      cat5(r, mk_int(r, stat.st_dev),
-			   mk_int(r, stat.st_ino),
-			   mk_int(r, stat.st_mode),
-			   mk_int(r, stat.st_nlink),
-			   mk_int(r, stat.st_uid)),
-		      cat5(r, mk_int(r, stat.st_gid),
-			   mk_int(r, stat.st_rdev),
-			   mk_int(r, stat.st_size),
-			   mk_int(r, stat.st_blksize),
-			   mk_int(r, stat.st_blocks)),
-		      cat3(r, mk_int(r, stat.st_atime),
-			   mk_int(r, stat.st_mtime),
-			   mk_int(r, stat.st_ctime)));
 
-	if(DO_LOG_SUMMARY(state)) {
-	  fprintf(state->log, "%s: ", nofollow ? "lstat" : "stat");
-	  fprint_d(state->log, pathname);
-	  fprintf(state->log, ": ok\n");
-	}
-      }
-      else {
+      *log_msg = cat3(r, mk_string(r, nofollow ? "lstat" : "stat"),
+		      mk_string(r, ": "),
+		      mk_leaf(r, pathname));
+
+      obj = resolve_obj_simple(proc->root, proc->cwd, pathname,
+			       SYMLINK_LIMIT, nofollow, &err);
+      if(!obj) {
+	*log_reply = mk_string(r, "fail");
 	*reply = cat2(r, mk_string(r, "Fail"),
 		      mk_int(r, err));
-
-	if(DO_LOG_SUMMARY(state)) {
-	  fprintf(state->log, "%s: ", nofollow ? "lstat" : "stat");
-	  fprint_d(state->log, pathname);
-	  fprintf(state->log, ": fail errno=%i\n", err);
-	}
+	return;
       }
+      /* FIXME: check for error: */
+      obj->vtable->stat(obj, &stat);
+      filesys_obj_free(obj);
+      *reply = cat4(r, mk_string(r, "RSta"),
+		    cat5(r, mk_int(r, stat.st_dev),
+			 mk_int(r, stat.st_ino),
+			 mk_int(r, stat.st_mode),
+			 mk_int(r, stat.st_nlink),
+			 mk_int(r, stat.st_uid)),
+		    cat5(r, mk_int(r, stat.st_gid),
+			 mk_int(r, stat.st_rdev),
+			 mk_int(r, stat.st_size),
+			 mk_int(r, stat.st_blksize),
+			 mk_int(r, stat.st_blocks)),
+		    cat3(r, mk_int(r, stat.st_atime),
+			 mk_int(r, stat.st_mtime),
+			 mk_int(r, stat.st_ctime)));
+      *log_reply = mk_string(r, "ok");
       return;
     }
   }
@@ -1092,6 +1187,7 @@ void process_handle_msg(region_t r, struct server_state *state,
       int rc, err = 0;
       
       region_t r2 = region_make();
+      *log_msg = cat2(r, mk_string(r, "readlink: "), mk_leaf(r, pathname));
       rc = resolve_obj(r2, proc->root, proc->cwd, pathname, SYMLINK_LIMIT,
 		       1 /*nofollow*/, 0 /* create */, &result, &err);
       region_free(r2);
@@ -1100,6 +1196,7 @@ void process_handle_msg(region_t r, struct server_state *state,
 	if(obj->vtable->type == OBJT_SYMLINK) {
 	  seqf_t link_dest;
 	  if(obj->vtable->readlink(obj, r, &link_dest, &err) >= 0) {
+	    *log_reply = mk_string(r, "ok");
 	    *reply = cat2(r, mk_string(r, "RRdl"),
 			  mk_leaf(r, link_dest));
 	  }
@@ -1133,11 +1230,15 @@ void process_handle_msg(region_t r, struct server_state *state,
     if(ok) {
       seqf_t pathname = msg;
       int err = 0;
-      int e = process_chdir(proc, pathname, &err);
+      int e;
+      *log_msg = mk_string(r, "chdir");
+      e = process_chdir(proc, pathname, &err);
       if(e == 0) {
+	*log_reply = mk_string(r, "ok");
 	*reply = mk_string(r, "RSuc");
       }
       else {
+	*log_reply = mk_string(r, "fail");
 	*reply = cat2(r, mk_string(r, "Fail"),
 		      mk_int(r, err));
       }
@@ -1150,7 +1251,9 @@ void process_handle_msg(region_t r, struct server_state *state,
     m_str(&ok, &msg, "Gcwd");
     m_end(&ok, &msg);
     if(ok) {
+      *log_msg = mk_string(r, "getcwd");
       if(proc->cwd) {
+	*log_reply = mk_string(r, "ok");
 	*reply = cat2(r, mk_string(r, "RCwd"),
 		      string_of_cwd(r, proc->cwd));
       }
@@ -1168,7 +1271,9 @@ void process_handle_msg(region_t r, struct server_state *state,
     if(ok) {
       seqf_t pathname = msg;
       int err = 0;
-      struct dir_stack *ds = resolve_dir(r, proc->root, proc->cwd, pathname, SYMLINK_LIMIT, &err);
+      struct dir_stack *ds;
+      *log_msg = mk_string(r, "dirlist");
+      ds = resolve_dir(r, proc->root, proc->cwd, pathname, SYMLINK_LIMIT, &err);
       if(ds) {
 	seqt_t result;
 	if(ds->dir->vtable->list(ds->dir, r, &result, &err) >= 0) {
@@ -1212,44 +1317,21 @@ void process_handle_msg(region_t r, struct server_state *state,
     m_int(&ok, &msg, &mode);
     if(ok) {
       seqf_t pathname = msg;
-      void *result;
-      int rc, err = 0;
+      struct filesys_obj *obj;
+      int err;
 
-      region_t r2 = region_make();
-      rc = resolve_obj(r2, proc->root, proc->cwd, pathname, SYMLINK_LIMIT,
-		       0 /*nofollow*/, 0 /* create */, &result, &err);
-      region_free(r2);
-      if(rc == RESOLVED_FILE_OR_SYMLINK) {
-	struct filesys_obj *obj = result;
+      *log_msg = cat2(r, mk_string(r, "access: "), mk_leaf(r, pathname));
+      obj = resolve_obj_simple(proc->root, proc->cwd, pathname, SYMLINK_LIMIT,
+			       0 /*nofollow*/, &err);
+      if(obj) {
 	filesys_obj_free(obj);
 	*reply = mk_string(r, "RAcc");
-
-	if(DO_LOG_SUMMARY(state)) {
-	  fprintf(state->log, "access: ");
-	  fprint_d(state->log, pathname);
-	  fprintf(state->log, ": ok\n");
-	}
-      }
-      else if(rc == RESOLVED_DIR) {
-	struct dir_stack *ds = result;
-	dir_stack_free(ds);
-	*reply = mk_string(r, "RAcc");
-
-	if(DO_LOG_SUMMARY(state)) {
-	  fprintf(state->log, "access: ");
-	  fprint_d(state->log, pathname);
-	  fprintf(state->log, ": ok\n");
-	}
+	*log_reply = mk_string(r, "ok");
       }
       else {
 	*reply = cat2(r, mk_string(r, "Fail"),
 		      mk_int(r, err));
-
-	if(DO_LOG_SUMMARY(state)) {
-	  fprintf(state->log, "access: ");
-	  fprint_d(state->log, pathname);
-	  fprintf(state->log, ": fail errno=%i\n", err);
-	}
+	*log_reply = mk_string(r, "fail");
       }
       return;
     }
@@ -1264,6 +1346,7 @@ void process_handle_msg(region_t r, struct server_state *state,
     if(ok) {
       seqf_t pathname = msg;
       int err = 0;
+      *log_msg = mk_string(r, "mkdir");
       if(process_mkdir(proc, pathname, mode, &err) < 0) {
 	*reply = cat2(r, mk_string(r, "Fail"),
 		      mk_int(r, err));
@@ -1272,6 +1355,78 @@ void process_handle_msg(region_t r, struct server_state *state,
 	*reply = mk_string(r, "RMkd");
       }
       return;
+    }
+  }
+  {
+    /* symlink() call */
+    seqf_t msg = msg_orig;
+    seqf_t newpath;
+    int ok = 1;
+    m_str(&ok, &msg, "Syml");
+    m_lenblock(&ok, &msg, &newpath);
+    if(ok) {
+      seqf_t oldpath = msg;
+      int err;
+      *log_msg = cat4(r, mk_string(r, "symlink: "), mk_leaf(r, newpath),
+		      mk_string(r, " to link to "), mk_leaf(r, oldpath));
+      if(process_symlink(proc, newpath, oldpath, &err) < 0) {
+	*reply = cat2(r, mk_string(r, "Fail"),
+		      mk_int(r, err));
+      }
+      else {
+	*reply = mk_string(r, "RSym");
+      }
+      return;
+    }
+  }
+  {
+    /* rename() call */
+    seqf_t msg = msg_orig;
+    seqf_t newpath;
+    int ok = 1;
+    m_str(&ok, &msg, "Renm");
+    m_lenblock(&ok, &msg, &newpath);
+    if(ok) {
+      seqf_t oldpath = msg;
+      int err;
+      *log_msg = cat4(r, mk_string(r, "rename: "), mk_leaf(r, oldpath),
+		      mk_string(r, " to "), mk_leaf(r, newpath));
+      if(process_rename(proc, oldpath, newpath, &err) < 0) {
+	*reply = cat2(r, mk_string(r, "Fail"),
+		      mk_int(r, err));
+	*log_reply = mk_string(r, "fail");
+	return;
+      }
+      else {
+	*reply = mk_string(r, "RRnm");
+	*log_reply = mk_string(r, "ok");
+	return;
+      }
+    }
+  }
+  {
+    /* link() call */
+    seqf_t msg = msg_orig;
+    seqf_t newpath;
+    int ok = 1;
+    m_str(&ok, &msg, "Link");
+    m_lenblock(&ok, &msg, &newpath);
+    if(ok) {
+      seqf_t oldpath = msg;
+      int err;
+      *log_msg = cat4(r, mk_string(r, "hard link: create "), mk_leaf(r, newpath),
+		      mk_string(r, " to link to "), mk_leaf(r, oldpath));
+      if(process_link(proc, oldpath, newpath, &err) < 0) {
+	*reply = cat2(r, mk_string(r, "Fail"),
+		      mk_int(r, err));
+	*log_reply = mk_string(r, "fail");
+	return;
+      }
+      else {
+	*reply = mk_string(r, "RLnk");
+	*log_reply = mk_string(r, "ok");
+	return;
+      }
     }
   }
   {
@@ -1288,12 +1443,45 @@ void process_handle_msg(region_t r, struct server_state *state,
     if(ok) {
       seqf_t pathname = msg;
       int err;
+      *log_msg = mk_string(r, "chmod");
       if(process_chmod(proc, pathname, mode, &err) < 0) {
 	*reply = cat2(r, mk_string(r, "Fail"),
 		      mk_int(r, err));
       }
       else {
 	*reply = mk_string(r, "RChm");
+      }
+      return;
+    }
+  }
+  {
+    /* utime()/utimes()/lutimes() calls */
+    seqf_t msg = msg_orig;
+    int nofollow;
+    int atime_sec, atime_usec;
+    int mtime_sec, mtime_usec;
+    int ok = 1;
+    m_str(&ok, &msg, "Utim");
+    m_int(&ok, &msg, &nofollow);
+    m_int(&ok, &msg, &atime_sec);
+    m_int(&ok, &msg, &atime_usec);
+    m_int(&ok, &msg, &mtime_sec);
+    m_int(&ok, &msg, &mtime_usec);
+    if(ok) {
+      seqf_t pathname = msg;
+      int err;
+      struct timeval atime, mtime;
+      atime.tv_sec = atime_sec;
+      atime.tv_usec = atime_usec;
+      mtime.tv_sec = mtime_sec;
+      mtime.tv_usec = mtime_usec;
+      *log_msg = mk_string(r, "utime");
+      if(process_utimes(proc, pathname, nofollow, &atime, &mtime, &err) < 0) {
+	*reply = cat2(r, mk_string(r, "Fail"),
+		      mk_int(r, err));
+      }
+      else {
+	*reply = mk_string(r, "RUtm");
       }
       return;
     }
@@ -1306,12 +1494,15 @@ void process_handle_msg(region_t r, struct server_state *state,
     if(ok) {
       seqf_t pathname = msg;
       int err;
+      *log_msg = cat2(r, mk_string(r, "unlink: "), mk_leaf(r, pathname));
       if(process_unlink(proc, pathname, &err) < 0) {
 	*reply = cat2(r, mk_string(r, "Fail"),
 		      mk_int(r, err));
+	*log_reply = mk_string(r, "fail");
       }
       else {
 	*reply = mk_string(r, "RUnl");
+	*log_reply = mk_string(r, "ok");
       }
       return;
     }
@@ -1324,12 +1515,15 @@ void process_handle_msg(region_t r, struct server_state *state,
     if(ok) {
       seqf_t pathname = msg;
       int err;
+      *log_msg = cat2(r, mk_string(r, "rmdir: "), mk_leaf(r, pathname));
       if(process_rmdir(proc, pathname, &err) < 0) {
 	*reply = cat2(r, mk_string(r, "Fail"),
 		      mk_int(r, err));
+	*log_reply = mk_string(r, "fail");
       }
       else {
 	*reply = mk_string(r, "RRmd");
+	*log_reply = mk_string(r, "ok");
       }
       return;
     }
@@ -1345,15 +1539,51 @@ void process_handle_msg(region_t r, struct server_state *state,
     if(ok) {
       seqf_t pathname = msg;
       int err;
-      struct filesys_obj *obj =
-	resolve_file(r, proc->root, proc->cwd, pathname,
-		     SYMLINK_LIMIT, 0 /*nofollow*/, &err);
+      struct filesys_obj *obj;
+      *log_msg = cat2(r, mk_string(r, "connect: "), mk_leaf(r, pathname));
+      obj = resolve_file(r, proc->root, proc->cwd, pathname,
+			 SYMLINK_LIMIT, 0 /*nofollow*/, &err);
       if(obj) {
 	if(obj->vtable->connect(obj, sock_fd, &err) >= 0) {
+	  filesys_obj_free(obj);
+	  *log_reply = mk_string(r, "ok");
 	  *reply = mk_string(r, "RFco");
 	  return;
 	}
+	filesys_obj_free(obj);
       }
+      *log_reply = mk_string(r, "fail");
+      *reply = cat2(r, mk_string(r, "Fail"),
+		    mk_int(r, err));
+      return;
+    }
+  }
+  {
+    /* bind() for Unix domain sockets */
+    seqf_t msg = msg_orig;
+    fds_t fds = fds_orig;
+    int ok = 1;
+    int sock_fd;
+    m_str(&ok, &msg, "Fbnd");
+    m_fd(&ok, &fds, &sock_fd);
+    if(ok) {
+      seqf_t pathname = msg;
+      int err;
+      struct resolved_slot *slot;
+      *log_msg = cat2(r, mk_string(r, "bind: "), mk_leaf(r, pathname));
+      slot = resolve_empty_slot(proc->root, proc->cwd, pathname,
+				SYMLINK_LIMIT, &err);
+      if(slot) {
+	if(slot->dir->vtable->socket_bind(slot->dir, slot->leaf, sock_fd,
+					  &err) >= 0) {
+	  free_resolved_slot(slot);
+	  *log_reply = mk_string(r, "ok");
+	  *reply = mk_string(r, "RFbd");
+	  return;
+	}
+	free_resolved_slot(slot);
+      }
+      *log_reply = mk_string(r, "fail");
       *reply = cat2(r, mk_string(r, "Fail"),
 		    mk_int(r, err));
       return;
@@ -1442,15 +1672,26 @@ void run_server(struct server_state *state)
 	      region_t r = region_make();
 	      seqt_t reply = seqt_empty;
 	      fds_t reply_fds = fds_empty;
+	      seqt_t log_msg = mk_string(r, "?");
+	      seqt_t log_reply = mk_string(r, "?");
+	      
 	      if(DO_LOG_MESSAGES(state)) {
 		fprintf(state->log, "\nmessage from process %i\n", node->id);
 		fprint_data(state->log, msg);
 	      }
 	      process_check(node->proc);
-	      process_handle_msg(r, state, node->proc, msg, fds, &reply, &reply_fds);
+	      process_handle_msg(r, state, node->proc, msg, fds,
+				 &reply, &reply_fds, &log_msg, &log_reply);
 	      if(DO_LOG_MESSAGES(state)) {
 		fprintf(state->log, "reply with %i FDs and this data:\n", reply_fds.count);
 		fprint_data(state->log, flatten(r, reply));
+	      }
+	      if(DO_LOG_SUMMARY(state)) {
+		fprintf(state->log, "#%i: ", node->id);
+		fprint_d(state->log, flatten(r, log_msg));
+		fprintf(state->log, ": ");
+		fprint_d(state->log, flatten(r, log_reply));
+		fprintf(state->log, "\n");
 	      }
 	      comm_send(r, node->proc->sock_fd, reply, reply_fds);
 	      close_fds(fds);

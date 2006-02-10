@@ -17,21 +17,23 @@
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
    USA.  */
 
-#ifndef build_fs_h
-#define build_fs_h
+#ifndef shell_globbing_h
+#define shell_globbing_h
 
-#include "filesysobj.h"
-#include "filesysslot.h"
 
-struct node;
+#include "shell.h"
+#include "shell-variants.h"
 
-struct node *make_empty_node();
-void free_node(struct node *node);
-void print_tree(int indent, struct node *node);
-int resolve_populate
-  (struct filesys_obj *root_obj, struct node *root_node,
-   struct dir_stack *cwd_ds,
-   seqf_t filename, int create, int *err);
-struct filesys_slot *build_fs(struct node *node);
+struct glob_params {
+  struct str_list **got_end;
+};
+
+int filename_of_glob_path(region_t r, struct glob_path *path, seqt_t *result);
+
+void glob_resolve(region_t r,
+		  struct filesys_obj *root, struct dir_stack *cwd,
+		  struct glob_path *filename,
+		  struct glob_params *params);
+
 
 #endif

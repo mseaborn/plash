@@ -1,0 +1,163 @@
+/* Copyright (C) 2004 Mark Seaborn
+
+   This file is part of Plash, the Principle of Least Authority Shell.
+
+   Plash is free software; you can redistribute it and/or modify it
+   under the terms of the GNU Lesser General Public License as
+   published by the Free Software Foundation; either version 2.1 of
+   the License, or (at your option) any later version.
+
+   Plash is distributed in the hope that it will be useful, but
+   WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Lesser General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public
+   License along with Plash; if not, write to the Free Software
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
+   USA.  */
+
+/* This program uses a lock directory to allocate user IDs.
+   
+   I considered putting the lock directory in /tmp.  We can create a
+   directory that only root can read or write.  Other users should not
+   be able to rename the directory.
+   
+   The nice thing about this is that the directory would be cleaned on
+   a reboot without having to add any new scripts to the boot
+   sequence.
+   
+   Unfortunately, it allows a possible denial-of-service attack,
+   because someone could create a directory in /tmp with the same name
+   as the one we're going to use.
+
+   So the directory will have to go somewhere safer in the directory
+   tree.  The problem of cleaning the directory is something we have
+   to deal with between reboots anyway.
+
+   NB. There's no point in checking the permissions and ownership of
+   the directory alone, because if a non-root user owns a directory in
+   its path, they can redirect the path to different directories that
+   root happens to own using symlinks.
+*/
+
+#include <errno.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <sys/time.h>
+#include <fcntl.h>
+#include <assert.h>
+
+#include "config.h"
+
+
+#define NAME "run-as-anonymous"
+
+#define UID_RANGE_LEN	(UID_RANGE_END - UID_RANGE_START)
+
+
+char hex_digit(int x)
+{
+  if(0 <= x && x <= 9) return x + '0';
+  if(0xa <= x && x <= 0xf) return x - 0xa + 'a';
+  assert(0);
+  return 'X';
+}
+
+int pick_uid()
+{
+  int try_uid;
+  int start_uid;
+  struct timeval time;
+  gettimeofday(&time, 0);
+
+  assert(UID_RANGE_LEN > 0);
+  start_uid = UID_RANGE_START + ((time.tv_sec ^ time.tv_usec) % UID_RANGE_LEN);
+  try_uid = start_uid;
+
+  while(1) {
+    int fd;
+    int i;
+    char buf[8 + 1];
+    for(i = 0; i < 8; i++) {
+      buf[i] = hex_digit((try_uid >> ((7-i)*4)) & 0xf);
+    }
+    buf[8] = 0;
+
+    /* fprintf(stderr, NAME ": trying uid %s\n", buf); */
+    fd = open(buf, O_WRONLY | O_CREAT | O_EXCL, 0600);
+    if(fd >= 0) {
+      close(fd);
+      return try_uid;
+    }
+    if(errno != EEXIST) {
+      perror(NAME ": open");
+      return 0;
+    }
+    try_uid++;
+    if(try_uid == start_uid) {
+      fprintf(stderr, NAME ": out of uids\n");
+      return 0;
+    }
+    if(try_uid >= UID_RANGE_END) try_uid = UID_RANGE_START;
+  }
+}
+
+int main(int argc, char *argv[], char *envp[])
+{
+  if(argc < 2) {
+    fprintf(stderr, "Usage: %s program args...\n", argv[0]);
+    return 1;
+  }
+  else {
+    char **argv2;
+    int i;
+    int cwd_fd;
+    int uid;
+
+#if 0
+    cwd_fd = open(".", O_RDONLY);
+    if(cwd_fd < 0) { perror(NAME ": open: can't save current directory"); return 1; }
+#endif
+
+    if(chdir(UID_LOCK_DIR) < 0) {
+      perror(NAME ": chdir: can't change to lock directory");
+      return 1;
+    }
+    
+    uid = pick_uid();
+    if(uid == 0) return 1;
+
+#if 0
+    if(fchdir(cwd_fd) < 0) {
+      perror(NAME ": fchdir: can't restore current directory"); return 1;
+    }
+#endif
+
+    argv2 = alloca((argc-1+1) * sizeof(char *));
+    argv2[0] = argv[1];
+    for(i = 1; i < argc-1; i++) argv2[i] = argv[i+1];
+    argv2[i] = 0;
+
+    if(chroot(JAIL_DIR) < 0) { perror(NAME ": chroot"); return 1; }
+    if(chdir("/") < 0) { perror(NAME ": chdir"); return 1; }
+
+    if(setgroups(0, 0) < 0) { perror(NAME ": setgroups"); return 1; }
+    if(setgid(uid) < 0) { perror(NAME ": setgid"); return 1; }
+    if(setuid(uid) < 0) { perror(NAME ": setuid"); return 1; }
+    if(getuid() != uid) {
+      fprintf(stderr, NAME ": uid not set correctly to %i -- "
+	      "does your kernel support 32-bit uids?\n", uid);
+      return 1;
+    }
+    if(getgid() != uid) {
+      fprintf(stderr, NAME ": gid not set correctly to %i -- "
+	      "does your kernel support 32-bit uids?\n", uid);
+      return 1;
+    }
+    
+    execve(argv[1], argv2, envp);
+    perror(NAME ": exec");
+    return 1;
+  }
+}

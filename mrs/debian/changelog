@@ -1,3 +1,27 @@
+plash (1.3) unstable; urgency=low
+
+  * Implemented FD redirection in the shell.
+  * Implemented rename() and link() for the same-directory case.
+    (The cross-directory case is trickier, 1. because it's hard to do
+    under Unix without race conditions in the presence of symlinks, and
+    2. it's complicated by directory proxy objects.)
+  * Improved one-line logging in the server.  Every call to the server
+    now produces a log line (though some are not fully filled out).
+  * Implemented bind().
+  * Implemented symlink() and utime()/utimes().
+  * Changed getuid() and getgid() so that they can take the uid/gid from
+    the environment variables PLASH_FAKE_UID/GID.  Some programs cannot
+    cope when they have a uid that does not have an entry in /etc/passwd.
+  * Added run-as-anonymous.
+  * Implemented globbing in the shell.  Pathnames now have structure in
+    the grammar; their components are separated by the parser.
+    When a pathname doesn't contain any wildcards, it is converted back
+    into a string.  It is canonicalised in the process; duplicate '/'s
+    are collapsed.
+  * Fixed FD leak:  the fabricated directory structure is now freed.
+
+ -- Mark Seaborn <mseaborn@jhu.edu>  Wed, 29 Dec 2004 17:10:41 +0000
+
 plash (1.2) unstable; urgency=low
 
   * Added support for `#!' scripts (to both the shell and the server).

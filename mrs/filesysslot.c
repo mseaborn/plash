@@ -59,6 +59,12 @@ static int gen_slot_mkdir(struct filesys_slot *obj, int mode, int *err)
   return slot->dir->vtable->mkdir(slot->dir, slot->leaf, mode, err);
 }
 
+static int gen_slot_symlink(struct filesys_slot *obj, const char *oldpath, int *err)
+{
+  struct filesys_generic_slot *slot = (void *) obj;
+  return slot->dir->vtable->symlink(slot->dir, slot->leaf, oldpath, err);
+}
+
 static int gen_slot_unlink(struct filesys_slot *obj, int *err)
 {
   struct filesys_generic_slot *slot = (void *) obj;
@@ -71,16 +77,25 @@ static int gen_slot_rmdir(struct filesys_slot *obj, int *err)
   return slot->dir->vtable->rmdir(slot->dir, slot->leaf, err);
 }
 
+static int gen_slot_socket_bind(struct filesys_slot *obj, int sock_fd, int *err)
+{
+  struct filesys_generic_slot *slot = (void *) obj;
+  return slot->dir->vtable->socket_bind(slot->dir, slot->leaf, sock_fd, err);
+}
+
 static struct filesys_slot_vtable gen_slot_vtable = {
   /* .free = */ gen_slot_free,
   /* .get = */ gen_slot_get,
-  /* .create_file = */ gen_slot_create_file,
-  /* .mkdir = */ gen_slot_mkdir,
-  /* .unlink = */ gen_slot_unlink,
-  /* .rmdir = */ gen_slot_rmdir,
+  /* .slot_create_file = */ gen_slot_create_file,
+  /* .slot_mkdir = */ gen_slot_mkdir,
+  /* .slot_symlink = */ gen_slot_symlink,
+  /* .slot_unlink = */ gen_slot_unlink,
+  /* .slot_rmdir = */ gen_slot_rmdir,
+  /* .slot_socket_bind = */ gen_slot_socket_bind,
   1
 };
 
+/* Takes an owning reference, and returns an owning reference. */
 struct filesys_slot *make_generic_slot(struct filesys_obj *dir, char *leaf)
 {
   struct filesys_generic_slot *slot =
@@ -119,6 +134,12 @@ static int ro_slot_mkdir(struct filesys_slot *slot, int mode, int *err)
   return -1;
 }
 
+static int ro_slot_symlink(struct filesys_slot *slot, const char *oldpath, int *err)
+{
+  *err = EACCES;
+  return -1;
+}
+
 static int ro_slot_unlink(struct filesys_slot *slot, int *err)
 {
   *err = EACCES;
@@ -131,16 +152,25 @@ static int ro_slot_rmdir(struct filesys_slot *slot, int *err)
   return -1;
 }
 
+static int ro_slot_socket_bind(struct filesys_slot *slot, int sock_fd, int *err)
+{
+  *err = EACCES;
+  return -1;
+}
+
 static struct filesys_slot_vtable ro_slot_vtable = {
   /* .free = */ ro_slot_free,
   /* .get = */ ro_slot_get,
-  /* .create_file = */ ro_slot_create_file,
-  /* .mkdir = */ ro_slot_mkdir,
-  /* .unlink = */ ro_slot_unlink,
-  /* .rmdir = */ ro_slot_rmdir,
+  /* .slot_create_file = */ ro_slot_create_file,
+  /* .slot_mkdir = */ ro_slot_mkdir,
+  /* .slot_symlink = */ ro_slot_symlink,
+  /* .slot_unlink = */ ro_slot_unlink,
+  /* .slot_rmdir = */ ro_slot_rmdir,
+  /* .slot_socket_bind = */ ro_slot_socket_bind,
   1
 };
 
+/* Takes an owning reference, and returns an owning reference. */
 struct filesys_slot *make_read_only_slot(struct filesys_obj *obj)
 {
   struct filesys_read_only_slot *slot =

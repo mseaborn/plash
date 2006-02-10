@@ -1,0 +1,147 @@
+
+The first protocol is used to send messages over a socket.  It simply
+divides the stream into messages.  Each message may contain data and
+file descriptors.
+
+Each message comprises:
+ * int32: "MSG!"
+ * int32: size of data payload in bytes (not necessarily word-aligned)
+ * int32: number of FDs
+ * data payload, padded to word (4 byte) boundary
+
+
+
+The filesystem protocol is layered on top of this.  The calls in the
+protocol are listed below.  The request is given before "=>"; possible
+replies come after.  "+ FD" indicates that a message includes a file
+descriptor argument.
+
+
+// open() call
+"Open" flags/int mode/int filename
+=>
+"ROpn" + FD
+"Fail" errno/int
+
+// stat() and lstat() calls
+"Stat" nofollow/int pathname
+=>
+"RSta" stat
+"Fail" errno/int
+
+// readlink() call
+"Rdlk" pathname
+=>
+"RRdl" string
+"Fail" errno/int
+
+// chdir() call
+"Chdr" pathname
+=>
+"RSuc"
+"Fail" errno/int
+
+// getcwd() call
+"Gcwd"
+=>
+"RCwd" pathname
+"Fail" errno/int
+
+// list contents of directories: opendir() + readdir() + closedir()
+"Dlst" pathname
+=>
+// same as `struct dirent' format:
+"RDls" (inode/int type/int name_size/int name)*
+"Fail" errno/int
+
+// access() call
+"Accs" mode/int pathname
+=>
+"RAcc"
+"Fail" errno/int
+
+// mkdir()
+"Mkdr" mode/int pathname
+=>
+"RMkd"
+"Fail" errno/int
+
+// chmod() call
+"Chmd" mode/int pathname
+=>
+"RChm"
+"Fail" errno/int
+
+// utime()/utimes()/lutimes() calls
+"Utim" nofollow/int
+	atime_sec/int atime_usec/int
+	mtime_sec/int mtime_usec/int
+	pathname
+=>
+"RUtm"
+"Fail" errno/int
+
+// rename() call
+"Renm" newpath-length/int newpath oldpath
+=>
+"RRnm"
+"Fail" errno/int
+
+// link() call
+"Link" newpath-length/int newpath oldpath
+=>
+"RLnk"
+"Fail" errno/int
+
+// symlink() call
+"Syml" newpath-length/int newpath oldpath
+=>
+"RSym"
+"Fail" errno/int
+
+// unlink() call
+"Unlk" pathname
+=>
+"RUnl"
+"Fail" errno/int
+
+// rmdir() call
+"Rmdr" pathname
+=>
+"RRmd"
+"Fail" errno/int
+
+// connect() on Unix domain sockets
+"Fcon" pathname + FD
+=>
+"RFco"
+"Fail" errno/int
+
+// bind() on Unix domain sockets
+"Fbnd" pathname + FD
+=>
+"RFbd"
+"Fail" errno/int
+
+// part of execve() call
+// The RExe result tells the client what it should pass to the exec syscall.
+// The client allocates a spare FD slot; it tells the server the number.
+// The server can then use this FD number in the arguments it returns.
+// The client receives an FD; it must copy it into that slot using "dup2".
+// This will be extended so that the server can also carry out the work of
+// the new process.
+"Exec" fd-number/int cmd-len/int cmd argc/int (arg-len/int arg)*
+=>
+"RExe" cmd-len/int cmd argc/int (arg-len/int arg)* + FD
+"Fail" errno/int
+
+// duplicate the connection -- called before the fork() syscall
+"Fork"
+=>
+"RFrk" + FD
+
+
+where:
+
+stat = dev ino mode nlink uid gid rdev size blksize blocks atime mtime ctime
+       (all ints)

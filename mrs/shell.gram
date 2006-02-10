@@ -1,0 +1,59 @@
+
+command =
+    "cd" ws dir:pathname {{ mk_chdir(r, dir) }}
+  / "cd" ws {{ mk_chdir(r, char_cons(r, '~', 0)) }}
+  / c:pathname a:arglist1 {{ mk_command(r, c, a) }};
+
+arglist1 = a1:arglist2 arrow a2:arglist2
+             {{ mk_arg_cat(r, mk_arg_read(r, a1), mk_arg_write(r, a2)) }}
+         / arglist2;
+# The ambient file list is just another arg list.  It can contain string
+# arguments, but these will be ignored (and give a warning).
+# This serves two purposes: you can easily put "+" into an arg list
+# and call the standard Unix shell instead in order to explore filesystem
+# that was created.  It's also simpler than defining something special
+# for ambient arg lists!
+arglist2 = a:arglist3 plus fs:arglist2 {{ mk_arg_cat(r, a, mk_arg_ambient(r, fs)) }}
+         / arglist3;
+arglist3 = a1:arglist4 a2:arglist3 {{ mk_arg_cat(r, a1, a2) }}
+         / null {{ mk_arg_empty(r) }};
+arglist4 = c_open l:arglist1 c_close {{ l }}
+         / arg;
+
+arg = s:option {{ mk_arg_string(r, s) }}
+    / s:string_literal {{ mk_arg_string(r, s) }}
+    / f:pathname {{ mk_arg_filename(r, f) }};
+
+# pathname = s:(!wschar c:char {{ (void*) c }})+ ws;
+pathname = !(![a-zA-Z0-9_/.~]) s:pathname_aux ws {{ s }};
+pathname_aux = c:(!wschar c:char {{ (void*) c }})
+               rest:(pathname_aux / null {{ 0 }})
+               {{ char_cons(r, (int) c, rest) }};
+
+
+string_literal =
+    '"' s:str_lit1 '"' ws {{ s }}
+  / '\'' s:str_lit2 '\'' ws {{ s }};
+str_lit1 = !'"' c:char rest:str_lit1 {{ char_cons(r, (int) c, rest) }} / null {{ 0 }};
+str_lit2 = !'\'' c:char rest:str_lit2 {{ char_cons(r, (int) c, rest) }} / null {{ 0 }};
+
+option = '-' s:opt_str ws {{ char_cons(r, '-', s) }};
+opt_str = !wschar c:char rest:opt_str {{ char_cons(r, (int) c, rest) }} / null {{ 0 }};
+
+char = '\\' '\\' {{ (void*) '\\' }}
+     / '\\' '\'' {{ (void*) '\'' }}
+     / '\\' '"' {{ (void*) '"' }}
+     / '\\' ' ' {{ (void*) ' ' }}
+     / '\\' 'n' {{ (void*) '\n' }}
+     / '\\' 't' {{ (void*) '\t' }}
+     / !('\\' .) c:. {{ (void*) c }};
+
+
+# Lexical
+
+c_open = '{' ws;
+c_close = '}' ws;
+arrow = "=>" ws;
+plus = "+" ws;
+ws = (wschar / '#' (!'\n' .)* '\n')*;
+wschar = ' ' / '\t' / '\n';

@@ -1,0 +1,182 @@
+Only in glibc-2.3.3: autom4te.cache
+diff -ru orig/glibc-2.3.3/elf/dl-load.c glibc-2.3.3/elf/dl-load.c
+--- orig/glibc-2.3.3/elf/dl-load.c	Mon Nov 24 22:54:19 2003
++++ glibc-2.3.3/elf/dl-load.c	Mon Nov 29 11:06:22 2004
+@@ -95,6 +95,8 @@
+ # define ELF_FIXED_ADDRESS(loader, mapstart) ((void) 0)
+ #endif
+ 
++/* mrs: moved to sysdeps/generic/ldsodefs.h */
++#if 0
+ /* Type for the buffer we put the ELF header and hopefully the program
+    header.  This buffer does not really have to be too large.  In most
+    cases the program header follows the ELF header directly.  If this
+@@ -119,6 +121,7 @@
+ #endif
+   char buf[FILEBUF_SIZE] __attribute__ ((aligned (__alignof (ElfW(Ehdr)))));
+ };
++#endif
+ 
+ /* This is the decomposed LD_LIBRARY_PATH search path.  */
+ static struct r_search_path_struct env_path_list;
+@@ -805,9 +808,7 @@
+ /* Map in the shared object NAME, actually located in REALNAME, and already
+    opened on FD.  */
+ 
+-#ifndef EXTERNAL_MAP_FROM_FD
+-static
+-#endif
++/* mrs: removed static qualifier */
+ struct link_map *
+ _dl_map_object_from_fd (const char *name, int fd, struct filebuf *fbp,
+ 			char *realname, struct link_map *loader, int l_type,
+diff -ru orig/glibc-2.3.3/elf/rtld.c glibc-2.3.3/elf/rtld.c
+--- orig/glibc-2.3.3/elf/rtld.c	Mon Nov 24 22:55:26 2003
++++ glibc-2.3.3/elf/rtld.c	Mon Nov 29 22:00:51 2004
+@@ -662,6 +662,8 @@
+ 
+   if (*user_entry == (ElfW(Addr)) ENTRY_POINT)
+     {
++      int exec_fd = -1; /* mrs */
++
+       /* Ho ho.  We are not the program interpreter!  We are the program
+ 	 itself!  This means someone ran ld.so as a command.  Well, that
+ 	 might be convenient to do sometimes.  We support it by
+@@ -683,7 +685,23 @@
+       GL(dl_rtld_map).l_name = rtld_progname;
+ 
+       while (_dl_argc > 1)
+-	if (! strcmp (INTUSE(_dl_argv)[1], "--list"))
++	/* mrs: */
++	if(! strcmp (INTUSE(_dl_argv)[1], "--fd")
++	   && _dl_argc > 2)
++	  {
++	    const char *c;
++	    int x = 0;
++	    for(c = _dl_argv[2]; *c; c++) {
++	      if('0' <= *c && *c <= '9') x = x*10 + (*c - '0');
++	      else _dl_fatal_printf("bad `--fd' argument\n");
++	    }
++	    exec_fd = x;
++
++	    _dl_skip_args += 2;
++	    _dl_argc -= 2;
++	    INTUSE(_dl_argv) += 2;
++	  }
++	else if (! strcmp (INTUSE(_dl_argv)[1], "--list"))
+ 	  {
+ 	    mode = list;
+ 	    GL(dl_lazy) = -1;	/* This means do no dependency analysis.  */
+@@ -738,6 +756,7 @@
+ file you run.  This is mostly of use for maintainers to test new versions\n\
+ of this helper program; chances are you did not intend to run this program.\n\
+ \n\
++  --fd N                read program from file descriptor rather than pathname\n\
+   --list                list all dependencies and how they are resolved\n\
+   --verify              verify that given object really is a dynamically linked\n\
+                         object we can handle\n\
+@@ -779,18 +798,41 @@
+ 	  const char *err_str = NULL;
+ 	  struct map_args args;
+ 
+-	  args.str = rtld_progname;
+-	  (void) INTUSE(_dl_catch_error) (&objname, &err_str, map_doit, &args);
+-	  if (__builtin_expect (err_str != NULL, 0))
+-	    /* We don't free the returned string, the programs stops
+-	       anyway.  */
+-	    _exit (EXIT_FAILURE);
++	  if(exec_fd < 0) {
++	    args.str = rtld_progname;
++	    (void) INTUSE(_dl_catch_error) (&objname, &err_str, map_doit, &args);
++	    if (__builtin_expect (err_str != NULL, 0))
++	      /* We don't free the returned string, the programs stops
++		 anyway.  */
++	      _exit (EXIT_FAILURE);
++	  }
++	  /* mrs: */
++	  else { _dl_fatal_printf("don't handle verify for FD input\n"); }
+ 	}
+       else
+ 	{
+ 	  HP_TIMING_NOW (start);
+-	  INTUSE(_dl_map_object) (NULL, rtld_progname, 0, lt_library, 0,
+-				  __RTLD_OPENEXEC);
++	  if(exec_fd < 0) {
++	    INTUSE(_dl_map_object) (NULL /* struct link_map *loader */,
++				    rtld_progname /* name */,
++				    0 /* preloaded */,
++				    lt_library /* type */,
++				    0 /* trace_mode */,
++				    __RTLD_OPENEXEC /* mode */);
++	  }
++	  else {
++	    struct filebuf fb;
++	    if(__lseek (exec_fd, SEEK_SET, 0) < 0)
++	      _dl_fatal_printf("lseek on executable FD failed\n");
++	    fb.len = __libc_read (exec_fd, fb.buf, sizeof (fb.buf));
++	    if(fb.len < 0) _dl_fatal_printf("read on executable FD failed\n");
++	    /* rtld_progname is #define'd as _dl_argv[0] */
++	    _dl_map_object_from_fd (rtld_progname /* name */, exec_fd, &fb,
++				    rtld_progname /* realname */,
++				    NULL /* struct link_map *loader */,
++				    lt_library /* type */,
++				    __RTLD_OPENEXEC /* mode */);
++	  }
+ 	  HP_TIMING_NOW (stop);
+ 
+ 	  HP_TIMING_DIFF (load_time, start, stop);
+diff -ru orig/glibc-2.3.3/sysdeps/generic/ldsodefs.h glibc-2.3.3/sysdeps/generic/ldsodefs.h
+--- orig/glibc-2.3.3/sysdeps/generic/ldsodefs.h	Mon Nov 24 22:56:07 2003
++++ glibc-2.3.3/sysdeps/generic/ldsodefs.h	Mon Nov 29 11:06:02 2004
+@@ -556,6 +556,38 @@
+      internal_function;
+ 
+ 
++/* mrs: */
++/* Type for the buffer we put the ELF header and hopefully the program
++   header.  This buffer does not really have to be too large.  In most
++   cases the program header follows the ELF header directly.  If this
++   is not the case all bets are off and we can make the header
++   arbitrarily large and still won't get it read.  This means the only
++   question is how large are the ELF and program header combined.  The
++   ELF header 32-bit files is 52 bytes long and in 64-bit files is 64
++   bytes long.  Each program header entry is again 32 and 56 bytes
++   long respectively.  I.e., even with a file which has 7 program
++   header entries we only have to read 512B.  Add to this a bit of
++   margin for program notes and reading 512B and 640B for 32-bit and
++   64-bit files respecitvely is enough.  If this heuristic should
++   really fail for some file the code in `_dl_map_object_from_fd'
++   knows how to recover.  */
++struct filebuf
++{
++  ssize_t len;
++#if __WORDSIZE == 32
++# define FILEBUF_SIZE 512
++#else
++# define FILEBUF_SIZE 640
++#endif
++  char buf[FILEBUF_SIZE] __attribute__ ((aligned (__alignof (ElfW(Ehdr)))));
++};
++
++/* mrs: */
++struct link_map *
++_dl_map_object_from_fd (const char *name, int fd, struct filebuf *fbp,
++			char *realname, struct link_map *loader, int l_type,
++			int mode);
++
+ /* Open the shared object NAME and map in its segments.
+    LOADER's DT_RPATH is used in searching for NAME.
+    If the object is already opened, returns its existing map.
+diff -ru orig/glibc-2.3.3/sysdeps/unix/sysv/linux/not-cancel.h glibc-2.3.3/sysdeps/unix/sysv/linux/not-cancel.h
+--- orig/glibc-2.3.3/sysdeps/unix/sysv/linux/not-cancel.h	Thu Sep  4 15:05:12 2003
++++ glibc-2.3.3/sysdeps/unix/sysv/linux/not-cancel.h	Tue Nov 30 21:34:01 2004
+@@ -18,6 +18,9 @@
+    Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
+    02111-1307 USA.  */
+ 
++// mrs:
++#error Do not use this any more!
++
+ #include <sysdep.h>
+ 
+ /* Uncancelable open.  */

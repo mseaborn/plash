@@ -1,0 +1,15 @@
+#!/usr/bin/perl
+
+my @lines;
+my $line;
+while(defined($line = <>)) {
+  if($line =~ /^[a-zA-Z0-9]{8}(\s+[A-Za-z]\s+)/) {
+    push(@lines, (' 'x8).$1.$');
+  }
+  else {
+    push(@lines, $line);
+  }
+}
+
+foreach my $x (sort @lines) { print $x; }
+print "(".scalar(@lines).")\n";

@@ -54,56 +54,28 @@ affected.
 mkdir -p %{buildroot}/usr/share/doc/plash-%{version}
 mkdir -p %{buildroot}/usr/share/doc/plash-%{version}/html
 mkdir -p %{buildroot}/usr/share/man/man1
-mkdir -p %{buildroot}/usr/lib/plash/lib
-mkdir -p %{buildroot}/var/lib/plash-chroot-jail/special
-mkdir -p %{buildroot}/var/lib/plash-chroot-jail/plash-uid-locks
-> %{buildroot}/var/lib/plash-chroot-jail/plash-uid-locks/flock-file
-mkdir -p %{buildroot}/usr/bin
-mkdir -p %{buildroot}/usr/share/emacs/site-lisp/plash/
 
 # Install docs
-cp -v plash/COPYRIGHT        %{buildroot}/usr/share/doc/plash-%{version}/
-cp -v plash/README           %{buildroot}/usr/share/doc/plash-%{version}/
-cp -v plash/NOTES            %{buildroot}/usr/share/doc/plash-%{version}/
-cp -v plash/NOTES.exec       %{buildroot}/usr/share/doc/plash-%{version}/
-cp -v plash/BUGS             %{buildroot}/usr/share/doc/plash-%{version}/
-cp -v plash/protocols.txt    %{buildroot}/usr/share/doc/plash-%{version}/
-cp -v plash/debian/changelog %{buildroot}/usr/share/doc/plash-%{version}/
-cp -v plash/docs/out-html/*  %{buildroot}/usr/share/doc/plash-%{version}/html/
+cp -prv plash/COPYRIGHT plash/README \
+	plash/docs/README.old plash/docs/NEWS plash/docs/NEWS-exec-objs \
+	plash/docs/protocols.txt \
+	plash/debian/changelog \
+	plash/docs/html \
+	%{buildroot}/usr/share/doc/plash-%{version}/
 
 # Install man pages
-cp -v plash/docs/out-man/plash.1 \
-      plash/docs/out-man/exec-object.1 \
-      plash/docs/out-man/plash-opts.1 \
-      plash/docs/out-man/plash-chroot.1 \
-      plash/docs/out-man/plash-run-emacs.1 \
-      plash/docs/out-man/pola-run.1 \
-      plash/docs/out-man/plash-socket-connect.1 \
-      plash/docs/out-man/plash-socket-publish.1 \
-      %{buildroot}/usr/share/man/man1/
+cp -pv plash/docs/man/* %{buildroot}/usr/share/man/man1/
 gzip -9 %{buildroot}/usr/share/man/man1/*.1
-( cd %{buildroot}/usr/share/man/man1 && ln -s plash-opts.1.gz plash-opts-gtk.1.gz )
+( cd %{buildroot}/usr/share/man/man1 && \
+  ln -s plash-opts.1.gz plash-opts-gtk.1.gz )
 
-# Install libraries
-( cd plash && ./src/install.pl --dest-dir %{buildroot}/usr/lib/plash/lib/ )
-strip --remove-section=.comment --remove-section=.note plash/shobj/ld.so -o %{buildroot}/var/lib/plash-chroot-jail/special/ld-linux.so.2
-chmod +x %{buildroot}/var/lib/plash-chroot-jail/special/ld-linux.so.2
 
-( cd plash && ./pkg-install.sh %{buildroot} )
+( cd plash && ./install.sh %{buildroot} )
 
-# cp -v plash/mrs/run-as-nobody %{buildroot}/usr/lib/plash/
-# cp -v plash/mrs/run-as-nobody+chroot %{buildroot}/usr/lib/plash/
-cp -v plash/setuid/run-as-anonymous %{buildroot}/usr/lib/plash/
-cp -v plash/setuid/gc-uid-locks %{buildroot}/usr/lib/plash/
-cp -v plash/setuid/run-as-anonymous %{buildroot}/var/lib/plash-chroot-jail/run-as-anonymous
-
-# Install Emacs Lisp file
-cp -v plash/src/plash-gnuserv.el %{buildroot}/usr/share/emacs/site-lisp/plash/
 
 %clean
 
 %files
-# -f glibc/mrs/installed-file-list
 
 # This has to come first, so that it applies to the directories below
 %defattr(-,root,root)
@@ -115,8 +87,6 @@ cp -v plash/src/plash-gnuserv.el %{buildroot}/usr/share/emacs/site-lisp/plash/
 /usr/share/doc/plash-%{version}
 /usr/share/emacs
 
-# %attr(06755,root,root) /usr/lib/plash/run-as-nobody
-# %attr(06755,root,root) /usr/lib/plash/run-as-nobody+chroot
 %attr(06755,root,root) /usr/lib/plash/run-as-anonymous
 %attr(06755,root,root) /usr/lib/plash/gc-uid-locks
 %attr(06755,root,root) /var/lib/plash-chroot-jail/run-as-anonymous

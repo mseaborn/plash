@@ -386,20 +386,10 @@ int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
     }
   }
 
-  /*
-  seqt_t got = seqt_empty;
-  int i, argc;
-  for(i = 0; argv[i]; i++) {
-    got = cat3(r, got,
-	       mk_int(r, strlen(argv[i])),
-	       mk_string(r, argv[i]));
-  }
-  argc = i;
-  */
-
   /* Allocate an FD number which we will copy an FD into later. */
   /* NB. FD 0 might have been closed by the program, in which case this
      will fail. */
+  /* This part is scheduled for removal; the FD isn't needed any more. */
   exec_fd = dup(0);
   if(exec_fd < 0) goto error;
 
@@ -411,8 +401,6 @@ int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
 			      mk_int(r, exec_fd),
 			      mk_int(r, strlen(cmd_filename)),
 			      mk_string(r, cmd_filename),
-			      /*mk_int(r, argc),
-				got*/
 			      mk_int(r, args),
 			      argbuf_data(argbuf)),
 			 caps_empty, fds_empty),
@@ -425,6 +413,24 @@ int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
     m_str(&ok, &msg, "RExe");
     m_lenblock(&ok, &msg, &cmd_filename2);
     m_int(&ok, &msg, &argc);
+    if(ok && result.fds.count == 0 && result.caps.size == 0) {
+      int i;
+      char **argv2 = alloca((argc + 1) * sizeof(char *));
+      for(i = 0; i < argc; i++) {
+	seqf_t arg;
+	m_lenblock(&ok, &msg, &arg);
+	if(!ok) { __set_errno(EIO); goto error; }
+	argv2[i] = region_strdup_seqf(r, arg);
+      }
+      argv2[argc] = 0;
+      
+      close(exec_fd); /* this line can be removed later */
+      
+      execve(region_strdup_seqf(r, cmd_filename2), argv2, envp);
+      goto error;
+    }
+
+    /* This case is scheduled for removal. */
     if(ok && result.fds.count == 1 && result.caps.size == 0) {
       int exec_fd2 = result.fds.fds[0];
       int i;

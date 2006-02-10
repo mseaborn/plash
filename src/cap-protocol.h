@@ -37,6 +37,10 @@ void cap_close_all_connections(void);
 
 void cap_print_connections_info(FILE *fp);
 
+#ifdef GC_DEBUG
+void cap_mark_exported_objects(void);
+#endif
+
 /* This is a more complex interface for listening on connections for
    when you need to use select() on some other file descriptors at the
    same time. */

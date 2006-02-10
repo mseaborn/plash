@@ -65,6 +65,11 @@ struct filesys_obj *fs_make_root(fs_node_t node);
 static inline void free_node(struct node *node) {
   filesys_obj_free((cap_t) node);
 }
+#ifdef GC_DEBUG
+static inline void mark_node(struct node *node) {
+  filesys_obj_mark((cap_t) node);
+}
+#endif
 
 
 /* This is a private data structure */

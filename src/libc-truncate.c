@@ -25,7 +25,7 @@
 #include "libc-comms.h"
 
 
-/* EXPORT: new_truncate => truncate __GI_truncate */
+/* EXPORT: new_truncate => truncate __GI_truncate __truncate __GI___truncate */
 int new_truncate(const char *path, off_t length)
 {
   int rc;
@@ -35,3 +35,6 @@ int new_truncate(const char *path, off_t length)
   close(fd);
   return rc;
 }
+
+
+#include "out-aliases_libc-truncate.h"

@@ -347,13 +347,20 @@ int open_executable_file(struct filesys_obj *obj, seqf_t cmd_filename, int *err)
 /* Takes an FD for an executable.  The initial executable is looked up
    in the user's namespace.  But pathnames specified in the `#!' line
    are looked up in the process's namespace. */
-/* Takes ownership of the FD it's given. */
+/* If exec_fd_out is non-NULL, it will return a file descriptor for the
+   executable (the interpreter executable if #! is used) -- this is for
+   use with ld.so's --fd option (which I am removing).
+   Otherwise, it returns the filename of the executable via
+   exec_filename_out. */
+/* Takes ownership of the FD it's given (ie. either closes it, or returns
+   it via exec_fd_out if applicable). */
 /* Returns -1 if there's an error. */
 int exec_for_scripts
   (region_t r,
    struct filesys_obj *root, struct dir_stack *cwd,
    const char *cmd, int exec_fd, int argc, const char **argv,
-   int *exec_fd_out, int *argc_out, const char ***argv_out,
+   int *exec_fd_out, const char **exec_filename_out,
+   int *argc_out, const char ***argv_out,
    int *err)
 {
   char buf[1024];
@@ -374,10 +381,11 @@ int exec_for_scripts
     seqf_t icmd;
     region_t r2;
     struct filesys_obj *obj;
-    int fd;
 
     close(exec_fd);
-    
+
+    /* Parse the #! line to find the interpreter filename, and an
+       optional argument for it. */
     while(i < got && buf[i] == ' ') i++; /* Skip spaces */
     if(i >= got) { *err = EINVAL; return -1; }
     icmd_start = i;
@@ -391,16 +399,26 @@ int exec_for_scripts
     if(i >= got) { *err = EINVAL; return -1; }
     arg_end = i;
 
+    /* Deal with the interpreter executable's filename. */
     icmd.data = buf + icmd_start;
     icmd.size = icmd_end - icmd_start;
-    r2 = region_make();
-    obj = resolve_file(r2, root, cwd, icmd, SYMLINK_LIMIT,
-		       0 /* nofollow */, err);
-    region_free(r2);
-    if(!obj) return -1; /* Error */
-    fd = obj->vtable->open(obj, O_RDONLY, err);
-    filesys_obj_free(obj);
-    if(fd < 0) return -1; /* Error */
+    if(exec_fd_out) {
+      int fd;
+      r2 = region_make();
+      obj = resolve_file(r2, root, cwd, icmd, SYMLINK_LIMIT,
+			 0 /* nofollow */, err);
+      region_free(r2);
+      if(!obj) return -1; /* Error */
+      fd = obj->vtable->open(obj, O_RDONLY, err);
+      filesys_obj_free(obj);
+      if(fd < 0) return -1; /* Error */
+
+      *exec_fd_out = fd;
+    }
+    else {
+      assert(exec_filename_out);
+      *exec_filename_out = region_strdup_seqf(r, icmd);
+    }
 
     if(arg_end > arg_start) {
       seqf_t arg = { buf + arg_start, arg_end - arg_start };
@@ -410,7 +428,6 @@ int exec_for_scripts
       argv2[1] = region_strdup_seqf(r, arg);
       argv2[2] = cmd;
       for(i = 1; i < argc; i++) argv2[i+2] = argv[i];
-      *exec_fd_out = fd;
       *argc_out = argc + 2;
       *argv_out = argv2;
       return 0;
@@ -421,7 +438,6 @@ int exec_for_scripts
       argv2[0] = region_strdup_seqf(r, icmd);
       argv2[1] = cmd;
       for(i = 1; i < argc; i++) argv2[i+1] = argv[i];
-      *exec_fd_out = fd;
       *argc_out = argc + 1;
       *argv_out = argv2;
       return 0;
@@ -429,7 +445,13 @@ int exec_for_scripts
   }
   else {
     /* Assume an ELF executable. */
-    *exec_fd_out = exec_fd;
+    if(exec_fd_out) {
+      *exec_fd_out = exec_fd;
+    }
+    else {
+      close(exec_fd);
+      *exec_filename_out = cmd;
+    }
     *argc_out = argc;
     *argv_out = argv;
     return 0;
@@ -576,15 +598,14 @@ void handle_fs_op_message(region_t r, struct process *proc,
        //&& argc >= 1
        ) {
       struct arg_m_buf argbuf = { msg, caps_empty, fds_empty };
-      int extra_args = 5;
-      int buf_size = 40;
-      char *buf = region_alloc(r, buf_size);
+      int extra_args;
       const char **argv, **argv2;
       seqf_t cmd_filename2;
       int i;
       int err;
       struct filesys_obj *obj;
       int fd;
+      const char *executable_filename; /* of interpreter for #! scripts */
 
       *log_msg = cat2(r, mk_string(r, "exec: "), mk_leaf(r, cmd_filename));
 
@@ -600,16 +621,6 @@ void handle_fs_op_message(region_t r, struct process *proc,
 	}
       }
 
-      /*
-      argv = region_alloc(r, argc * sizeof(seqf_t));
-      for(i = 0; i < argc; i++) {
-	seqf_t arg;
-	m_lenblock(&ok, &msg, &arg);
-	argv[i] = region_strdup_seqf(r, arg);
-	if(!ok) goto exec_error;
-      }
-      */
-      
       obj = resolve_file(r, proc->root, proc->cwd, cmd_filename,
 			 SYMLINK_LIMIT, 0 /* nofollow */, &err);
       if(!obj) goto exec_fail;
@@ -636,17 +647,19 @@ void handle_fs_op_message(region_t r, struct process *proc,
       /* Handle "#!" scripts. */
       if(exec_for_scripts(r, proc->root, proc->cwd,
 			  region_strdup_seqf(r, cmd_filename), fd, argc, argv,
-			  &fd, &argc, &argv, &err) < 0) goto exec_fail;
-      
+			  NULL /* fd not returned */,
+			  &executable_filename,
+			  &argc, &argv, &err) < 0) goto exec_fail;
+
+      extra_args = 3;
       argv2 = region_alloc(r, (argc + extra_args) * sizeof(seqf_t));
+      assert(argc >= 1);
       argv2[0] = argv[0];
       cmd_filename2 = seqf_string("/special/ld-linux.so.2");
       argv2[1] = "--library-path";
       argv2[2] = PLASH_LD_LIBRARY_PATH;
-      argv2[3] = "--fd";
-      snprintf(buf, buf_size, "%i", fd_number);
-      argv2[4] = buf;
-      for(i = 0; i < argc; i++) argv2[i + extra_args] = argv[i];
+      argv2[3] = executable_filename;
+      for(i = 1; i < argc; i++) { argv2[extra_args + i] = argv[i]; }
 
       {
 	seqt_t got = seqt_empty;
@@ -661,7 +674,9 @@ void handle_fs_op_message(region_t r, struct process *proc,
 		      mk_leaf(r, cmd_filename2),
 		      mk_int(r, argc + extra_args),
 		      got);
+	/*
 	*reply_fds = mk_fds1(r, fd);
+	*/
 	*log_reply = mk_string(r, "ok");
 	return;
       }
@@ -1191,9 +1206,8 @@ DECLARE_VTABLE(fs_op_vtable);
 cap_t make_fs_op_server(struct server_shared *shared,
 			struct filesys_obj *root, struct dir_stack *cwd)
 {
-  struct fs_op_object *obj = amalloc(sizeof(struct fs_op_object));
-  obj->hdr.refcount = 1;
-  obj->hdr.vtable = &fs_op_vtable;
+  struct fs_op_object *obj =
+    filesys_obj_make(sizeof(struct fs_op_object), &fs_op_vtable);
   obj->p.root = root;
   obj->p.cwd = cwd;
   obj->shared = shared;
@@ -1219,6 +1233,15 @@ void fs_op_free(struct filesys_obj *obj1)
 
   server_shared_free(obj->shared);
 }
+
+#ifdef GC_DEBUG
+void fs_op_mark(struct filesys_obj *obj1)
+{
+  struct fs_op_object *obj = (void *) obj1;
+  filesys_obj_mark(obj->p.root);
+  if(obj->p.cwd) filesys_obj_mark(dir_stack_downcast(obj->p.cwd));
+}
+#endif
 
 void fs_op_call(struct filesys_obj *obj1, region_t r,
 		struct cap_args args, struct cap_args *result)
@@ -1256,8 +1279,6 @@ void fs_op_call(struct filesys_obj *obj1, region_t r,
   }
 }
 
-OBJECT_VTABLE(fs_op_vtable, fs_op_free, fs_op_call);
-
 
 DECLARE_VTABLE(fs_op_maker_vtable);
 struct fs_op_maker {
@@ -1267,9 +1288,8 @@ struct fs_op_maker {
 
 cap_t fs_op_maker_make(struct server_shared *shared)
 {
-  struct fs_op_maker *obj = amalloc(sizeof(struct fs_op_maker));
-  obj->hdr.refcount = 1;
-  obj->hdr.vtable = &fs_op_maker_vtable;
+  struct fs_op_maker *obj =
+    filesys_obj_make(sizeof(struct fs_op_maker), &fs_op_maker_vtable);
   obj->shared = shared;
   return (struct filesys_obj *) obj;
 }
@@ -1303,8 +1323,6 @@ void fs_op_maker_call(struct filesys_obj *obj1, region_t r,
   }
 }
 
-OBJECT_VTABLE(fs_op_maker_vtable, fs_op_maker_free, fs_op_maker_call);
-
 
 DECLARE_VTABLE(conn_maker_vtable);
 struct conn_maker {
@@ -1313,10 +1331,7 @@ struct conn_maker {
 
 cap_t conn_maker_make()
 {
-  struct conn_maker *obj = amalloc(sizeof(struct conn_maker));
-  obj->hdr.refcount = 1;
-  obj->hdr.vtable = &conn_maker_vtable;
-  return (struct filesys_obj *) obj;
+  return filesys_obj_make(sizeof(struct conn_maker), &conn_maker_vtable);
 }
 
 void conn_maker_free(struct filesys_obj *obj)
@@ -1338,17 +1353,12 @@ int conn_maker_make_conn(struct filesys_obj *obj1, region_t r,
   return socks[0];
 }
 
-#include "out-vtable-fs-operations.h"
-
 
 DECLARE_VTABLE(fab_dir_maker_vtable);
 
 cap_t fab_dir_maker_make()
 {
-  struct filesys_obj *obj = amalloc(sizeof(struct filesys_obj));
-  obj->refcount = 1;
-  obj->vtable = &fab_dir_maker_vtable;
-  return obj;
+  return filesys_obj_make(sizeof(struct filesys_obj), &fab_dir_maker_vtable);
 }
 
 extern int next_inode;
@@ -1391,9 +1401,8 @@ void fab_dir_maker_call(struct filesys_obj *obj1, region_t r,
       list = node;
     }
     {
-      struct fab_dir *dir = amalloc(sizeof(struct fab_dir));
-      dir->hdr.refcount = 1;
-      dir->hdr.vtable = &fab_dir_vtable;
+      struct fab_dir *dir =
+	filesys_obj_make(sizeof(struct fab_dir), &fab_dir_vtable);
       dir->entries = list;
       dir->inode = next_inode++;
       result->data = mk_int(r, METHOD_OKAY);
@@ -1410,8 +1419,6 @@ void fab_dir_maker_call(struct filesys_obj *obj1, region_t r,
   result->fds = fds_empty;
 }
 
-OBJECT_VTABLE(fab_dir_maker_vtable, generic_free, fab_dir_maker_call);
-
 
 DECLARE_VTABLE(union_dir_maker_vtable);
 struct union_dir_maker {
@@ -1420,10 +1427,7 @@ struct union_dir_maker {
 
 cap_t union_dir_maker_make()
 {
-  struct union_dir_maker *obj = amalloc(sizeof(struct union_dir_maker));
-  obj->hdr.refcount = 1;
-  obj->hdr.vtable = &union_dir_maker_vtable;
-  return (struct filesys_obj *) obj;
+  return filesys_obj_make(sizeof(struct union_dir_maker), &union_dir_maker_vtable);
 }
 
 void union_dir_maker_call(struct filesys_obj *obj1, region_t r,
@@ -1448,4 +1452,4 @@ void union_dir_maker_call(struct filesys_obj *obj1, region_t r,
   }
 }
 
-OBJECT_VTABLE(union_dir_maker_vtable, generic_free, union_dir_maker_call);
+#include "out-vtable-fs-operations.h"

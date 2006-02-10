@@ -93,6 +93,15 @@ void comb_dir_free(struct filesys_obj *obj1)
   if(obj->dir) filesys_obj_free(obj->dir);
 }
 
+#ifdef GC_DEBUG
+void comb_dir_mark(struct filesys_obj *obj1)
+{
+  struct comb_dir *obj = (void *) obj1;
+  filesys_obj_mark((void *) obj->node);
+  if(obj->dir) filesys_obj_mark(obj->dir);
+}
+#endif
+
 int comb_dir_stat(struct filesys_obj *obj, struct stat *st, int *err)
 {
   struct comb_dir *dir = (void *) obj;
@@ -115,9 +124,8 @@ int comb_dir_stat(struct filesys_obj *obj, struct stat *st, int *err)
 /* Takes owning references.  `dir' may be null. */
 struct filesys_obj *make_comb_dir(struct node *node, struct filesys_obj *dir)
 {
-  struct comb_dir *n = amalloc(sizeof(struct comb_dir));
-  n->hdr.refcount = 1;
-  n->hdr.vtable = &comb_dir_vtable;
+  struct comb_dir *n =
+    filesys_obj_make(sizeof(struct comb_dir), &comb_dir_vtable);
   n->node = node;
   n->dir = dir;
   return (struct filesys_obj *) n;
@@ -129,9 +137,8 @@ struct filesys_obj *object_of_node(struct node *node, struct filesys_obj *dir,
 {
   if(node->symlink_dest) {
     /* FIXME? copying the destination is unnecessary */
-    struct fab_symlink *sym = amalloc(sizeof(struct fab_symlink));
-    sym->hdr.refcount = 1;
-    sym->hdr.vtable = &fab_symlink_vtable;
+    struct fab_symlink *sym =
+      filesys_obj_make(sizeof(struct fab_symlink), &fab_symlink_vtable);
     sym->dest = dup_seqf(seqf_string(node->symlink_dest));
     sym->inode = node->inode;
     return (struct filesys_obj *) sym;

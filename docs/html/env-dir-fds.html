@@ -1,0 +1,40 @@
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ANSI_X3.4-1968"><title>Directory file descriptors</title><meta name="generator" content="DocBook XSL Stylesheets V1.68.1"><link rel="start" href="index.html" title="Plash: the Principle of Least Authority shell"><link rel="up" href="env.html" title="Chapter&#160;3.&#160;Plash's restricted execution environment"><link rel="prev" href="env-parent-dirs.html" title="Parent directories: the semantics of dot-dot using dir_stacks"><link rel="next" href="syscall-intercept.html" title="Why not do interception of system calls using, for example, ptrace?"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="navheader"><table width="100%" summary="Navigation header"><tr><th colspan="3" align="center">Directory file descriptors</th></tr><tr><td width="20%" align="left"><a accesskey="p" href="env-parent-dirs.html">Prev</a>&#160;</td><th width="60%" align="center">Chapter&#160;3.&#160;Plash's restricted execution environment</th><td width="20%" align="right">&#160;<a accesskey="n" href="syscall-intercept.html">Next</a></td></tr></table><hr></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="env-dir-fds"></a>Directory file descriptors</h2></div></div></div><p>Plash supports <code class="function">open()</code> on directories.  It supports the use of
+<code class="function">fchdir()</code> and <code class="function">close()</code> on the resulting directory file
+descriptor.  However, it doesn't support <code class="function">dup()</code> on directory FDs,
+and <code class="function">execve()</code> won't preserve them.</p><p>Directory file descriptors require special handling.  Under Plash,
+when <code class="function">open()</code> is called on a file, it will return a real,
+kernel-level file descriptor for a file.  The file server passes the
+client this file descriptor across a socket.  But it's not safe to do
+this with kernel-level directory file descriptors, because if the
+client obtained one of these it could use it to break out of its
+chroot jail (using the kernel-level <code class="function">fchdir</code> system call).</p><p>A complete solution would be to virtualize file descriptors fully, so
+that every libc call involving file descriptors is intercepted and
+replaced.  This would be a lot of work, because there are quite a few
+FD-related calls.  It raises some tricky questions, such as what bits
+of code use real kernel FDs and which use virtualised FDs.  It might
+impact performance.  And it's potentially dangerous: if the changes to
+libc failed to replace one FD-related call, it could lead to the wrong
+file descriptors being used in some operation, because in this case a
+virtual FD number would be treated as a real, kernel FD number.
+(There is no similar danger with virtualising the system calls that
+use the file namespace, because the use of <code class="function">chroot()</code> means that
+the process's kernel file namespace is almost entirely empty.)</p><p>However, a complete solution is complete overkill.  There are probably
+no programs that pass a directory file descriptor to <code class="function">select()</code>,
+and no programs that expect to keep a directory file descriptor across
+a call to <code class="function">execve()</code> or in the child process after <code class="function">fork()</code>.</p><p>So I have adopted a partial solution to virtualising file descriptors.
+When <code class="function">open()</code> needs to return a virtualized file descriptor -- in
+this case, for a directory -- the server returns two parts to the
+client: it returns the real, kernel-level file descriptor that it gets
+from opening <code class="filename">/dev/null</code> (a "dummy" file descriptor), and it
+returns a reference to a dir_stack object (representing the
+directory).</p><p>Plash's libc <code class="function">open()</code> function returns the kernel-level
+<code class="filename">/dev/null</code> file descriptor to the client program, but it
+stores the dir_stack object in a table maintained by libc.  Plash's
+<code class="function">fchdir()</code> function in libc consults this table; it can only work if
+there is an entry for the given file descriptor number in the table.</p><p>Creating a "dummy" kernel-level file descriptor ensures that the file
+descriptor number stays allocated from the kernel's point of view.  It
+provides a FD that can be used in any context where an FD can be used,
+without -- as far as I know -- any harmful effects.  The client
+program will get a more appropriate error than EBADF if it passes the
+file descriptor to functions which aren't useful for directory file
+descriptors, such as <code class="function">select()</code> or <code class="function">write()</code>.</p></div><div class="navfooter"><hr><table width="100%" summary="Navigation footer"><tr><td width="40%" align="left"><a accesskey="p" href="env-parent-dirs.html">Prev</a>&#160;</td><td width="20%" align="center"><a accesskey="u" href="env.html">Up</a></td><td width="40%" align="right">&#160;<a accesskey="n" href="syscall-intercept.html">Next</a></td></tr><tr><td width="40%" align="left" valign="top">Parent directories: the semantics of dot-dot using dir_stacks&#160;</td><td width="20%" align="center"><a accesskey="h" href="index.html">Home</a></td><td width="40%" align="right" valign="top">&#160;Why not do interception of system calls using, for example, ptrace?</td></tr></table></div></body></html>

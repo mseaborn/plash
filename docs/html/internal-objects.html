@@ -1,0 +1,37 @@
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ANSI_X3.4-1968"><title>Object system</title><meta name="generator" content="DocBook XSL Stylesheets V1.68.1"><link rel="start" href="index.html" title="Plash: the Principle of Least Authority shell"><link rel="up" href="internal.html" title="Chapter&#160;7.&#160;Internals"><link rel="prev" href="internal-string.html" title="String handling"><link rel="next" href="internal-marshal.html" title="Encodings for marshalling"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="navheader"><table width="100%" summary="Navigation header"><tr><th colspan="3" align="center">Object system</th></tr><tr><td width="20%" align="left"><a accesskey="p" href="internal-string.html">Prev</a>&#160;</td><th width="60%" align="center">Chapter&#160;7.&#160;Internals</th><td width="20%" align="right">&#160;<a accesskey="n" href="internal-marshal.html">Next</a></td></tr></table><hr></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="internal-objects"></a>Object system</h2></div></div></div><p>See filesysobj.h</p><p>Originally the object system was just used for file, directory and
+symlink objects, but I extended it so that references to objects can
+be exported to other processes using Plash's object-capability
+protocol.  There are other kinds of object now.</p><p>An object reference has type "struct filesys_obj *".  "cap_t" is an
+alias for this.
+</p><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="id2526899"></a>Methods</h3></div></div></div><p>There are a number of methods defined.  Every object supports all the
+methods.  That is, it is valid to call a method on any object, even if
+the method isn't relevant to that object.  If the method isn't
+relevant, it will return an error code (for those methods that can
+return error codes).</p><p>Every object contains a pointer to a vtable, which contains function
+pointers implementing the methods.  This design is simple, but it
+means all the vtables need to be recompiled when we add new methods.
+Since the vtables are sparse (ie. most methods aren't relevant to a
+given object), we have a program, "make-vtables.pl", which generates
+the C code for constructing the vtables.
+</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="id2526922"></a>Reference counting</h3></div></div></div><p>All objects have a reference count.  To increment the count, use
+"inc_ref(obj)".  To decrement the count, use "filesys_obj_free(obj)"
+(this will free the object when the count hits zero).  Some references
+are owning references -- you are supposed to free them.  Some
+references are non-owning -- they are "borrowed" from the caller.</p><p>The choice of whether a function argument is an owning or a non-owning
+reference is based on a trade-off between convenience and minimising
+the lifetime of objects.  You have to look at the comments for a
+function to see whether its arguments are passed as owning or
+non-owning.
+</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="id2526943"></a>Marshalling</h3></div></div></div><p>In order to make a method call across a connection using the
+object-capability protocol, the method's arguments must be marshalled
+-- converted into a string and an array of objects/FDs, and then
+converted back again at the other end.</p><p>Marshalled arguments are represented by "struct cap_args".</p><p>The most general methods are "cap_invoke" and "cap_call", which only
+use marshalled arguments.  "cap_invoke" is send-only and asynchronous;
+it returns immediately and does not itself get a reply.  "cap_call" is
+synchronous and returns a result.</p><p>The other methods call, or are called by, "cap_call".</p><p>For remote objects, other methods marshal their arguments and call
+"cap_call", which in turn calls "cap_invoke".</p><p>When local objects receive a remote request, "cap_invoke" handles this
+request and calls "cap_call", which unmarshals the arguments and
+calls the relevant method.</p><p>The reason the other methods exist is that they are more efficient to
+use for calls within a process, and they are more convenient.</p><p>For some methods, marshalling is not implemented, so these methods
+can't be used remotely.
+</p></div></div><div class="navfooter"><hr><table width="100%" summary="Navigation footer"><tr><td width="40%" align="left"><a accesskey="p" href="internal-string.html">Prev</a>&#160;</td><td width="20%" align="center"><a accesskey="u" href="internal.html">Up</a></td><td width="40%" align="right">&#160;<a accesskey="n" href="internal-marshal.html">Next</a></td></tr><tr><td width="40%" align="left" valign="top">String handling&#160;</td><td width="20%" align="center"><a accesskey="h" href="index.html">Home</a></td><td width="40%" align="right" valign="top">&#160;Encodings for marshalling</td></tr></table></div></body></html>

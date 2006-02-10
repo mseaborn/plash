@@ -1,0 +1,50 @@
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ANSI_X3.4-1968"><title>Symbolic links</title><meta name="generator" content="DocBook XSL Stylesheets V1.68.1"><link rel="start" href="index.html" title="Plash: the Principle of Least Authority shell"><link rel="up" href="env.html" title="Chapter&#160;3.&#160;Plash's restricted execution environment"><link rel="prev" href="env.html" title="Chapter&#160;3.&#160;Plash's restricted execution environment"><link rel="next" href="env-parent-dirs.html" title="Parent directories: the semantics of dot-dot using dir_stacks"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="navheader"><table width="100%" summary="Navigation header"><tr><th colspan="3" align="center">Symbolic links</th></tr><tr><td width="20%" align="left"><a accesskey="p" href="env.html">Prev</a>&#160;</td><th width="60%" align="center">Chapter&#160;3.&#160;Plash's restricted execution environment</th><td width="20%" align="right">&#160;<a accesskey="n" href="env-parent-dirs.html">Next</a></td></tr></table><hr></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="env-symlinks"></a>Symbolic links</h2></div></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="id2473794"></a>Semantics</h3></div></div></div><p>If we pass a directory as an argument to a program, it may contain
+symbolic links to anywhere.  Since processes may now have different
+namespaces, we have a choice of namespaces in which to resolve the
+destinations of the symbolic links.  Do we resolve them in the user's
+namespace, or the process's namespace?</p><p>If we resolve symlinks in the user's namespace, and we allow the
+process to create symlinks to arbitrary destinations, it could create
+a symlink to `/' and thereby grant itself access to all of the user's
+filesystem.  Instead, we could try to restrict the ability of a
+process to create symlinks, so that it can only create symlinks to
+files and directories that it already has access to.  But since
+symlinks are interpreted relative to their position in the filesystem,
+which can change, it would be difficult to make this robust.
+Furthermore, the problem of pre-existing symlinks remains.  A user
+should be able to tell what files and directories they're granting
+access to based on the command invocation.  Granting access also to
+files and directories that are symlinked to, perhaps from deep inside
+a directory, violates this, because there is little constraint on the
+destinations of symlinks.</p><p>Resolving symlinks in the process's namespace makes more sense.  It
+follows the normal semantics of symlinks under Unix, which is that
+symlinks are simply a convenience that *could* be implemented by the
+process itself rather than by the kernel.</p><p>Ultimately, the solution is to do away with symbolic links and replace
+them with object references.</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="id2473837"></a>Implementation</h3></div></div></div><p>If we are to implement these semantics, we must be careful not to use
+the kernel's ability to follow symlinks.  There is not a
+straightforward option for turning off following symlinks in the
+underlying filesystem.  When we give a pathname such as `a/b/c' to the
+kernel, if `a/b' is a symbolic link the kernel will always follow it,
+interpreting it in its namespace.</p><p>The approach used in the file server is to set the current working
+directory to each component of the pathname in turn.  For each
+component, do:</p><div class="itemizedlist"><ul type="disc"><li><p>lstat() on the leaf name.  If it's a symlink, do readlink() and
+   interpret the link.</p></li><li><p>Otherwise, if it's a directory, do open(leaf, O_NOFOLLOW | O_DIRECTORY).
+   If O_NOFOLLOW or O_DIRECTORY are not supported, we can do fstat()
+   to check that the object opened is the same as the one we lstat()'d
+   (it may have changed between the system calls).</p></li><li><p>Do fchdir() to set the current directory to the directory.
+</p></li></ul></div><p>Obviously this requires more system calls than allowing the kernel to
+resolve symlinks.</p><p>Note that the server must never send the clients FDs for directories.
+A client could use a directory FD to break out of its chroot jail.</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="id2473890"></a>Remaining problems</h3></div></div></div><p>The Unix kernel can be regarded as providing a set of capability
+registers (file descriptors) that can contain directory object
+references, along with a special capability register (the current
+working directory) relative to which pathnames are resolved.
+References can be copied from a normal register to the special
+register using fchdir().  References can be copied from the special
+register to the normal registers using open(".").</p><p>Unfortunately, this model falls down in two places:</p><div class="itemizedlist"><ul type="disc"><li><p>Directories with `execute' but not `read' permission
+   cannot be opened with open().  One can chdir() into them, but not
+   fchdir() into them.</p><p>   Arguably, Unix should let you open() such directories but not read
+   their contents using the resulting FD.</p><p>   This could be worked around, but no workaround is implemented yet.</p></li><li><p>link() is unusual in that it takes two pathname arguments.
+   It is difficult to use safely (without the kernel following
+   symlinks).  We have no guarantee that the source file (or
+   destination) is the one we intended to link.  Any check will be
+   vulnerable to race conditions.</p><p>   The same applies to rename().</p><p>   Under Plash, link() and rename() are only implemented for the
+   same-directory case.</p></li></ul></div></div></div><div class="navfooter"><hr><table width="100%" summary="Navigation footer"><tr><td width="40%" align="left"><a accesskey="p" href="env.html">Prev</a>&#160;</td><td width="20%" align="center"><a accesskey="u" href="env.html">Up</a></td><td width="40%" align="right">&#160;<a accesskey="n" href="env-parent-dirs.html">Next</a></td></tr><tr><td width="40%" align="left" valign="top">Chapter&#160;3.&#160;Plash's restricted execution environment&#160;</td><td width="20%" align="center"><a accesskey="h" href="index.html">Home</a></td><td width="40%" align="right" valign="top">&#160;Parent directories: the semantics of dot-dot using dir_stacks</td></tr></table></div></body></html>

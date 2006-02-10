@@ -1,0 +1,60 @@
+.TH exec\-object 1   
+.SH NAME
+exec\-object \- Creates executable objects for use under Plash
+.SH SYNOPSIS
+.nf
+exec\-object \fIexecutable\-pathname\fR \fIroot\-directory\fR
+.fi
+.PP
+.nf
+def \fIvar\fR =
+    capcmd exec\-object /bin/foo
+      /x=(mkfs /bin/foo /usr ...)
+.fi
+.SH DESCRIPTION
+This is a command that is only useful when called using a
+capcmd expression from Plash.
+.PP
+This command returns an executable object E. When E is invoked with a
+root directory \fIdir2\fR as an argument, it forks a new process whose
+root directory is set to be a union of \fIroot\-directory\fR and
+\fIdir2\fR, and that new process execve()s
+\fIexecutable\-pathname\fR.
+.PP
+This is commonly used with the shell's mkfs expression,
+which will construct the root directory.
+.SH "RETURN VALUE"
+The return value given by exit() isn't used. This program
+returns an object reference using the return_cont
+mechanism. It doesn't exit until all the references to the object
+have been dropped.
+.SH EXAMPLES
+.nf
+
+  def my_oggenc =
+    capcmd exec\-object '/usr/bin/oggenc'
+      /x=(mkfs /usr/bin/oggenc /usr/lib /lib)
+
+  def my_oggenc =
+    capcmd exec\-object '/usr/bin/oggenc'
+      /x=(mkfs
+            /usr/bin/oggenc=(F /debian/usr/bin/oggenc)
+            /usr/lib=(F /debian/usr/lib)
+            /lib=(F /debian/lib))
+
+  def my_oggenc =
+    capcmd exec\-object '/usr/bin/oggenc'
+      /x=(mkfs
+            /usr/bin/oggenc
+            /usr/lib/libvorbisenc.so.0
+            /usr/lib/libvorbis.so.0
+            /lib/i686/libm.so.6
+            /usr/lib/libogg.so.0
+            /usr/lib/plash/lib/libc.so.6)
+.fi
+.SH "SEE ALSO"
+plash(1)
+.PP
+/usr/share/doc/plash
+.SH AUTHOR
+Mark Seaborn <mseaborn@onetel.com>

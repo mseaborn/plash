@@ -28,9 +28,8 @@
 struct filesys_obj *fs_build_fs(struct node *node)
 {
   if(node->symlink_dest) {
-    struct fab_symlink *sym = amalloc(sizeof(struct fab_symlink));
-    sym->hdr.refcount = 1;
-    sym->hdr.vtable = &fab_symlink_vtable;
+    struct fab_symlink *sym =
+      filesys_obj_make(sizeof(struct fab_symlink), &fab_symlink_vtable);
     sym->dest = dup_seqf(seqf_string(node->symlink_dest));
     sym->inode = node->inode;
     return make_read_only_slot((struct filesys_obj *) sym);
@@ -40,7 +39,7 @@ struct filesys_obj *fs_build_fs(struct node *node)
   }
   else {
     /* Construct directory */
-    struct s_fab_dir *dir = amalloc(sizeof(struct s_fab_dir));
+    struct s_fab_dir *dir;
     struct slot_list *nlist = 0;
     struct node_list *list;
     for(list = node->children; list; list = list->next) {
@@ -50,8 +49,7 @@ struct filesys_obj *fs_build_fs(struct node *node)
       n->next = nlist;
       nlist = n;
     }
-    dir->hdr.refcount = 1;
-    dir->hdr.vtable = &s_fab_dir_vtable;
+    dir = filesys_obj_make(sizeof(struct s_fab_dir), &s_fab_dir_vtable);
     dir->entries = nlist;
     dir->inode = node->inode;
     return make_read_only_slot((struct filesys_obj *) dir);

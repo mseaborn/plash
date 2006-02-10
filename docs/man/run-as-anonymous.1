@@ -1,0 +1,85 @@
+.TH run\-as\-anonymous 1   
+.SH NAME
+run\-as\-anonymous \- Start process with an unused UID, in a chroot() environment
+.SH SYNOPSIS
+.nf
+run\-as\-anonymous \fIcommand\fR \fIargs...\fR
+.fi
+.SH DESCRIPTION
+run\-as\-anonymous is a small setuid\-root program for starting processes
+such that they are isolated from the rest of the system. It chooses a
+UID for the process that is not being used by other processes. It
+sets the process's root directory using chroot().
+.PP
+run\-as\-anonymous is part of Plash. Plash uses it to give a user
+protection from the programs they run.
+.PP
+Only a small part of Plash, including run\-as\-anonymous, needs root
+access to install. If you are a system administrator, this means you
+can inspect this part and install it in confidence that it won't
+interfere with the rest of your system. You don't have to trust the
+rest of Plash, which is more complex \-\- though your users will trust
+the rest of Plash if they use it.
+.SH "THE CHROOT() JAIL"
+The chroot() jail directory is typically \fB/var/lib/plash\-chroot\-jail\fR. It needs to be on a writable filesystem
+because it contains a lock directory.
+.PP
+The jail directory typically contains one directory, \fBspecial\fR, which \fIcan\fR be writable by a normal user without
+effectively giving that user root authority. (This is not relevant if
+you are installing an RPM or Debian package of Plash.)
+.PP
+The jail directory should \fInot\fR be writable by a normal
+user. If this were so, the user could hard link a setuid\-root
+executable into the jail directory, and put a file \fBlib/ld\-linux.so.2\fR containing their own code into the jail directory.
+Running this executable using run\-as\-anonymous would run the user's
+code with root permission. The user would effectively have root
+authority.
+.PP
+The idea behind the \fBspecial\fR directory is that no
+setuid\-root executable will depend on the contents of \fB/special\fR.
+.PP
+Typically, \fBspecial\fR will only contain Plash's version of
+glibc's dynamic linker, \fBld\-linux.so.2\fR. The dynamic
+linker is invoked as an executable. It will load a normal executable
+from a file outside the chroot jail, via the file descriptors that it
+is passed. run\-as\-anonymous does execve() after changing the root
+directory, so there needs to be an executable in the chroot jail to
+call execve() on.
+.SH "ALLOCATING USER IDS"
+run\-as\-anonymous allocates UIDs from a numeric range that is specific
+as a compile time option (typically 0x100000 to 0x200000) \-\- see
+config.sh.
+.PP
+It creates lock files to ensure that UIDs are not re\-used. The lock
+files are typically kept in \fB/var/lib/plash\-chroot\-jail/plash\-uid\-locks\fR.
+.PP
+The program gc\-uid\-locks can be run every so often to remove lock
+files when the corresponding UID is no longer used by any process.
+.PP
+The file \fB/var/lib/plash\-chroot\-jail/plash\-uid\-locks/flock\-file\fR is locked using
+flock() to ensure that gc\-uid\-locks does not run concurrently with any
+instance of run\-as\-anonymous.
+.SH "AUTHORITY GRANTED AND DENIED"
+Putting a process in a chroot() jail can deny it the ability to open
+most files. Giving a process a unique UID denies the ability to send
+signals to other processes (using kill()) or take over other processes
+(using ptrace()).
+.PP
+A process can communicate with the outside world using the file
+descriptors it was created with, including receiving other file
+descriptors (via Unix domain sockets). This is how Plash grants a
+process authority, after run\-as\-anonymous has taken away authority
+that could be exercised through the more usual system calls.
+.PP
+Note that if a process receives a directory file descriptor, it can
+use that to break out of its chroot() jail, using fchdir(). Plash is
+careful not to pass a process any directory file descriptors.
+.PP
+run\-as\-anonymous does not prevent a process from connecting to or
+listening on network sockets.
+.SH "SEE ALSO"
+gc\-uid\-locks, plash
+.PP
+/usr/share/doc/plash
+.SH AUTHOR
+Mark Seaborn <mseaborn@onetel.com>

@@ -1,0 +1,44 @@
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ANSI_X3.4-1968"><title>run-as-anonymous</title><meta name="generator" content="DocBook XSL Stylesheets V1.68.1"><link rel="start" href="index.html" title="Plash: the Principle of Least Authority shell"><link rel="up" href="man-pages.html" title="Chapter&#160;6.&#160;Man pages"><link rel="prev" href="chroot.html" title="plash-chroot"><link rel="next" href="gc-uid-locks.html" title="gc-uid-locks"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="navheader"><table width="100%" summary="Navigation header"><tr><th colspan="3" align="center">run-as-anonymous</th></tr><tr><td width="20%" align="left"><a accesskey="p" href="chroot.html">Prev</a>&#160;</td><th width="60%" align="center">Chapter&#160;6.&#160;Man pages</th><td width="20%" align="right">&#160;<a accesskey="n" href="gc-uid-locks.html">Next</a></td></tr></table><hr></div><div class="refentry" lang="en"><a name="run-as-anonymous"></a><div class="titlepage"></div><div class="refnamediv"><h2>Name</h2><p>run-as-anonymous &#8212; Start process with an unused UID, in a chroot() environment</p></div><div class="refsynopsisdiv"><h2>Synopsis</h2><pre class="synopsis">run-as-anonymous <em class="replaceable"><code>command</code></em> <em class="replaceable"><code>args...</code></em>
+</pre></div><div class="refsect1" lang="en"><a name="id2526424"></a><h2>Description</h2><p>run-as-anonymous is a small setuid-root program for starting processes
+such that they are isolated from the rest of the system.  It chooses a
+UID for the process that is not being used by other processes.  It
+sets the process's root directory using chroot().</p><p>run-as-anonymous is part of Plash.  Plash uses it to give a user
+protection from the programs they run.</p><p>Only a small part of Plash, including run-as-anonymous, needs root
+access to install.  If you are a system administrator, this means you
+can inspect this part and install it in confidence that it won't
+interfere with the rest of your system.  You don't have to trust the
+rest of Plash, which is more complex -- though your users will trust
+the rest of Plash if they use it.</p></div><div class="refsect1" lang="en"><a name="id2526452"></a><h2>The chroot() jail</h2><p>The chroot() jail directory is typically <code class="filename">/var/lib/plash-chroot-jail</code>.  It needs to be on a writable filesystem
+because it contains a lock directory.</p><p>The jail directory typically contains one directory, <code class="filename">special</code>, which <span class="emphasis"><em>can</em></span> be writable by a normal user without
+effectively giving that user root authority.  (This is not relevant if
+you are installing an RPM or Debian package of Plash.)</p><p>The jail directory should <span class="emphasis"><em>not</em></span> be writable by a normal
+user.  If this were so, the user could hard link a setuid-root
+executable into the jail directory, and put a file <code class="filename">lib/ld-linux.so.2</code> containing their own code into the jail directory.
+Running this executable using run-as-anonymous would run the user's
+code with root permission.  The user would effectively have root
+authority.</p><p>The idea behind the <code class="filename">special</code> directory is that no
+setuid-root executable will depend on the contents of <code class="filename">/special</code>.</p><p>Typically, <code class="filename">special</code> will only contain Plash's version of
+glibc's dynamic linker, <code class="filename">ld-linux.so.2</code>.  The dynamic
+linker is invoked as an executable.  It will load a normal executable
+from a file outside the chroot jail, via the file descriptors that it
+is passed.  run-as-anonymous does execve() after changing the root
+directory, so there needs to be an executable in the chroot jail to
+call execve() on.</p></div><div class="refsect1" lang="en"><a name="id2526543"></a><h2>Allocating user IDs</h2><p>run-as-anonymous allocates UIDs from a numeric range that is specific
+as a compile time option (typically 0x100000 to 0x200000) -- see
+config.sh.</p><p>It creates lock files to ensure that UIDs are not re-used.  The lock
+files are typically kept in <code class="filename">/var/lib/plash-chroot-jail/plash-uid-locks</code>.</p><p>The program gc-uid-locks can be run every so often to remove lock
+files when the corresponding UID is no longer used by any process.</p><p>The file <code class="filename">/var/lib/plash-chroot-jail/plash-uid-locks/flock-file</code> is locked using
+flock() to ensure that gc-uid-locks does not run concurrently with any
+instance of run-as-anonymous.</p></div><div class="refsect1" lang="en"><a name="id2526583"></a><h2>Authority granted and denied</h2><p>Putting a process in a chroot() jail can deny it the ability to open
+most files.  Giving a process a unique UID denies the ability to send
+signals to other processes (using kill()) or take over other processes
+(using ptrace()).</p><p>A process can communicate with the outside world using the file
+descriptors it was created with, including receiving other file
+descriptors (via Unix domain sockets).  This is how Plash grants a
+process authority, after run-as-anonymous has taken away authority
+that could be exercised through the more usual system calls.</p><p>Note that if a process receives a directory file descriptor, it can
+use that to break out of its chroot() jail, using fchdir().  Plash is
+careful not to pass a process any directory file descriptors.</p><p>run-as-anonymous does not prevent a process from connecting to or
+listening on network sockets.</p></div><div class="refsect1" lang="en"><a name="id2526616"></a><h2>See also</h2><p><span><strong class="command">gc-uid-locks</strong></span>, <span><strong class="command">plash</strong></span></p><p>  /usr/share/doc/plash
+</p></div><div class="refsect1" lang="en"><a name="id2526637"></a><h2>Author</h2><p>Mark Seaborn &lt;mseaborn@onetel.com&gt;
+</p></div></div><div class="navfooter"><hr><table width="100%" summary="Navigation footer"><tr><td width="40%" align="left"><a accesskey="p" href="chroot.html">Prev</a>&#160;</td><td width="20%" align="center"><a accesskey="u" href="man-pages.html">Up</a></td><td width="40%" align="right">&#160;<a accesskey="n" href="gc-uid-locks.html">Next</a></td></tr><tr><td width="40%" align="left" valign="top">plash-chroot&#160;</td><td width="20%" align="center"><a accesskey="h" href="index.html">Home</a></td><td width="40%" align="right" valign="top">&#160;gc-uid-locks</td></tr></table></div></body></html>

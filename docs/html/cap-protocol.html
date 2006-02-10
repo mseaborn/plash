@@ -1,0 +1,111 @@
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ANSI_X3.4-1968"><title>Object-capability protocol</title><meta name="generator" content="DocBook XSL Stylesheets V1.68.1"><link rel="start" href="index.html" title="Plash: the Principle of Least Authority shell"><link rel="up" href="interfaces.html" title="Chapter&#160;5.&#160;Protocols and interfaces"><link rel="prev" href="interfaces.html" title="Chapter&#160;5.&#160;Protocols and interfaces"><link rel="next" href="env-vars.html" title="PLASH_COMM_FD and PLASH_CAPS"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="navheader"><table width="100%" summary="Navigation header"><tr><th colspan="3" align="center">Object-capability protocol</th></tr><tr><td width="20%" align="left"><a accesskey="p" href="interfaces.html">Prev</a>&#160;</td><th width="60%" align="center">Chapter&#160;5.&#160;Protocols and interfaces</th><td width="20%" align="right">&#160;<a accesskey="n" href="env-vars.html">Next</a></td></tr></table><hr></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="cap-protocol"></a>Object-capability protocol</h2></div></div></div><p>Implemented by cap-protocol.c.</p><p>This is layered on top of the message protocol.  It allows references
+to an arbitrary number of objects to be exported across a connection.</p><p>Objects can be invoked, passing data, file descriptors and references
+to other objects as arguments.  Object references can be dropped,
+allowing the storage associated with the reference to be reclaimed;
+the storage associated with the object itself can also potentially be
+reclaimed.</p><p>There are two endpoints to a connection.  Each may export object
+references to the other.  The protocol is symmetric -- it doesn't
+distinguish between client and server.  For the sake of explanation,
+however, let us call the endpoints A and B.  Everything below would
+still hold true if A and B were swapped.</p><p>At any given point, A is exporting a set of object references to B.
+Each reference has an integer ID.  These are typically interpreted as
+indexes into an array (the `export table'), so that when A receives an
+invocation request from B, it can look up the object in the array and
+invoke it.</p><p>The set of object references that A exports to B may be extended with
+new references by messages that A sends to B (but not by messages B
+sends to A).  These object references may be removed by messages that
+B sends to A (but not by messages A sends to B).</p><p>Messages in the protocol contain object IDs, which contain two parts.
+The lower 8 bits are a `namespace ID'.  This indicates whether the
+reference is to an object exported by A or by B, and whether a
+newly-exported reference is single-use.  The rest of the object ID is
+the reference ID (an index into an export table).</p><p>The possible namespace IDs are:</p><pre class="programlisting">#define CAPP_NAMESPACE_RECEIVER                 0
+#define CAPP_NAMESPACE_SENDER                   1
+#define CAPP_NAMESPACE_SENDER_SINGLE_USE        2
+</pre><p>The messages that A may send to B are:
+</p><div class="itemizedlist"><ul type="disc"><li><p>"Invk" cap/int no_cap_args/int cap_args data + FDs</p><p>   Invokes an object X.  X is denoted by the object ID `cap'.  X must
+   be an object that B exports to A, so `cap' may only use the
+   RECEIVER namespace.  (Since A is sending, B is the receiver.)</p><p>   `cap_args' is an array of object IDs of length `no_cap_args'.
+   These denote objects to be passed as arguments to X.  These object
+   IDs may use any of the three namespace IDs:</p><p>   </p><div class="itemizedlist"><ul type="circle"><li><p>For the RECEIVER namespace, this refers to an object that B
+      exports to A.
+   </p></li><li><p>For the SENDER namespace, this indicates that A has added a new
+      reference to the set of objects it exports to B.  From this
+      point on, B may send A messages referring to this ID (except
+      that B will refer to the object with the RECEIVER namespace
+      instead of SENDER).
+   </p></li><li><p>The SENDER_SINGLE_USE namespace works the same as SENDER,
+      except that it indicates to B that the reference is single use.
+      B may only invoke this object once.  Once B invokes the object,
+      the reference becomes invalid.  (However, B may pass the object
+      as an argument without this restriction.)
+   </p></li></ul></div><p>   The message may include file descriptors to pass as arguments to X.</p><p>   When B receives this message, it invokes X with the specified
+   arguments.  If `cap' is a reference that is exported as single-use,
+   B removes the reference from its export table.</p><p>  </p></li><li><p>"Drop" cap/int</p><p>   Drops a reference.  `cap' is an object ID that B exports to A, so
+   `cap' may only use the RECEIVER namespace.</p><p>   When B receives this message, it removes the reference `cap' from
+   its export table.  B may also delete the object X that `cap'
+   denotes if there are no other references to X.</p><p>  </p></li></ul></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="id2523339"></a>Closing the connection</h3></div></div></div><p>Violations:  If either end receives a message that is illegal, such as
+messages that contain illegal object IDs, it may choose to terminate
+the connection.  This would mean closing the file descriptor for the
+socket.  Assuming there are no other copies of this file descriptor in
+the system (in this or other processes), the other end will get an
+error when it tries to read from its socket, and also regard the
+connection as broken.  Having closed the connection, an endpoint is
+free to delete its export table, and possibly free the objects it
+contained references to.</p><p>In general, endpoints are free to close the connection anyway, if they
+want to.</p><p>When no references are exported from B to A or A to B, it is
+conventional to close the connection, because it is of no use: no
+messages can legally be sent on it.  Conventionally, A will close the
+connection rather than sending a "Drop" message for the last reference
+that B exports to A, when A exports nothing to B.
+</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="id2523370"></a>Conventions</h3></div></div></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="id2523374"></a>Initial state of a newly-created connection</h4></div></div></div><p>A and B start off holding socket file descriptors connected to each
+other (typically created by socketpair()).  A exports M references to
+B; these are given IDs 0 to M-1.  B exports N references to A; these
+are given IDs 0 to N-1.</p><p>The numbers M and N must be made known to both A and B by some means
+outside of the protocol, just as the file descriptors are obtained by
+some means outside of the protocol.</p><p>If A and B have differing views about what M and N are, one will
+probably send messages that the other sees as a protocol violation,
+and the latter may close the connection.</p><p>Of course, M and N and the file descriptors can be sent in invocations
+using the protocol.  See the conn_maker object.</p><p>Also see the <code class="envar">PLASH_CAPS</code> environment variable.
+</p></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="id2523412"></a>Call-return</h4></div></div></div><p>With most invocations, you want to receive a result (even if it's just
+an indication of success or failure).  In these cases, an object X is
+invoked with a message starting with "Call".  The first object
+argument is a `return continuation', C.  When it has finished, X
+invokes C with arguments containing the results.</p><p>What happens if C is never invoked?  This might happen if a connection
+is broken.  C will get freed in this case, perhaps as a result of a
+"Drop" message, and this can be used to indicate to the caller that
+the call failed.</p><p>What happens if C is invoked more than once?  C should simply ignore
+any invocations after the first one.</p><p>A return continuation is typically exported as a single-use
+capability.  This is not so much to stop it being invoked more than
+once (because subsequent invocations can easily be ignored), but more
+to prevent the build-up of exported references:</p><div class="itemizedlist"><ul type="disc"><li><p>When A repeatedly calls B, B might fail to drop the references to
+   the return continuations that A passes it after invoking them.
+   This would cause A's export table to fill up with useless
+   references.  A could not legally re-use the IDs for these
+   references according to the protocol.  However, if A passes the
+   return continuations to B as single-use references, B cannot
+   legally use their IDs after invoking them, so A can re-use the IDs
+   and free up space in its export table.  (If B does invoke an
+   already-invoked single-use reference, it is violating the protocol
+   and A might close the connection as a result.)</p><p>   However, this was not the immediate motivation for adding
+   single-use references to the protocol.  More importantly:</p></li><li><p>libc.so and ld-linux.so (the dynamic linker) both need to make
+   calls to objects in order to open files, etc.  So they both need to
+   pass return continuations, and allocate IDs for them.  If the
+   return continuations' IDs are invalidated after each call, libc.so
+   and ld-linux.so can allocate the IDs without regard to each other.
+   It is much simpler when they don't need to co-ordinate but can
+   still share the same connection.  Each return continuation can be
+   exported with the same ID; these are the only objects exported from
+   this end of the connection.</p><p>   The same issue arises when passing control to a new process image
+   using "exec".</p><p>   Without single-use references, ld-linux.so might make a call and
+   receive an "Invk" message as a result (but not wait for any further
+   messages).  Then libc.so might make a call, then listen for a
+   result and receive a "Drop" message for a reference it never
+   exported.  libc.so would treat this as a protocol violation and
+   shut down the connection.  With single-use references, the "Drop"
+   message is unnecessary, because it is implied.</p></li></ul></div></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="id2523512"></a>Future extensions</h3></div></div></div><p>The protocol does not provide a facility for message pipelining,
+ie. letting A invoke the result of a call to B before the call
+returns (saving the time of a round trip).</p><p>Such a facility involves letting A's messages add entries to B's
+export tables.  A would be able to choose IDs for references that B
+exports.  It would no longer be the case that B allocates all the IDs
+that it exports.
+</p></div></div><div class="navfooter"><hr><table width="100%" summary="Navigation footer"><tr><td width="40%" align="left"><a accesskey="p" href="interfaces.html">Prev</a>&#160;</td><td width="20%" align="center"><a accesskey="u" href="interfaces.html">Up</a></td><td width="40%" align="right">&#160;<a accesskey="n" href="env-vars.html">Next</a></td></tr><tr><td width="40%" align="left" valign="top">Chapter&#160;5.&#160;Protocols and interfaces&#160;</td><td width="20%" align="center"><a accesskey="h" href="index.html">Home</a></td><td width="40%" align="right" valign="top">&#160;<code class="envar">PLASH_COMM_FD</code> and <code class="envar">PLASH_CAPS</code></td></tr></table></div></body></html>

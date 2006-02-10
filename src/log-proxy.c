@@ -30,9 +30,8 @@ struct log_proxy {
 
 cap_t make_log_proxy(cap_t x)
 {
-  struct log_proxy *obj = amalloc(sizeof(struct log_proxy));
-  obj->hdr.refcount = 1;
-  obj->hdr.vtable = &log_proxy_vtable;
+  struct log_proxy *obj =
+    filesys_obj_make(sizeof(struct log_proxy), &log_proxy_vtable);
   obj->x = x;
   return (cap_t) obj;
 }
@@ -42,6 +41,14 @@ void log_proxy_free(struct filesys_obj *obj1)
   struct log_proxy *obj = (void *) obj1;
   filesys_obj_free(obj->x);
 }
+
+#ifdef GC_DEBUG
+void log_proxy_mark(struct filesys_obj *obj1)
+{
+  struct log_proxy *obj = (void *) obj1;
+  filesys_obj_mark(obj->x);
+}
+#endif
 
 void print_args(struct cap_args args)
 {

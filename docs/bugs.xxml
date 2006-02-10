@@ -48,32 +48,10 @@ See
 http://cert.uni-stuttgart.de/archive/bugtraq/1999/10/msg00011.html
 SSH authentication agent follows symlinks via a UNIX domain socket
 
-Race conditions in gc-uid-locks:
-This race means that run-as-anonymous could assign a process a UID that
-*is* currently in use.  If a process manages to get the same UID as
-another, it can kill the other process, or worse, ptrace() it and gain
-its authority.  The risk is very low, because a program inside the
-chroot() environment can't run run-as-anonymous or gc-uid-locks.
- * If gc-uid-locks runs between run-as-anonymous claiming the lock file
-   and changing its uid, gc-uid-locks will delete the lock file
-    * Solution:  run-as-anonymous should set its group before claiming
-      the lock file
- * gc-uid-locks reads uids first then locks.  Consider:
-    * gc-uid-locks reads uids
-    * run-as-anonymous sets uids, claims lock
-    * gc-uid-locks reads lock files -> deletes lock that actually in use
-   Solution:  read lock files first.
- * gc-uid-locks deletes lock file after checks:
-    * gc-uid-locks[1] determines that lock file F is to be deleted
-    * gc-uid-locks[2] deletes F
-    * run-as-anonymous claims lock file F
-    * gc-uid-locks[1] deletes F, but it's actually in use
-   Solution:  gc-uid-locks should have its own mutual exclusion lock
-Assumptions:  that /proc/ is a reliable, *atomic* way of reading uid/gids
-
-Running as root:  /dev/tty is a writable slot; it should be a writable
-object in a read-only slot
- * The same applies to /tmp/.X11-unix
+Running as root:
+ * /dev/tty is a writable slot; it should be a writable object in a
+   read-only slot.  Now fixed.
+ * The same applies to /tmp/.X11-unix.  Not fixed yet.
 
 }
 
@@ -81,6 +59,7 @@ object in a read-only slot
 \ps:
 
 No thread safety in libc
+ * Causes ogg123 at least to segfault
 
 stat64() doesn't work properly
 

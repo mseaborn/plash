@@ -32,7 +32,8 @@ int exec_for_scripts
   (region_t r,
    struct filesys_obj *root, struct dir_stack *cwd,
    const char *cmd, int exec_fd, int argc, const char **argv,
-   int *exec_fd_out, int *argc_out, const char ***argv_out,
+   int *exec_fd_out, const char **exec_filename_out,
+   int *argc_out, const char ***argv_out,
    int *err);
 
 /* This could be merged into struct fs_op_object now */

@@ -1,0 +1,234 @@
+.TH pola\-run 1   
+.SH NAME
+pola\-run \- Run a program, giving it less authority than the caller
+.SH SYNOPSIS
+.nf
+pola\-run
+  \fB\-\-prog\fR \fIfilename\fR
+  [ \fB\-f\fR[awls]... \fIpathname\fR
+  | \fB\-t\fR[awls]... \fIpathname\fR \fIpathname\fR
+  | \fB\-a\fR \fIstring\fR
+  | \fB\-\-cwd\fR \fIdir\fR
+  | \fB\-\-no\-cwd\fR
+  | \fB\-\-copy\-cwd\fR ]...
+  [\fB\-B\fR] [\fB\-\-x11\fR] [\fB\-\-net\fR]
+.fi
+.SH DESCRIPTION
+pola\-run runs programs under the Plash environment. It starts a
+process with a subset of the caller process's authority. The caller
+can grant the callee read\-only or read\-write access to specific files
+and directories, which can be mapped at any point in the callee's
+filesystem namespace.
+.PP
+pola\-run provides a programmatic interface. It is intended to be used
+from Bash shell scripts and other programs. Since it works via the
+command line, it can be used from virtually any language, in contrast
+to a C API. pola\-run is different from the Plash shell, which does
+not provide a programmatic interface: Plash shell commands are
+intended to be written by hand, not generated automatically.
+.PP
+pola\-run constructs two things to pass to the callee program: a list
+of argument strings (as received by main()), and a file
+namespace. The \fB\-a\fR option adds strings to the argument list,
+in order. The \fB\-f\fR and \fB\-t\fR options add files and
+directories to the file namespace. These can be combined:
+\fB\-fa\fR and \fB\-ta\fR add an object to the file namespace
+and a corresponding filename to the argument list.
+.PP
+Unlike the Plash shell, pola\-run grants access to no files by default.
+The \fB\-B\fR option will grant access to a fairly safe but large
+installation endowment, which includes /usr, /bin and /lib.
+(Currently this is different to the shell's default installation
+endowment, which includes /etc as well.)
+.PP
+pola\-run can be used to invoke executable objects, in which case the
+callee can have access to objects that the caller doesn't have access
+to.
+.PP
+\fINB. The implementation is incomplete. Some things mentioned here
+aren't implemented yet.\fR
+.SH OPTIONS
+For arguments that take one parameter, there are two forms to choose
+from: "\fB\-\-arg\fR \fIparam\fR" and "\fB\-\-arg\fR=\fIparam\fR".
+The first form may be more convenient to generate in a C program. The
+latter may be more readable in hand\-written shell scripts.
+.TP 
+\fB\-\-prog\fR \fIfilename\fR
+.TP 
+\fB\-\-prog\fR=\fIfilename\fR
+This gives the filename of the executable to be invoked. If it
+doesn't contain a slash, it will be looked up in \fBPATH\fR.
+
+Note that if the executable is a "#!" script, access to the
+interpreter specified in the "#!" line will \fInot\fR be
+implicitly granted.
+.TP 
+\fB\-\-prog\-sock\fR \fIfilename\fR
+.TP 
+\fB\-\-prog\-sock\fR=\fIfilename\fR
+Invoke an executable object rather than an executable file. The
+executable object is taken from the socket named by \fIfilename\fR. An
+object can be exported to a socket using
+plash\-socket\-publish.
+
+This option implies \fB\-\-no\-default\fR.
+.TP 
+\fB\-f\fR[awls]...[,\fIoption\fR]... \fIpathname\fR
+.TP 
+\fB\-f\fR[awls]...[,\fIoption\fR]...=\fIpathname\fR
+Grant access to a file or directory (given by \fIpathname\fR), and
+optionally add \fIpathname\fR to the argument list. This takes the
+following single\-letter options. The multi\-character options must be
+separated by commas.
+
+.RS 
+.TP 
+\fBa\fR
+Add \fIpathname\fR to the argument list. Equivalent to
+adding the argument "\fB\-a\fR \fIpathname\fR".
+.TP 
+\fBw\fR
+Grant read/write access to the slot specified by
+\fIpathname\fR. By default, without this option, read\-only
+access is granted to the file or directory specified by
+\fIpathname\fR.
+.TP 
+\fBl\fR
+Follow symbolic links (the "l" is for "foLLow"). If
+symbolic links are encountered when pola\-run resolves
+\fIpathname\fR, these links will be followed. When the symlink
+occurs at the last element in a pathname, this will cause
+pola\-run to grant access to both the symlink object and the
+destination object (or the slots containing them, when the
+\fBw\fR option is used). If \fIpathname\fR resolves to a
+directory, this option does not affect the treatment of
+symlinks inside the directory.
+.TP 
+\fBs\fR
+Grant permission to create symbolic links. (Only
+relevant if \fBw\fR is used.)
+.TP 
+\fBobjrw\fR
+Grant read/write access to the file or directory
+object, but not the slot, specified by \fIpathname\fR. This is
+useful for granting access to writable devices such as
+\fI/dev/null\fR.
+.TP 
+\fBsocket\fR
+Grant permission to connect to Unix domain sockets (as
+the \fBw\fR option does), but without granting write
+access to file and directory objects.
+.RE
+.TP 
+\fB\-t\fR[awls]...[,\fIoption\fR]... \fIdest\-pathname\fR \fIsource\-pathname\fR
+Grant access to a file or directory (\fIsource\-pathname\fR), but attach
+it to a different pathname in the file namespace(\fIdest\-pathname\fR).
+Optionally add \fIdest\-pathname\fR to the argument list. This takes
+the same options as \fB\-f\fR.
+
+Note that "\fB\-f\fR\fIoptions\fR \fIpathname\fR" is \fInot\fR
+exactly equivalent to "\fB\-t\fR\fIoptions\fR \fIpathname\fR
+\fIpathname\fR". \fB\-t\fR will not introduce symlinks at the
+directory components of \fIdest\-pathname\fR, and it will fail if there
+are any symlinks in these locations.
+.TP 
+\fB\-a\fR \fIstring\fR
+.TP 
+\fB\-a\fR=\fIstring\fR
+Add \fIstring\fR to the argument list.
+.TP 
+\fB\-\-cwd\fR \fIdir\fR
+.TP 
+\fB\-\-cwd\fR=\fIdir\fR
+.TP 
+\fB\-\-no\-cwd\fR
+.TP 
+\fB\-\-copy\-cwd\fR
+These options set the current working directory (cwd) for the process.
+
+\fB\-\-copy\-cwd\fR will use the calling process's cwd. This is the
+default.
+
+\fB\-\-no\-cwd\fR unsets the cwd, so that using a pathname relative
+to the cwd will give an error.
+
+\fB\-\-cwd\fR sets the cwd to a directory given by a pathname.
+
+In any case, if the directory's pathname does not exist in the
+namespace created for the process, the cwd will be left unset.
+
+These options also affect how the pathnames in other arguments are
+interpreted. You can use multiple cwd arguments. An argument
+pathname is resolved relative to the most recent one. The final cwd
+argument also sets the process's cwd.
+.TP 
+\fB\-B\fR
+Grant access to a default installation endowment. This is equivalent
+to the options:
+
+.nf
+
+\-fl /usr
+\-fl /bin
+\-fl /lib
+\-fl,objrw /dev/null
+\-fl,objrw /dev/tty
+.fi
+.TP 
+\fB\-\-x11\fR
+Grant access to the X11 Window System. This is currently equivalent
+to the options:
+
+.nf
+
+\-fl,socket /tmp/.X11\-unix/
+\-fl ~/.Xauthority
+.fi
+
+In the future, \fB\-\-x11\fR may work using an X11 proxy.
+.TP 
+\fB\-\-net\fR
+This grants access to some files that are important for accessing the
+Internet. When Plash gains the ability to deny a process access to
+the network, this option will gain the function of passing network
+access on to the callee.
+
+Currently, this is equivalent to:
+
+.nf
+
+\-fl /etc/resolv.conf
+\-fl /etc/hosts
+\-fl /etc/services
+.fi
+.SH EXAMPLES
+In Bash:
+.PP
+.nf
+gcc \-c foo.c \-o foo.o
+.fi
+.PP
+In the Plash shell:
+.PP
+.nf
+gcc \-c foo.c => \-o foo.o + .
+.fi
+.PP
+This would become:
+.PP
+.nf
+pola\-run \-B \-\-prog=gcc  \-a=\-c  \-fa=foo.c  \-a=\-o  \-faw=foo.o  \-f=.
+.fi
+.PP
+Run Bash with the same filesystem namespace as the caller. This is
+useful for testing Plash:
+.PP
+.nf
+pola\-run \-fw=/ \-\-prog /bin/bash
+.fi
+.SH "SEE ALSO"
+plash, plash\-socket\-publish
+.PP
+/usr/share/doc/plash
+.SH AUTHOR
+Mark Seaborn <mseaborn@onetel.com>

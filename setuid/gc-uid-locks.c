@@ -246,7 +246,7 @@ void gc_uid_locks()
 
       if(i >= pids_got) {
 	/* error */
-	fprintf(stderr, NAME_MSG "mismatch: extra process\n");
+	fprintf(stderr, NAME_MSG "mismatch: extra process has appeared (pid %i)\n", proc_pid);
 	return;
       }
       if(pids[i].pid != proc_pid ||

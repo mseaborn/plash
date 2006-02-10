@@ -1,0 +1,423 @@
+diff -urN glibc-2.3.5.orig/nptl/sysdeps/unix/sysv/linux/i386/not-cancel.h glibc-2.3.5.new/nptl/sysdeps/unix/sysv/linux/i386/not-cancel.h
+--- glibc-2.3.5.orig/nptl/sysdeps/unix/sysv/linux/i386/not-cancel.h	Thu Sep  4 10:03:28 2003
++++ glibc-2.3.5.new/nptl/sysdeps/unix/sysv/linux/i386/not-cancel.h	Sat Sep 24 21:19:15 2005
+@@ -44,10 +44,19 @@
+ /* Uncancelable close.  */
+ #define close_not_cancel(fd) \
+   __close_nocancel (fd)
++
++#if defined NOT_IN_libc && !defined IS_IN_rtld
++
+ #define close_not_cancel_no_status(fd) \
+   (void) ({ INTERNAL_SYSCALL_DECL (err);				      \
+ 	    INTERNAL_SYSCALL (close, err, 1, (fd)); })
+ 
++#else
++
++void close_not_cancel_no_status(int fd);
++
++#endif
++
+ /* Uncancelable read.  */
+ #define read_not_cancel(fd, buf, n) \
+   __read_nocancel (fd, buf, n)
+@@ -57,9 +66,7 @@
+   __write_nocancel (fd, buf, n)
+ 
+ /* Uncancelable writev.  */
+-#define writev_not_cancel_no_status(fd, iov, n) \
+-  (void) ({ INTERNAL_SYSCALL_DECL (err);				      \
+-	    INTERNAL_SYSCALL (writev, err, 3, (fd), (iov), (n)); })
++void writev_not_cancel_no_status(int fd, const struct iovec *iov, int n);
+ 
+ /* Uncancelable fcntl.  */
+ #define fcntl_not_cancel(fd, cmd, val) \
+@@ -70,6 +77,5 @@
+ # define waitpid_not_cancel(pid, stat_loc, options) \
+   __waitpid_nocancel (pid, stat_loc, options)
+ #else
+-# define waitpid_not_cancel(pid, stat_loc, options) \
+-  INLINE_SYSCALL (wait4, 4, pid, stat_loc, options, NULL)
++int waitpid_not_cancel(int pid, int *stat_loc, int options);
+ #endif
+diff -urN glibc-2.3.5.orig/nptl/sysdeps/unix/sysv/linux/not-cancel-close.c glibc-2.3.5.new/nptl/sysdeps/unix/sysv/linux/not-cancel-close.c
+--- glibc-2.3.5.orig/nptl/sysdeps/unix/sysv/linux/not-cancel-close.c	Wed Dec 31 19:00:00 1969
++++ glibc-2.3.5.new/nptl/sysdeps/unix/sysv/linux/not-cancel-close.c	Sat Sep 24 20:10:06 2005
+@@ -0,0 +1,2 @@
++
++/* Intentionally empty:  this doesn't need to generate anything. */
+diff -urN glibc-2.3.5.orig/nptl/sysdeps/unix/sysv/linux/not-cancel-open.c glibc-2.3.5.new/nptl/sysdeps/unix/sysv/linux/not-cancel-open.c
+--- glibc-2.3.5.orig/nptl/sysdeps/unix/sysv/linux/not-cancel-open.c	Wed Dec 31 19:00:00 1969
++++ glibc-2.3.5.new/nptl/sysdeps/unix/sysv/linux/not-cancel-open.c	Sat Sep 24 20:08:54 2005
+@@ -0,0 +1,2 @@
++
++/* Intentionally empty:  this doesn't need to generate anything. */
+diff -urN glibc-2.3.5.orig/nptl/sysdeps/unix/sysv/linux/not-cancel-read.c glibc-2.3.5.new/nptl/sysdeps/unix/sysv/linux/not-cancel-read.c
+--- glibc-2.3.5.orig/nptl/sysdeps/unix/sysv/linux/not-cancel-read.c	Wed Dec 31 19:00:00 1969
++++ glibc-2.3.5.new/nptl/sysdeps/unix/sysv/linux/not-cancel-read.c	Sat Sep 24 20:10:15 2005
+@@ -0,0 +1,2 @@
++
++/* Intentionally empty:  this doesn't need to generate anything. */
+diff -urN glibc-2.3.5.orig/nptl/sysdeps/unix/sysv/linux/not-cancel-waitpid.c glibc-2.3.5.new/nptl/sysdeps/unix/sysv/linux/not-cancel-waitpid.c
+--- glibc-2.3.5.orig/nptl/sysdeps/unix/sysv/linux/not-cancel-waitpid.c	Wed Dec 31 19:00:00 1969
++++ glibc-2.3.5.new/nptl/sysdeps/unix/sysv/linux/not-cancel-waitpid.c	Sat Sep 24 20:55:38 2005
+@@ -0,0 +1,31 @@
++/* Uncancelable versions of cancelable interfaces.  Linux version.
++   Copyright (C) 2003 Free Software Foundation, Inc.
++   This file is part of the GNU C Library.
++   Contributed by Ulrich Drepper <drepper@redhat.com>, 2003.
++
++   The GNU C Library is free software; you can redistribute it and/or
++   modify it under the terms of the GNU Lesser General Public
++   License as published by the Free Software Foundation; either
++   version 2.1 of the License, or (at your option) any later version.
++
++   The GNU C Library is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   Lesser General Public License for more details.
++
++   You should have received a copy of the GNU Lesser General Public
++   License along with the GNU C Library; if not, write to the Free
++   Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
++   02111-1307 USA.  */
++
++#include <errno.h>
++#include <sysdep.h>
++#include <not-cancel.h>
++
++
++#if !defined __NR_waitpid
++int waitpid_not_cancel(int pid, int *stat_loc, int options)
++{
++  return INLINE_SYSCALL (wait4, 4, pid, stat_loc, options, NULL);
++}
++#endif
+diff -urN glibc-2.3.5.orig/nptl/sysdeps/unix/sysv/linux/not-cancel-write.c glibc-2.3.5.new/nptl/sysdeps/unix/sysv/linux/not-cancel-write.c
+--- glibc-2.3.5.orig/nptl/sysdeps/unix/sysv/linux/not-cancel-write.c	Wed Dec 31 19:00:00 1969
++++ glibc-2.3.5.new/nptl/sysdeps/unix/sysv/linux/not-cancel-write.c	Sat Sep 24 20:10:17 2005
+@@ -0,0 +1,2 @@
++
++/* Intentionally empty:  this doesn't need to generate anything. */
+diff -urN glibc-2.3.5.orig/sysdeps/unix/sysv/linux/Makefile glibc-2.3.5.new/sysdeps/unix/sysv/linux/Makefile
+--- glibc-2.3.5.orig/sysdeps/unix/sysv/linux/Makefile	Sun Aug 28 07:05:54 2005
++++ glibc-2.3.5.new/sysdeps/unix/sysv/linux/Makefile	Sat Sep 24 20:33:42 2005
+@@ -13,7 +13,7 @@
+ 
+ ifeq ($(subdir),misc)
+ sysdep_routines += sysctl clone llseek umount umount2 readahead \
+-		   setfsuid setfsgid makedev
++		   setfsuid setfsgid makedev not-cancel-writev
+ 
+ CFLAGS-gethostid.c = -fexceptions
+ 
+@@ -115,7 +115,7 @@
+ ifeq ($(subdir),posix)
+ sysdep_headers += bits/initspin.h
+ 
+-sysdep_routines += exit-thread
++sysdep_routines += exit-thread not-cancel-waitpid
+ endif
+ 
+ ifeq ($(subdir),inet)
+@@ -137,7 +137,9 @@
+ endif
+ 
+ ifeq ($(subdir),io)
+-sysdep_routines += xstatconv internal_statvfs internal_statvfs64
++sysdep_routines += xstatconv internal_statvfs internal_statvfs64 \
++		   not-cancel-open not-cancel-close not-cancel-close-ns \
++		   not-cancel-read not-cancel-write
+ endif
+ 
+ ifeq ($(subdir),elf)
+diff -urN glibc-2.3.5.orig/sysdeps/unix/sysv/linux/not-cancel-close-ns.c glibc-2.3.5.new/sysdeps/unix/sysv/linux/not-cancel-close-ns.c
+--- glibc-2.3.5.orig/sysdeps/unix/sysv/linux/not-cancel-close-ns.c	Wed Dec 31 19:00:00 1969
++++ glibc-2.3.5.new/sysdeps/unix/sysv/linux/not-cancel-close-ns.c	Sat Sep 24 20:31:29 2005
+@@ -0,0 +1,30 @@
++/* Uncancelable versions of cancelable interfaces.  Linux version.
++   Copyright (C) 2003 Free Software Foundation, Inc.
++   This file is part of the GNU C Library.
++   Contributed by Ulrich Drepper <drepper@redhat.com>, 2003.
++
++   The GNU C Library is free software; you can redistribute it and/or
++   modify it under the terms of the GNU Lesser General Public
++   License as published by the Free Software Foundation; either
++   version 2.1 of the License, or (at your option) any later version.
++
++   The GNU C Library is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   Lesser General Public License for more details.
++
++   You should have received a copy of the GNU Lesser General Public
++   License along with the GNU C Library; if not, write to the Free
++   Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
++   02111-1307 USA.  */
++
++#include <errno.h>
++#include <sysdep.h>
++#include <not-cancel.h>
++
++
++void close_not_cancel_no_status(int fd)
++{
++  INTERNAL_SYSCALL_DECL (err);
++  INTERNAL_SYSCALL (close, err, 1, (fd));
++}
+diff -urN glibc-2.3.5.orig/sysdeps/unix/sysv/linux/not-cancel-close.c glibc-2.3.5.new/sysdeps/unix/sysv/linux/not-cancel-close.c
+--- glibc-2.3.5.orig/sysdeps/unix/sysv/linux/not-cancel-close.c	Wed Dec 31 19:00:00 1969
++++ glibc-2.3.5.new/sysdeps/unix/sysv/linux/not-cancel-close.c	Sat Sep 24 20:31:24 2005
+@@ -0,0 +1,29 @@
++/* Uncancelable versions of cancelable interfaces.  Linux version.
++   Copyright (C) 2003 Free Software Foundation, Inc.
++   This file is part of the GNU C Library.
++   Contributed by Ulrich Drepper <drepper@redhat.com>, 2003.
++
++   The GNU C Library is free software; you can redistribute it and/or
++   modify it under the terms of the GNU Lesser General Public
++   License as published by the Free Software Foundation; either
++   version 2.1 of the License, or (at your option) any later version.
++
++   The GNU C Library is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   Lesser General Public License for more details.
++
++   You should have received a copy of the GNU Lesser General Public
++   License along with the GNU C Library; if not, write to the Free
++   Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
++   02111-1307 USA.  */
++
++#include <errno.h>
++#include <sysdep.h>
++#include <not-cancel.h>
++
++
++int close_not_cancel(int fd)
++{
++  return INLINE_SYSCALL (close, 1, fd);
++}
+diff -urN glibc-2.3.5.orig/sysdeps/unix/sysv/linux/not-cancel-open.c glibc-2.3.5.new/sysdeps/unix/sysv/linux/not-cancel-open.c
+--- glibc-2.3.5.orig/sysdeps/unix/sysv/linux/not-cancel-open.c	Wed Dec 31 19:00:00 1969
++++ glibc-2.3.5.new/sysdeps/unix/sysv/linux/not-cancel-open.c	Tue Sep 20 16:52:54 2005
+@@ -0,0 +1,34 @@
++/* Uncancelable versions of cancelable interfaces.  Linux version.
++   Copyright (C) 2003 Free Software Foundation, Inc.
++   This file is part of the GNU C Library.
++   Contributed by Ulrich Drepper <drepper@redhat.com>, 2003.
++
++   The GNU C Library is free software; you can redistribute it and/or
++   modify it under the terms of the GNU Lesser General Public
++   License as published by the Free Software Foundation; either
++   version 2.1 of the License, or (at your option) any later version.
++
++   The GNU C Library is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   Lesser General Public License for more details.
++
++   You should have received a copy of the GNU Lesser General Public
++   License along with the GNU C Library; if not, write to the Free
++   Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
++   02111-1307 USA.  */
++
++#include <errno.h>
++#include <sysdep.h>
++#include <not-cancel.h>
++
++
++int open_not_cancel(const char *name, int flags, int mode)
++{
++  return INLINE_SYSCALL (open, 3, (const char *) (name), (flags), (mode));
++}
++
++int open_not_cancel_2(const char *name, int flags)
++{
++  return INLINE_SYSCALL (open, 2, (const char *) (name), (flags));
++}
+diff -urN glibc-2.3.5.orig/sysdeps/unix/sysv/linux/not-cancel-read.c glibc-2.3.5.new/sysdeps/unix/sysv/linux/not-cancel-read.c
+--- glibc-2.3.5.orig/sysdeps/unix/sysv/linux/not-cancel-read.c	Wed Dec 31 19:00:00 1969
++++ glibc-2.3.5.new/sysdeps/unix/sysv/linux/not-cancel-read.c	Tue Sep 20 16:53:18 2005
+@@ -0,0 +1,29 @@
++/* Uncancelable versions of cancelable interfaces.  Linux version.
++   Copyright (C) 2003 Free Software Foundation, Inc.
++   This file is part of the GNU C Library.
++   Contributed by Ulrich Drepper <drepper@redhat.com>, 2003.
++
++   The GNU C Library is free software; you can redistribute it and/or
++   modify it under the terms of the GNU Lesser General Public
++   License as published by the Free Software Foundation; either
++   version 2.1 of the License, or (at your option) any later version.
++
++   The GNU C Library is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   Lesser General Public License for more details.
++
++   You should have received a copy of the GNU Lesser General Public
++   License along with the GNU C Library; if not, write to the Free
++   Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
++   02111-1307 USA.  */
++
++#include <errno.h>
++#include <sysdep.h>
++#include <not-cancel.h>
++
++
++int read_not_cancel(int fd, void *buf, int n)
++{
++  return INLINE_SYSCALL (read, 3, (fd), (buf), (n));
++}
+diff -urN glibc-2.3.5.orig/sysdeps/unix/sysv/linux/not-cancel-waitpid.c glibc-2.3.5.new/sysdeps/unix/sysv/linux/not-cancel-waitpid.c
+--- glibc-2.3.5.orig/sysdeps/unix/sysv/linux/not-cancel-waitpid.c	Wed Dec 31 19:00:00 1969
++++ glibc-2.3.5.new/sysdeps/unix/sysv/linux/not-cancel-waitpid.c	Tue Sep 20 16:57:25 2005
+@@ -0,0 +1,33 @@
++/* Uncancelable versions of cancelable interfaces.  Linux version.
++   Copyright (C) 2003 Free Software Foundation, Inc.
++   This file is part of the GNU C Library.
++   Contributed by Ulrich Drepper <drepper@redhat.com>, 2003.
++
++   The GNU C Library is free software; you can redistribute it and/or
++   modify it under the terms of the GNU Lesser General Public
++   License as published by the Free Software Foundation; either
++   version 2.1 of the License, or (at your option) any later version.
++
++   The GNU C Library is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   Lesser General Public License for more details.
++
++   You should have received a copy of the GNU Lesser General Public
++   License along with the GNU C Library; if not, write to the Free
++   Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
++   02111-1307 USA.  */
++
++#include <errno.h>
++#include <sysdep.h>
++#include <not-cancel.h>
++
++
++int waitpid_not_cancel(int pid, int *stat_loc, int options)
++{
++#ifdef __NR_waitpid
++  return INLINE_SYSCALL (waitpid, 3, pid, stat_loc, options);
++#else
++  return INLINE_SYSCALL (wait4, 4, pid, stat_loc, options, NULL);
++#endif
++}
+diff -urN glibc-2.3.5.orig/sysdeps/unix/sysv/linux/not-cancel-write.c glibc-2.3.5.new/sysdeps/unix/sysv/linux/not-cancel-write.c
+--- glibc-2.3.5.orig/sysdeps/unix/sysv/linux/not-cancel-write.c	Wed Dec 31 19:00:00 1969
++++ glibc-2.3.5.new/sysdeps/unix/sysv/linux/not-cancel-write.c	Tue Sep 20 16:53:50 2005
+@@ -0,0 +1,29 @@
++/* Uncancelable versions of cancelable interfaces.  Linux version.
++   Copyright (C) 2003 Free Software Foundation, Inc.
++   This file is part of the GNU C Library.
++   Contributed by Ulrich Drepper <drepper@redhat.com>, 2003.
++
++   The GNU C Library is free software; you can redistribute it and/or
++   modify it under the terms of the GNU Lesser General Public
++   License as published by the Free Software Foundation; either
++   version 2.1 of the License, or (at your option) any later version.
++
++   The GNU C Library is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   Lesser General Public License for more details.
++
++   You should have received a copy of the GNU Lesser General Public
++   License along with the GNU C Library; if not, write to the Free
++   Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
++   02111-1307 USA.  */
++
++#include <errno.h>
++#include <sysdep.h>
++#include <not-cancel.h>
++
++
++int write_not_cancel(int fd, const void *buf, int n)
++{
++  return INLINE_SYSCALL (write, 3, (fd), (buf), (n));
++}
+diff -urN glibc-2.3.5.orig/sysdeps/unix/sysv/linux/not-cancel-writev.c glibc-2.3.5.new/sysdeps/unix/sysv/linux/not-cancel-writev.c
+--- glibc-2.3.5.orig/sysdeps/unix/sysv/linux/not-cancel-writev.c	Wed Dec 31 19:00:00 1969
++++ glibc-2.3.5.new/sysdeps/unix/sysv/linux/not-cancel-writev.c	Tue Sep 20 16:54:19 2005
+@@ -0,0 +1,30 @@
++/* Uncancelable versions of cancelable interfaces.  Linux version.
++   Copyright (C) 2003 Free Software Foundation, Inc.
++   This file is part of the GNU C Library.
++   Contributed by Ulrich Drepper <drepper@redhat.com>, 2003.
++
++   The GNU C Library is free software; you can redistribute it and/or
++   modify it under the terms of the GNU Lesser General Public
++   License as published by the Free Software Foundation; either
++   version 2.1 of the License, or (at your option) any later version.
++
++   The GNU C Library is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   Lesser General Public License for more details.
++
++   You should have received a copy of the GNU Lesser General Public
++   License along with the GNU C Library; if not, write to the Free
++   Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
++   02111-1307 USA.  */
++
++#include <errno.h>
++#include <sysdep.h>
++#include <not-cancel.h>
++
++
++void writev_not_cancel_no_status(int fd, const struct iovec *iov, int n)
++{
++  INTERNAL_SYSCALL_DECL (err);
++  INTERNAL_SYSCALL (writev, err, 3, (fd), (iov), (n));
++}
+diff -urN glibc-2.3.5.orig/sysdeps/unix/sysv/linux/not-cancel.h glibc-2.3.5.new/sysdeps/unix/sysv/linux/not-cancel.h
+--- glibc-2.3.5.orig/sysdeps/unix/sysv/linux/not-cancel.h	Thu Sep  4 10:05:12 2003
++++ glibc-2.3.5.new/sysdeps/unix/sysv/linux/not-cancel.h	Sat Sep 24 18:50:56 2005
+@@ -20,6 +20,14 @@
+ 
+ #include <sysdep.h>
+ 
++
++#if defined NOT_IN_libc && !defined IS_IN_rtld
++
++
++/* The uncancelable versions of read, write, waitpid and close are
++   used by Linuxthreads' libpthread.  They are inlined because they
++   are not exported from libc.so. */
++
+ /* Uncancelable open.  */
+ #define open_not_cancel(name, flags, mode) \
+    INLINE_SYSCALL (open, 3, (const char *) (name), (flags), (mode))
+@@ -57,4 +65,29 @@
+ #else
+ # define waitpid_not_cancel(pid, stat_loc, options) \
+   INLINE_SYSCALL (wait4, 4, pid, stat_loc, options, NULL)
++#endif
++
++
++#else
++
++
++/* Uncancelable versions of open, close, read, write, writev, fcntl,
++   and waitpid. */
++/* Used in libc.so and ld.so (rtld). */
++
++struct iovec;
++
++int open_not_cancel(const char *name, int flags, int mode);
++int open_not_cancel_2(const char *name, int flags);
++int close_not_cancel(int fd);
++void close_not_cancel_no_status(int fd);
++int read_not_cancel(int fd, void *buf, int n);
++int write_not_cancel(int fd, const void *buf, int n);
++void writev_not_cancel_no_status(int fd, const struct iovec *iov, int n);
++int waitpid_not_cancel(int pid, int *stat_loc, int options);
++
++#define fcntl_not_cancel(fd, cmd, val) \
++  __fcntl_nocancel (fd, cmd, val)
++
++
+ #endif

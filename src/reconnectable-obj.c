@@ -45,9 +45,8 @@ DECLARE_VTABLE(reconnectable_obj_vtable);
 
 cap_t make_reconnectable(cap_t x)
 {
-  struct reconnectable_obj *obj = amalloc(sizeof(struct reconnectable_obj));
-  obj->hdr.refcount = 1;
-  obj->hdr.vtable = &reconnectable_obj_vtable;
+  struct reconnectable_obj *obj =
+    filesys_obj_make(sizeof(struct reconnectable_obj), &reconnectable_obj_vtable);
   obj->head = 0;
   obj->x = x;
 
@@ -70,6 +69,14 @@ void reconnectable_obj_free(struct filesys_obj *obj1)
 
   filesys_obj_free(obj->x);
 }
+
+#ifdef GC_DEBUG
+void reconnectable_obj_mark(struct filesys_obj *obj1)
+{
+  struct reconnectable_obj *obj = (void *) obj1;
+  filesys_obj_mark(obj->x);
+}
+#endif
 
 void reconnectable_obj_invoke(struct filesys_obj *obj1, struct cap_args args)
 {

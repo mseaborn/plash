@@ -1,3 +1,24 @@
+plash (1.13) unstable; urgency=low
+
+  * Big changes to build process, so that I can distribute pre-built
+    glibc object files to make Plash easier to built from source.
+    Changes to build with glibc 2.3.5 (instead of 2.3.3).
+    Use libc_pic.a instead of individual object files.
+  * Remove glibc patch for getting ld.so to accept a "--fd" option.
+    fs-operations.c:  Change exec_for_scripts() to return a filename,
+    not an FD.
+    shell.c:  Change command_invocation_sec(); uses new function,
+    args_to_exec_elf_program().
+    pola-run.c
+    Change the fsop_exec method so that it doesn't have to return an FD.
+     * fs-operations.c:  change handling of METHOD_FSOP_EXEC.
+       (FD case removed.)
+     * libc-fork-exec.c:  changed to handle no-FD-returned case.
+       (I'll leave the FD case in for now.)
+  * pola-run.c:  Bug fixes.  Add the "--log" option.
+
+ -- Mark Seaborn <mseaborn@onetel.com>  Thu,  6 Oct 2005 22:00:00 +0100
+
 plash (1.12) unstable; urgency=low
 
   * libc.map, libc-fork-exec.c:  Add plash_libc_kernel_execve.

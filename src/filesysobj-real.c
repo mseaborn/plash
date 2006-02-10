@@ -39,6 +39,7 @@
 #include "region.h"
 #include "serialise.h"
 #include "filesysobj.h"
+#include "filesysobj-real.h"
 #include "cap-protocol.h"
 
 
@@ -59,10 +60,7 @@ struct filesys_obj *initial_dir(const char *pathname, int *err)
   if(fd < 0) { *err = errno; return 0; }
   set_close_on_exec_flag(fd, 1);
   if(fstat(fd, &stat) < 0) { *err = errno; return 0; }
-  new_obj = amalloc(sizeof(struct real_dir));
-  new_obj = amalloc(sizeof(struct real_dir));
-  new_obj->hdr.refcount = 1;
-  new_obj->hdr.vtable = &real_dir_vtable;
+  new_obj = filesys_obj_make(sizeof(struct real_dir), &real_dir_vtable);
   new_obj->stat = stat;
   new_obj->fd = make_fd(fd);
   return (void *) new_obj;
@@ -244,9 +242,7 @@ struct filesys_obj *real_dir_traverse(struct filesys_obj *obj, const char *leaf)
       return 0;
     }
     set_close_on_exec_flag(fd, 1);
-    new_obj = amalloc(sizeof(struct real_dir));
-    new_obj->hdr.refcount = 1;
-    new_obj->hdr.vtable = &real_dir_vtable;
+    new_obj = filesys_obj_make(sizeof(struct real_dir), &real_dir_vtable);
     new_obj->stat = stat;
     new_obj->fd = fd < 0 ? 0 : make_fd(fd);
     return (struct filesys_obj *) new_obj;
@@ -255,9 +251,8 @@ struct filesys_obj *real_dir_traverse(struct filesys_obj *obj, const char *leaf)
     /* Could do readlink presumptively, but it's not always called, so
        may as well save the syscall, which could involve reading a block
        from disc.  However, this means that readlink can fail. */
-    struct real_symlink *new_obj = amalloc(sizeof(struct real_symlink));
-    new_obj->hdr.refcount = 1;
-    new_obj->hdr.vtable = &real_symlink_vtable;
+    struct real_symlink *new_obj =
+      filesys_obj_make(sizeof(struct real_symlink), &real_symlink_vtable);
     new_obj->stat = stat;
     new_obj->dir_fd = dir->fd;
     new_obj->leaf = strdup(leaf);
@@ -265,9 +260,8 @@ struct filesys_obj *real_dir_traverse(struct filesys_obj *obj, const char *leaf)
     return (struct filesys_obj *) new_obj;
   }
   else {
-    struct real_file *new_obj = amalloc(sizeof(struct real_file));
-    new_obj->hdr.refcount = 1;
-    new_obj->hdr.vtable = &real_file_vtable;
+    struct real_file *new_obj =
+      filesys_obj_make(sizeof(struct real_file), &real_file_vtable);
     new_obj->stat = stat;
     new_obj->dir_fd = dir->fd;
     new_obj->leaf = strdup(leaf);

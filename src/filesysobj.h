@@ -68,13 +68,22 @@ static inline struct cap_args cap_args_make
 
 struct filesys_obj {
   int refcount;
-  struct filesys_obj_vtable *vtable;
+  const struct filesys_obj_vtable *vtable;
+#ifdef GC_DEBUG
+  struct filesys_obj *prev, *next;
+  int mark_count;
+#endif
 };
 #define OBJT_FILE 1
 #define OBJT_DIR 2
 #define OBJT_SYMLINK 3
 struct filesys_obj_vtable {
   void (*free)(struct filesys_obj *obj);
+
+#ifdef GC_DEBUG
+  /* This is for debugging only, for debugging refcount leaks. */
+  void (*mark)(struct filesys_obj *obj);
+#endif
 
   void (*cap_invoke)(struct filesys_obj *obj, struct cap_args args);
   void (*cap_call)(struct filesys_obj *obj, region_t r,
@@ -150,38 +159,28 @@ struct filesys_obj_vtable {
   int sentinel;
 };
 
-/* Concrete types */
-
-struct real_dir {
-  struct filesys_obj hdr;
-  struct stat stat;
-  struct file_desc *fd; /* May be 0 if we failed to open the directory */
-};
-
-struct real_file {
-  struct filesys_obj hdr;
-  struct stat stat;
-  struct file_desc *dir_fd;
-  char *leaf;
-};
-
-struct real_symlink {
-  struct filesys_obj hdr;
-  struct stat stat; /* Result of lstat on symlink */
-  struct file_desc *dir_fd;
-  char *leaf;
-};
-
-extern struct filesys_obj_vtable real_dir_vtable;
-extern struct filesys_obj_vtable real_file_vtable;
-extern struct filesys_obj_vtable real_symlink_vtable;
-
 void filesys_obj_free(struct filesys_obj *obj);
 
 /* Checks that reference is valid */
 void filesys_obj_check(struct filesys_obj *obj);
 
-struct filesys_obj *initial_dir(const char *pathname, int *err);
+#if !defined GC_DEBUG
+static inline void *filesys_obj_make(int size, const struct filesys_obj_vtable *vtable)
+{
+  struct filesys_obj *obj = amalloc(size);
+  obj->refcount = 1;
+  obj->vtable = vtable;
+  return obj;
+}
+#else
+void *filesys_obj_make(int size, const struct filesys_obj_vtable *vtable);
+#endif
+
+#ifdef GC_DEBUG
+void filesys_obj_mark(struct filesys_obj *obj);
+void gc_init(void);
+void gc_check(void);
+#endif
 
 
 void generic_free(struct filesys_obj *obj);
@@ -326,10 +325,10 @@ static inline cap_t inc_ref(cap_t x)
 
 
 #define DECLARE_VTABLE(name) \
-extern struct filesys_obj_vtable name
+extern const struct filesys_obj_vtable name
 
 #define OBJECT_VTABLE(name, obj_free, obj_call) \
-struct filesys_obj_vtable name = { \
+struct const filesys_obj_vtable name = { \
   /* .free = */ obj_free, \
  \
   /* .cap_invoke = */ local_obj_invoke, \

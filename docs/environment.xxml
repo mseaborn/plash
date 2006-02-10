@@ -283,7 +283,7 @@ descriptors, such as {\f:select()} or {\f:write()}.
 
 }
 
-{\sect1 id={syscall-intercept}: \title- Why not do interception of system calls using eg. ptrace?
+{\sect1 id={syscall-intercept}: \title- Why not do interception of system calls using, for example, ptrace?
 \ps:
 
 Another way to do what Plash does is to intercept system calls.
@@ -323,5 +323,47 @@ filesystem and interfere with other processes.  However, Plash does
 not prevent a process from connecting to or listening on network
 sockets.  This could be done if there was a way for Plash to prevent a
 process from doing connect() and bind() system calls.
+
+}
+
+{\sect1 id={chroot-comparison}: \title- How does Plash compare with chroot jails?
+\ps:
+
+Plash provides functionality similar to chroot().  The Linux kernel's
+chroot() system call can be used to run a program in a different file
+namespace (ie. root directory).  chroot jailing is a well-known
+technique, though not used very frequently due to its limitations.
+
+The facilities for creating new namespaces for use with chroot are
+limited.  You can only put individual files into the chroot
+environment by copying or hard linking them.  It's not possible to
+grant read-write access to individual directory entries.  Though you
+can't hard link directories, you can put directories into a chroot
+environment using "mount --bind", but this can't be used to grant only
+read-only access to a directory.
+
+chroot environments are heavyweight.  It is not practical to create
+one for every invocation of a program.  To do so, you would have to
+delete the copied files and directories, and remove any mount point
+entries, when the process you started had finished.  If a program
+starts child processes, it's hard to tell when this is.  As a result,
+chroot environments are usually static.
+
+Furthermore, the chroot() call is only available to the root user.
+(This is a consequence of the way chroot() interacts with setuid
+executables.)
+
+Plash implements its security using a chroot environment, but this is
+largely just an implementation detail.  Plash uses chroot() to take
+authority away from a process, but it uses file descriptor passing to
+give limited authority back to the process.
+
+Plash moves the interpretation of filenames so that it is done in user
+space.  It allows directories to be implemented in user space.  This
+allows the creation of file namespaces to be more flexible.  Files,
+directories and directory entries (slots) can be mapped anywhere in a
+directory tree.  Since the directory tree for a file namespace is
+stored in a server process, tidying up is simple: the server process
+exits when no clients are connected to it.
 
 }

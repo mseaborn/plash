@@ -1,0 +1,62 @@
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ANSI_X3.4-1968"><title>Programs that don't work under Plash</title><meta name="generator" content="DocBook XSL Stylesheets V1.68.1"><link rel="start" href="index.html" title="Plash: the Principle of Least Authority shell"><link rel="up" href="bugs-and-vulns.html" title="Chapter&#160;8.&#160;Bugs and vulnerabilities"><link rel="prev" href="problems.html" title="Might be problems in future"><link rel="next" href="copyright.html" title="Chapter&#160;9.&#160;Copyright"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="navheader"><table width="100%" summary="Navigation header"><tr><th colspan="3" align="center">Programs that don't work under Plash</th></tr><tr><td width="20%" align="left"><a accesskey="p" href="problems.html">Prev</a>&#160;</td><th width="60%" align="center">Chapter&#160;8.&#160;Bugs and vulnerabilities</th><td width="20%" align="right">&#160;<a accesskey="n" href="copyright.html">Next</a></td></tr></table><hr></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="compatibility"></a>Programs that don't work under Plash</h2></div></div></div><pre class="programlisting">rm -r:
+needs to open directory FDs and use fchdir() to work without being
+vulnerable to symlink races.  fchdir() isn't implemented.
+
+install:
+uses fchdir() too, it seems.
+
+gcc:
+tries 1000 times to open files in /tmp in a loop (so hangs for a while),
+then aborts (without a descriptive error)
+-- really, it should test for EEXIST
+
+mkisofs:
+/usr/bin/mkisofs: Operation not permitted. Panic cannot set back efective uid.
+It does the following:
+setreuid32(0xffffffff, 0x1f6)           = -1 EPERM (Operation not permitted)
+where 0x1f6 = 502 (mrs), the UID it believes it already has
+
+make:
+setresuid32(0xffffffff, 0x1f6, 0xffffffff) = -1 EPERM (Operation not permitted)
+(but this doesn't happen with Debian, even though make is 3.79.1 on both)
+
+mailq:
+masqmail is setuid root, and it tries to close all file descriptors,
+and consequently cuts off its access to the server.
+
+emacs:
+  X-plash$ emacs
+  emacs: Memory exhausted--use M-x save-some-buffers RET
+I'm not sure why this is happening.
+Emacs doesn't like being run like this, from Bash:
+  /lib/ld-linux.so.2 /usr/bin/emacs
+This error is mentioned in:
+http://www.cs.berkeley.edu/~nks/fig/fig.ps
+
+xemacs:
+Running the shell "shell" gives:
+  sendmsg: Bad file descriptor
+  recvmsg: Bad file descriptor
+  [2622] cap-protocol: [fd 5] to-server: connection error, errno 9 (Bad file descriptor)
+  Can't exec program /bin/sh
+  Process shell exited abnormally with code 1
+It would appear that XEmacs is closing the file descriptor that Plash uses.
+
+xemacs: also relies on pseudo-terminals; do this:
+nm /usr/bin/xemacs | egrep 'getpt|grantpt|unlockpt|ptsname|openpty|forkpty'
+
+xemacs:
+Filename completion doesn't seem to work on fabricated directories,
+only real directories.  Is it relying on the object type being included
+in directory listings?
+
+
+
+Fixed
+
+Now works:
+
+xemacs
+(uses open() on directories)
+
+</pre></div><div class="navfooter"><hr><table width="100%" summary="Navigation footer"><tr><td width="40%" align="left"><a accesskey="p" href="problems.html">Prev</a>&#160;</td><td width="20%" align="center"><a accesskey="u" href="bugs-and-vulns.html">Up</a></td><td width="40%" align="right">&#160;<a accesskey="n" href="copyright.html">Next</a></td></tr><tr><td width="40%" align="left" valign="top">Might be problems in future&#160;</td><td width="20%" align="center"><a accesskey="h" href="index.html">Home</a></td><td width="40%" align="right" valign="top">&#160;Chapter&#160;9.&#160;Copyright</td></tr></table></div></body></html>

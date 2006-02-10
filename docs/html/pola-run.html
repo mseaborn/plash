@@ -1,0 +1,93 @@
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ANSI_X3.4-1968"><title>pola-run</title><meta name="generator" content="DocBook XSL Stylesheets V1.68.1"><link rel="start" href="index.html" title="Plash: the Principle of Least Authority shell"><link rel="up" href="man-pages.html" title="Chapter&#160;6.&#160;Man pages"><link rel="prev" href="man-pages.html" title="Chapter&#160;6.&#160;Man pages"><link rel="next" href="plash.html" title="plash"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="navheader"><table width="100%" summary="Navigation header"><tr><th colspan="3" align="center">pola-run</th></tr><tr><td width="20%" align="left"><a accesskey="p" href="man-pages.html">Prev</a>&#160;</td><th width="60%" align="center">Chapter&#160;6.&#160;Man pages</th><td width="20%" align="right">&#160;<a accesskey="n" href="plash.html">Next</a></td></tr></table><hr></div><div class="refentry" lang="en"><a name="pola-run"></a><div class="titlepage"></div><div class="refnamediv"><h2>Name</h2><p>pola-run &#8212; Run a program, giving it less authority than the caller</p></div><div class="refsynopsisdiv"><h2>Synopsis</h2><pre class="synopsis">pola-run
+  <code class="option">--prog</code> <em class="replaceable"><code>filename</code></em>
+  [ <code class="option">-f</code>[awls]... <em class="replaceable"><code>pathname</code></em>
+  | <code class="option">-t</code>[awls]... <em class="replaceable"><code>pathname</code></em> <em class="replaceable"><code>pathname</code></em>
+  | <code class="option">-a</code> <em class="replaceable"><code>string</code></em>
+  | <code class="option">--cwd</code> <em class="replaceable"><code>dir</code></em>
+  | <code class="option">--no-cwd</code>
+  | <code class="option">--copy-cwd</code> ]...
+  [<code class="option">-B</code>] [<code class="option">--x11</code>] [<code class="option">--net</code>]
+</pre></div><div class="refsect1" lang="en"><a name="id2523928"></a><h2>Description</h2><p>pola-run runs programs under the Plash environment.  It starts a
+process with a subset of the caller process's authority.  The caller
+can grant the callee read-only or read-write access to specific files
+and directories, which can be mapped at any point in the callee's
+filesystem namespace.</p><p>pola-run provides a programmatic interface.  It is intended to be used
+from Bash shell scripts and other programs.  Since it works via the
+command line, it can be used from virtually any language, in contrast
+to a C API.  pola-run is different from the Plash shell, which does
+not provide a programmatic interface: Plash shell commands are
+intended to be written by hand, not generated automatically.</p><p>pola-run constructs two things to pass to the callee program: a list
+of argument strings (as received by <code class="function">main()</code>), and a file
+namespace.  The <code class="option">-a</code> option adds strings to the argument list,
+in order.  The <code class="option">-f</code> and <code class="option">-t</code> options add files and
+directories to the file namespace.  These can be combined:
+<code class="option">-fa</code> and <code class="option">-ta</code> add an object to the file namespace
+and a corresponding filename to the argument list.</p><p>Unlike the Plash shell, pola-run grants access to no files by default.
+The <code class="option">-B</code> option will grant access to a fairly safe but large
+installation endowment, which includes /usr, /bin and /lib.
+(Currently this is different to the shell's default installation
+endowment, which includes /etc as well.)</p><p>pola-run can be used to invoke executable objects, in which case the
+callee can have access to objects that the caller doesn't have access
+to.</p><p><span class="emphasis"><em>NB. The implementation is incomplete.  Some things mentioned here
+aren't implemented yet.</em></span></p></div><div class="refsect1" lang="en"><a name="id2524007"></a><h2>Options</h2><p>For arguments that take one parameter, there are two forms to choose
+from: "<code class="option">--arg</code> <em class="replaceable"><code>param</code></em>" and "<code class="option">--arg</code>=<em class="replaceable"><code>param</code></em>".
+The first form may be more convenient to generate in a C program.  The
+latter may be more readable in hand-written shell scripts.</p><div class="variablelist"><dl><dt><span class="term"><code class="option">--prog</code> <em class="replaceable"><code>filename</code></em></span></dt><dd><p></p></dd><dt><span class="term"><code class="option">--prog</code>=<em class="replaceable"><code>filename</code></em></span></dt><dd><p>This gives the filename of the executable to be invoked.  If it
+doesn't contain a slash, it will be looked up in <code class="envar">PATH</code>.</p><p>Note that if the executable is a "#!" script, access to the
+interpreter specified in the "#!" line will <span class="emphasis"><em>not</em></span> be
+implicitly granted.</p></dd><dt><span class="term"><code class="option">--prog-sock</code> <em class="replaceable"><code>filename</code></em></span></dt><dd><p></p></dd><dt><span class="term"><code class="option">--prog-sock</code>=<em class="replaceable"><code>filename</code></em></span></dt><dd><p>Invoke an executable object rather than an executable file.  The
+executable object is taken from the socket named by <em class="replaceable"><code>filename</code></em>.  An
+object can be exported to a socket using
+<span><strong class="command">plash-socket-publish</strong></span>.</p><p>This option implies <code class="option">--no-default</code>.</p></dd><dt><span class="term"><code class="option">-f</code>[awls]...[,<em class="replaceable"><code>option</code></em>]... <em class="replaceable"><code>pathname</code></em></span></dt><dd><p></p></dd><dt><span class="term"><code class="option">-f</code>[awls]...[,<em class="replaceable"><code>option</code></em>]...=<em class="replaceable"><code>pathname</code></em></span></dt><dd><p>Grant access to a file or directory (given by <em class="replaceable"><code>pathname</code></em>), and
+optionally add <em class="replaceable"><code>pathname</code></em> to the argument list.  This takes the
+following single-letter options.  The multi-character options must be
+separated by commas.</p><div class="variablelist"><dl><dt><span class="term"><code class="option">a</code></span></dt><dd><p>Add <em class="replaceable"><code>pathname</code></em> to the argument list.  Equivalent to
+	adding the argument "<code class="option">-a</code> <em class="replaceable"><code>pathname</code></em>".</p></dd><dt><span class="term"><code class="option">w</code></span></dt><dd><p>Grant read/write access to the slot specified by
+	<em class="replaceable"><code>pathname</code></em>.  By default, without this option, read-only
+	access is granted to the file or directory specified by
+	<em class="replaceable"><code>pathname</code></em>.</p></dd><dt><span class="term"><code class="option">l</code></span></dt><dd><p>Follow symbolic links (the "l" is for "foLLow").  If
+	symbolic links are encountered when pola-run resolves
+	<em class="replaceable"><code>pathname</code></em>, these links will be followed.  When the symlink
+	occurs at the last element in a pathname, this will cause
+	pola-run to grant access to both the symlink object and the
+	destination object (or the slots containing them, when the
+	<code class="option">w</code> option is used).  If <em class="replaceable"><code>pathname</code></em> resolves to a
+	directory, this option does not affect the treatment of
+	symlinks inside the directory.</p></dd><dt><span class="term"><code class="option">s</code></span></dt><dd><p>Grant permission to create symbolic links.  (Only
+	relevant if <code class="option">w</code> is used.)</p></dd><dt><span class="term"><code class="option">objrw</code></span></dt><dd><p>Grant read/write access to the file or directory
+	object, but not the slot, specified by <em class="replaceable"><code>pathname</code></em>.  This is
+	useful for granting access to writable devices such as
+	<em class="replaceable"><code>/dev/null</code></em>.</p></dd><dt><span class="term"><code class="option">socket</code></span></dt><dd><p>Grant permission to connect to Unix domain sockets (as
+	the <code class="option">w</code> option does), but without granting write
+	access to file and directory objects.</p></dd></dl></div></dd><dt><span class="term"><code class="option">-t</code>[awls]...[,<em class="replaceable"><code>option</code></em>]... <em class="replaceable"><code>dest-pathname</code></em> <em class="replaceable"><code>source-pathname</code></em></span></dt><dd><p>Grant access to a file or directory (<em class="replaceable"><code>source-pathname</code></em>), but attach
+it to a different pathname in the file namespace(<em class="replaceable"><code>dest-pathname</code></em>).
+Optionally add <em class="replaceable"><code>dest-pathname</code></em> to the argument list.  This takes
+the same options as <code class="option">-f</code>.</p><p>Note that "<code class="option">-f</code><em class="replaceable"><code>options</code></em> <em class="replaceable"><code>pathname</code></em>" is <span class="emphasis"><em>not</em></span>
+exactly equivalent to "<code class="option">-t</code><em class="replaceable"><code>options</code></em> <em class="replaceable"><code>pathname</code></em>
+<em class="replaceable"><code>pathname</code></em>".  <code class="option">-t</code> will not introduce symlinks at the
+directory components of <em class="replaceable"><code>dest-pathname</code></em>, and it will fail if there
+are any symlinks in these locations.</p></dd><dt><span class="term"><code class="option">-a</code> <em class="replaceable"><code>string</code></em></span></dt><dd><p></p></dd><dt><span class="term"><code class="option">-a</code>=<em class="replaceable"><code>string</code></em></span></dt><dd><p>Add <em class="replaceable"><code>string</code></em> to the argument list.</p></dd><dt><span class="term"><code class="option">--cwd</code> <em class="replaceable"><code>dir</code></em></span></dt><dd><p></p></dd><dt><span class="term"><code class="option">--cwd</code>=<em class="replaceable"><code>dir</code></em></span></dt><dd><p></p></dd><dt><span class="term"><code class="option">--no-cwd</code></span></dt><dd><p></p></dd><dt><span class="term"><code class="option">--copy-cwd</code></span></dt><dd><p>These options set the current working directory (cwd) for the process.</p><p><code class="option">--copy-cwd</code> will use the calling process's cwd.  This is the
+default.</p><p><code class="option">--no-cwd</code> unsets the cwd, so that using a pathname relative
+to the cwd will give an error.</p><p><code class="option">--cwd</code> sets the cwd to a directory given by a pathname.</p><p>In any case, if the directory's pathname does not exist in the
+namespace created for the process, the cwd will be left unset.</p><p>These options also affect how the pathnames in other arguments are
+interpreted.  You can use multiple cwd arguments.  An argument
+pathname is resolved relative to the most recent one.  The final cwd
+argument also sets the process's cwd.</p></dd><dt><span class="term"><code class="option">-B</code></span></dt><dd><p>Grant access to a default installation endowment.  This is equivalent
+to the options:</p><pre class="programlisting">
+-fl /usr
+-fl /bin
+-fl /lib
+-fl,objrw /dev/null
+-fl,objrw /dev/tty</pre></dd><dt><span class="term"><code class="option">--x11</code></span></dt><dd><p>Grant access to the X11 Window System.  This is currently equivalent
+to the options:</p><pre class="programlisting">
+-fl,socket /tmp/.X11-unix/
+-fl ~/.Xauthority</pre><p>In the future, <code class="option">--x11</code> may work using an X11 proxy.</p></dd><dt><span class="term"><code class="option">--net</code></span></dt><dd><p>This grants access to some files that are important for accessing the
+Internet.  When Plash gains the ability to deny a process access to
+the network, this option will gain the function of passing network
+access on to the callee.</p><p>Currently, this is equivalent to:</p><pre class="programlisting">
+-fl /etc/resolv.conf
+-fl /etc/hosts
+-fl /etc/services</pre></dd></dl></div></div><div class="refsect1" lang="en"><a name="id2524506"></a><h2>Examples</h2><p>In Bash:</p><pre class="programlisting">gcc -c foo.c -o foo.o</pre><p>In the Plash shell:</p><pre class="programlisting">gcc -c foo.c =&gt; -o foo.o + .</pre><p>This would become:</p><pre class="programlisting">pola-run -B --prog=gcc  -a=-c  -fa=foo.c  -a=-o  -faw=foo.o  -f=.</pre><p>Run Bash with the same filesystem namespace as the caller.  This is
+useful for testing Plash:</p><pre class="programlisting">pola-run -fw=/ --prog /bin/bash</pre></div><div class="refsect1" lang="en"><a name="id2524557"></a><h2>See also</h2><p><span><strong class="command">plash</strong></span>, <span><strong class="command">plash-socket-publish</strong></span></p><p>  /usr/share/doc/plash
+</p></div><div class="refsect1" lang="en"><a name="id2524579"></a><h2>Author</h2><p>Mark Seaborn &lt;mseaborn@onetel.com&gt;
+</p></div></div><div class="navfooter"><hr><table width="100%" summary="Navigation footer"><tr><td width="40%" align="left"><a accesskey="p" href="man-pages.html">Prev</a>&#160;</td><td width="20%" align="center"><a accesskey="u" href="man-pages.html">Up</a></td><td width="40%" align="right">&#160;<a accesskey="n" href="plash.html">Next</a></td></tr><tr><td width="40%" align="left" valign="top">Chapter&#160;6.&#160;Man pages&#160;</td><td width="20%" align="center"><a accesskey="h" href="index.html">Home</a></td><td width="40%" align="right" valign="top">&#160;plash</td></tr></table></div></body></html>

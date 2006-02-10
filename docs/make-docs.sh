@@ -13,9 +13,9 @@ fi
 cd docs && (
 ./parse.pl index.xxml >out-doc.xml
 
-mkdir -p out-html
-time xmlto html -m config.xsl -o out-html/ out-doc.xml
+mkdir -p html
+time xmlto html -m config.xsl -o html/ out-doc.xml
 
-mkdir -p out-man
-(cd out-man && docbook2x-man ../out-doc.xml)
+mkdir -p man
+(cd man && docbook2x-man ../out-doc.xml)
 )

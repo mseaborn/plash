@@ -25,7 +25,7 @@
 #include "cap-protocol.h"
 
 
-extern struct filesys_obj_vtable union_dir_vtable;
+DECLARE_VTABLE(union_dir_vtable);
 
 struct union_dir {
   struct filesys_obj hdr;
@@ -34,9 +34,8 @@ struct union_dir {
 
 struct filesys_obj *make_union_dir(struct filesys_obj *x, struct filesys_obj *y)
 {
-  struct union_dir *dir = amalloc(sizeof(struct union_dir));
-  dir->hdr.refcount = 1;
-  dir->hdr.vtable = &union_dir_vtable;
+  struct union_dir *dir =
+    filesys_obj_make(sizeof(struct union_dir), &union_dir_vtable);
   dir->x = x;
   dir->y = y;
   return (struct filesys_obj *) dir;
@@ -49,6 +48,15 @@ void union_dir_free(struct filesys_obj *obj)
   filesys_obj_free(dir->x);
   filesys_obj_free(dir->y);
 }
+
+#ifdef GC_DEBUG
+void union_dir_mark(struct filesys_obj *obj)
+{
+  struct union_dir *dir = (void *) obj;
+  filesys_obj_mark(dir->x);
+  filesys_obj_mark(dir->y);
+}
+#endif
 
 int union_dir_stat(struct filesys_obj *obj, struct stat *buf, int *err)
 {

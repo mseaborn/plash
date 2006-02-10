@@ -38,6 +38,9 @@
 #include "marshal-exec.h"
 
 
+__asm__(".weak plash_libc_reset_connection");
+
+
 DECLARE_VTABLE(exec_obj_vtable);
 struct exec_obj {
   struct filesys_obj hdr;
@@ -54,6 +57,17 @@ void exec_obj_free(struct filesys_obj *obj1)
   filesys_obj_free(obj->union_dir_maker);
   free(obj->cmd);
 }
+
+#ifdef GC_DEBUG
+void exec_obj_mark(struct filesys_obj *obj1)
+{
+  struct exec_obj *obj = (void *) obj1;
+  filesys_obj_mark(obj->root_dir);
+  filesys_obj_mark(obj->conn_maker);
+  filesys_obj_mark(obj->fs_op_maker);
+  filesys_obj_mark(obj->union_dir_maker);
+}
+#endif
 
 #define STAT_DEVICE 101
 
@@ -173,6 +187,7 @@ void exec_obj_invoke(struct filesys_obj *obj1, struct cap_args args)
 	  
 	  /* Close sockets */
 	  cap_close_all_connections();
+	  assert(plash_libc_reset_connection);
 	  plash_libc_reset_connection();
 	  
 	  install_fds(inst_fds);
@@ -271,9 +286,8 @@ int main(int argc, const char *argv[])
     }
 
     {
-      struct exec_obj *obj = amalloc(sizeof(struct exec_obj));
-      obj->hdr.refcount = 1;
-      obj->hdr.vtable = &exec_obj_vtable;
+      struct exec_obj *obj =
+	filesys_obj_make(sizeof(struct exec_obj), &exec_obj_vtable);
       obj->root_dir = root_dir;
       obj->cmd = strdup(argv[1]);
       obj->conn_maker = conn_maker;

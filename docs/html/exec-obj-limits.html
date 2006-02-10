@@ -1,0 +1,41 @@
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ANSI_X3.4-1968"><title>Limitations</title><meta name="generator" content="DocBook XSL Stylesheets V1.68.1"><link rel="start" href="index.html" title="Plash: the Principle of Least Authority shell"><link rel="up" href="exec-obj.html" title="Chapter&#160;4.&#160;Executable objects"><link rel="prev" href="exec-obj-notes.html" title="Notes"><link rel="next" href="interfaces.html" title="Chapter&#160;5.&#160;Protocols and interfaces"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="navheader"><table width="100%" summary="Navigation header"><tr><th colspan="3" align="center">Limitations</th></tr><tr><td width="20%" align="left"><a accesskey="p" href="exec-obj-notes.html">Prev</a>&#160;</td><th width="60%" align="center">Chapter&#160;4.&#160;Executable objects</th><td width="20%" align="right">&#160;<a accesskey="n" href="interfaces.html">Next</a></td></tr></table><hr></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="exec-obj-limits"></a>Limitations</h2></div></div></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="id2522978"></a>Linux, job control, and TTY file descriptors</h3></div></div></div><p>File descriptors for TTYs under Unix do not behave like capabilities
+in the sense that the kernel takes a process's "process group" into
+account when the process does IO on a TTY file descriptor.  This is
+part of the Unix job control mechanism.  A process will be stopped
+(with SIGTTIN) if it tries to read from a TTY when it is not part of
+the TTY's current process group.</p><p>I don't think this is a good design.  So far, however, it has not a
+problem because the processes started by `exec-object' can simply set
+their process group ID to the one specified in the "exec" invocation.
+That lets them read input from the terminal.</p><p>However, processes also have a "session ID".  Typically, the processes
+running under a given terminal window run in their own distinct
+session.  A process cannot set its process group ID to a process group
+that belongs to a different session.  So if an exec-object instance E,
+started from one terminal window W1, is invoked by a process in
+another terminal window W2, E won't be able to start a process P that
+can read input from the user in W2, even if P has the appropriate TTY
+file descriptor.  This may be a problem in the future.</p><p>I can see two ways around this:</p><div class="itemizedlist"><ul type="disc"><li><p>Just arrange for all the relevant processes to be running under
+   the same session ID.  This would only work if we're not using
+   existing terminal emulators (xterm, gnome-terminal, etc.).
+   It might not work at all.</p></li><li><p>Virtualise IO on file descriptors to use method calls on objects
+   instead.  There would be a lot of libc functions to modify in
+   order to do this properly, but this has other uses.
+</p></li></ul></div><p>
+</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="id2523035"></a>Job control</h3></div></div></div><p>You can start a process via the shell using an object invocation, and
+you can stop the process by pressing Ctrl-Z, but the shell is not
+informed that the process has been stopped, so the shell will not
+return control to the user and display a prompt.</p><p>This needs to be fixed.  It is a deficiency in the specification of
+the "Exeo" method call.</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="id2523052"></a>exec-object limitations</h3></div></div></div><p>exec-object does not set the current working directory of the
+processes it starts.</p><p>exec-object doesn't provide any control over the arguments and
+environment variables it passes to the processes it starts.</p><p>exec-object doesn't start its child processes with a different UID, so
+the child process could kill it, ptrace() it, etc.  (exec-object
+should use "run-as-anonymous" like the shell does.)</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="id2523075"></a>Shell limitations</h3></div></div></div><p>The shell does not provide a mechanism for sharing object references
+with other instances of the shell, with other users, or across the
+network.</p><p>The shell does not allow for recursive definitions using "def".</p><p>The shell only supports "capcmd CMD ARGS..." where CMD is an
+executable file, but not where CMD is an executable object, and it
+doesn't support running CMD in the standard Unix way (as the `!!' 
+syntax does).</p><p>A "capcmd !! CMD ARGS..." expression would allow the use of existing
+setuid executables from programs running under Plash.</p><p>A "capcmd VAR ARGS..." expression would make it possible to have
+a single process provide multiple executable objects, ie:</p><pre class="programlisting">
+  def factory_maker = capcmd factory-maker-maker
+  def echo = capcmd factory_maker '/bin/echo' ...
+  def ls = capcmd factory_maker '/bin/ls' ...</pre></div></div><div class="navfooter"><hr><table width="100%" summary="Navigation footer"><tr><td width="40%" align="left"><a accesskey="p" href="exec-obj-notes.html">Prev</a>&#160;</td><td width="20%" align="center"><a accesskey="u" href="exec-obj.html">Up</a></td><td width="40%" align="right">&#160;<a accesskey="n" href="interfaces.html">Next</a></td></tr><tr><td width="40%" align="left" valign="top">Notes&#160;</td><td width="20%" align="center"><a accesskey="h" href="index.html">Home</a></td><td width="40%" align="right" valign="top">&#160;Chapter&#160;5.&#160;Protocols and interfaces</td></tr></table></div></body></html>

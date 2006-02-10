@@ -271,6 +271,11 @@ This would become:
 
 \pre- pola-run -B --prog=gcc  -a=-c  -fa=foo.c  -a=-o  -faw=foo.o  -f=.
 
+Run Bash with the same filesystem namespace as the caller.  This is
+useful for testing Plash:
+
+\pre- pola-run -fw=/ --prog /bin/bash
+
 }
 
 

@@ -1,0 +1,51 @@
+.TH plash\-socket\-publish 1   
+.SH NAME
+plash\-socket\-publish \- Make a Plash object reference available via a named socket
+.SH SYNOPSIS
+.nf
+plash\-socket\-publish => \fIsocket\-pathname\fR /x=\fIvariable\-name\fR
+.fi
+.SH DESCRIPTION
+This program makes a reference to a single Plash object available via
+a Unix domain socket \-\- that is, a named socket that appears in the
+filesystem. This is useful for exporting an object that has been
+bound to a variable in one instance of the Plash shell, so that it can
+be used in other instances of the shell (eg. in a different terminal
+window).
+.PP
+It can be used in conjunction with plash\-socket\-connect,
+which connects to a socket and returns a copy of the reference that
+the socket exports.
+.PP
+If a socket already exists at \fIsocket\-pathname\fR, the program
+removes it first. (However, it will give an error if a file exists
+under that name.)
+.PP
+This command is only useful when used in the Plash shell.
+.SH LIMITATIONS
+The process has to stick around as a proxy to forward method calls.
+.PP
+The program can't tell when it can never receive any more connections
+\-\- ie. when the socket has been deleted from the filesystem or
+replaced \-\- so it runs indefinitely. You have to stop the program
+manually.
+.SH EXAMPLES
+.nf
+
+def edit_file = capcmd plash\-run\-emacs ...
+plash\-socket\-publish => ~/tmp/emacs /x=edit_file
+.fi
+.PP
+Then in another shell:
+.PP
+.nf
+
+def edit_file = capcmd plash\-socket\-connect => ~/tmp/emacs
+edit_file => some\-file.txt
+.fi
+.SH "SEE ALSO"
+plash, plash\-socket\-connect, plash\-run\-emacs
+.PP
+/usr/share/doc/plash
+.SH AUTHOR
+Mark Seaborn <mseaborn@onetel.com>

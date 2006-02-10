@@ -28,7 +28,7 @@
 #include "cap-protocol.h"
 
 
-extern struct filesys_obj_vtable readonly_obj_vtable;
+DECLARE_VTABLE(readonly_obj_vtable);
 
 struct readonly_obj {
   struct filesys_obj hdr;
@@ -38,9 +38,8 @@ struct readonly_obj {
 /* Takes an owning reference. */
 struct filesys_obj *make_read_only_proxy(struct filesys_obj *x)
 {
-  struct readonly_obj *obj = amalloc(sizeof(struct readonly_obj));
-  obj->hdr.refcount = 1;
-  obj->hdr.vtable = &readonly_obj_vtable;
+  struct readonly_obj *obj =
+    filesys_obj_make(sizeof(struct readonly_obj), &readonly_obj_vtable);
   obj->x = x;
   return (struct filesys_obj *) obj;
 }
@@ -51,6 +50,14 @@ void readonly_free(struct filesys_obj *obj1)
   struct readonly_obj *obj = (void *) obj1;
   filesys_obj_free(obj->x);
 }
+
+#ifdef GC_DEBUG
+void readonly_mark(struct filesys_obj *obj1)
+{
+  struct readonly_obj *obj = (void *) obj1;
+  filesys_obj_mark(obj->x);
+}
+#endif
 
 int readonly_type(struct filesys_obj *obj1)
 {

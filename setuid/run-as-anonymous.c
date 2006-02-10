@@ -127,7 +127,7 @@ int main(int argc, char *argv[], char *envp[])
     return 1;
   }
   else {
-#if 0
+#ifndef NO_DEBUG
     int debug = 0;
 #endif
     char **argv2;
@@ -171,7 +171,7 @@ int main(int argc, char *argv[], char *envp[])
 
     argc--;
     argv++;
-#if 0
+#ifndef NO_DEBUG
     if(argc >= 2 && !strcmp(argv[0], "--debug")) {
       debug = 1;
       argc--;
@@ -204,7 +204,7 @@ int main(int argc, char *argv[], char *envp[])
 
     if(close(lock_file_fd) < 0) { perror(NAME ": close"); return 1; }
 
-#if 0
+#ifndef NO_DEBUG
     if(debug) {
       fprintf(stderr, NAME ": stopping, pid %i\n", getpid());
       if(raise(SIGSTOP) < 0) { perror(NAME ": raise(SIGSTOP)"); return 1; }

@@ -39,7 +39,7 @@ static int my_atoi(const char *str)
   return x;
 }
 
-static char *strdup(const char *str)
+static char *my_strdup(const char *str)
 {
   int len = strlen(str);
   char *x = amalloc(len + 1);
@@ -120,7 +120,7 @@ int plash_init()
 
     var = glibc_getenv("PLASH_CAPS");
     if(!var) { __set_errno(ENOSYS); return -1; }
-    process_caps_names = strdup(var);
+    process_caps_names = my_strdup(var);
 
     cap_list = seqf_string(var);
     list = cap_list;

@@ -82,4 +82,6 @@ read() and write()) work on kernel-level file descriptors as before.
 
 \splice name={bugs};
 
+\splice name={copyright};
+
 }

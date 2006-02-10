@@ -1,0 +1,49 @@
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ANSI_X3.4-1968"><title>Chapter&#160;8.&#160;Bugs and vulnerabilities</title><meta name="generator" content="DocBook XSL Stylesheets V1.68.1"><link rel="start" href="index.html" title="Plash: the Principle of Least Authority shell"><link rel="up" href="index.html" title="Plash: the Principle of Least Authority shell"><link rel="prev" href="xxml.html" title="Documentation format: XXML, an XML surface syntax"><link rel="next" href="bugs.html" title="Bugs"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="navheader"><table width="100%" summary="Navigation header"><tr><th colspan="3" align="center">Chapter&#160;8.&#160;Bugs and vulnerabilities</th></tr><tr><td width="20%" align="left"><a accesskey="p" href="xxml.html">Prev</a>&#160;</td><th width="60%" align="center">&#160;</th><td width="20%" align="right">&#160;<a accesskey="n" href="bugs.html">Next</a></td></tr></table><hr></div><div class="chapter" lang="en"><div class="titlepage"><div><div><h2 class="title"><a name="bugs-and-vulns"></a>Chapter&#160;8.&#160;Bugs and vulnerabilities</h2></div></div></div><div class="toc"><p><b>Table of Contents</b></p><dl><dt><span class="sect1"><a href="bugs-and-vulns.html#vulns">Security vulnerabilities</a></span></dt><dt><span class="sect1"><a href="bugs.html">Bugs</a></span></dt><dt><span class="sect1"><a href="problems.html">Might be problems in future</a></span></dt><dt><span class="sect1"><a href="compatibility.html">Programs that don't work under Plash</a></span></dt></dl></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="vulns"></a>Security vulnerabilities</h2></div></div></div><pre class="programlisting">Race condition:
+connect() on Unix domain sockets presumably follows symlinks, and
+there is no way to switch this off.  This means an adversary could
+replace a domain socket with a symlink to exploit the race condition
+and open sockets in the server's namespace.
+(bind() probably doesn't follow symlinks; it probably behaves like
+open() with O_CREAT|O_EXCL.)
+Note that this is a race condition between servers.  If there was only
+one server process providing real filesystem objects, there would be
+no race condition, because socket_connect() would be atomic.
+Possible solution:
+ * The server has a private directory in which no server will create
+   symlinks on behalf of a client.
+   The server's socket_connect() method hardlinks the socket file into
+   the private directory, checks that the object that got hardlinked
+   is not a symlink, and then calls connect() on it.
+    * Problem: this doesn't work across devices.  We could try creating
+      a hard link in the same directory, but that doesn't work if the
+      server doesn't have write access to the directory.
+      (But then, if the server doesn't have write access *and other
+      servers don't either* the symlink attack cannot be carried out.)
+      Doing this in /tmp/.X11-unix creates a file that is owned by
+      root in a directory owned by root (with the sticky bit set), which
+      then cannot be deleted.  (The sticky bit means you can unlink an
+      object only if you own it, or you own the directory.)
+    * We could have a list of directories into which we try to create
+      hard links.  These are tried in turn.  The user can set these up
+      to cover all the filesystems.
+      Plash would have to create a directory per user ID inside these
+      directories (as in /tmp) -- incidentally, this means the sticky
+      bit isn't necessary, because processes with other user IDs can't
+      delete the directories while they're in use.
+      What should the default be?  "/tmp/plash/"
+      This would be enough for opening X11 sockets.
+      How should this be configured?
+      Via an environment variable?  We would want to unset this so that
+      programs run under Plash don't see it.
+      Via a configuration file in /etc?  /etc/plash/hardlink-dirs could
+      contain a list of directories, each on a separate line.
+See
+http://cert.uni-stuttgart.de/archive/bugtraq/1999/10/msg00011.html
+SSH authentication agent follows symlinks via a UNIX domain socket
+
+Running as root:
+ * /dev/tty is a writable slot; it should be a writable object in a
+   read-only slot.  Now fixed.
+ * The same applies to /tmp/.X11-unix.  Not fixed yet.
+
+</pre></div></div><div class="navfooter"><hr><table width="100%" summary="Navigation footer"><tr><td width="40%" align="left"><a accesskey="p" href="xxml.html">Prev</a>&#160;</td><td width="20%" align="center">&#160;</td><td width="40%" align="right">&#160;<a accesskey="n" href="bugs.html">Next</a></td></tr><tr><td width="40%" align="left" valign="top">Documentation format: XXML, an XML surface syntax&#160;</td><td width="20%" align="center"><a accesskey="h" href="index.html">Home</a></td><td width="40%" align="right" valign="top">&#160;Bugs</td></tr></table></div></body></html>

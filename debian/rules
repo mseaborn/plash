@@ -23,6 +23,7 @@
 package=plash
 
 binary-arch:	checkroot
+	echo This needs updating -- please fix; exit 1
 	$(checkdir)
 	./make-glibc.sh
 	./make-dirs.sh

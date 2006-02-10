@@ -56,8 +56,8 @@ struct fab_symlink {
   int inode;
 };
 
-extern struct filesys_obj_vtable fab_dir_vtable;
-extern struct filesys_obj_vtable fab_symlink_vtable;
+DECLARE_VTABLE(fab_dir_vtable);
+DECLARE_VTABLE(fab_symlink_vtable);
 
 
 /* This is a version built from slots rather than filesys_objs */
@@ -74,8 +74,8 @@ struct s_fab_dir {
   int inode;
 };
 
-extern struct filesys_obj_vtable s_fab_dir_vtable;
-extern struct filesys_obj_vtable s_fab_symlink_vtable;
+DECLARE_VTABLE(s_fab_dir_vtable);
+DECLARE_VTABLE(s_fab_symlink_vtable);
 
 
 #endif

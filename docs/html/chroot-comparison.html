@@ -1,0 +1,26 @@
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ANSI_X3.4-1968"><title>How does Plash compare with chroot jails?</title><meta name="generator" content="DocBook XSL Stylesheets V1.68.1"><link rel="start" href="index.html" title="Plash: the Principle of Least Authority shell"><link rel="up" href="env.html" title="Chapter&#160;3.&#160;Plash's restricted execution environment"><link rel="prev" href="syscall-intercept.html" title="Why not do interception of system calls using, for example, ptrace?"><link rel="next" href="exec-obj.html" title="Chapter&#160;4.&#160;Executable objects"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="navheader"><table width="100%" summary="Navigation header"><tr><th colspan="3" align="center">How does Plash compare with chroot jails?</th></tr><tr><td width="20%" align="left"><a accesskey="p" href="syscall-intercept.html">Prev</a>&#160;</td><th width="60%" align="center">Chapter&#160;3.&#160;Plash's restricted execution environment</th><td width="20%" align="right">&#160;<a accesskey="n" href="exec-obj.html">Next</a></td></tr></table><hr></div><div class="sect1" lang="en"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a name="chroot-comparison"></a>How does Plash compare with chroot jails?</h2></div></div></div><p>Plash provides functionality similar to chroot().  The Linux kernel's
+chroot() system call can be used to run a program in a different file
+namespace (ie. root directory).  chroot jailing is a well-known
+technique, though not used very frequently due to its limitations.</p><p>The facilities for creating new namespaces for use with chroot are
+limited.  You can only put individual files into the chroot
+environment by copying or hard linking them.  It's not possible to
+grant read-write access to individual directory entries.  Though you
+can't hard link directories, you can put directories into a chroot
+environment using "mount --bind", but this can't be used to grant only
+read-only access to a directory.</p><p>chroot environments are heavyweight.  It is not practical to create
+one for every invocation of a program.  To do so, you would have to
+delete the copied files and directories, and remove any mount point
+entries, when the process you started had finished.  If a program
+starts child processes, it's hard to tell when this is.  As a result,
+chroot environments are usually static.</p><p>Furthermore, the chroot() call is only available to the root user.
+(This is a consequence of the way chroot() interacts with setuid
+executables.)</p><p>Plash implements its security using a chroot environment, but this is
+largely just an implementation detail.  Plash uses chroot() to take
+authority away from a process, but it uses file descriptor passing to
+give limited authority back to the process.</p><p>Plash moves the interpretation of filenames so that it is done in user
+space.  It allows directories to be implemented in user space.  This
+allows the creation of file namespaces to be more flexible.  Files,
+directories and directory entries (slots) can be mapped anywhere in a
+directory tree.  Since the directory tree for a file namespace is
+stored in a server process, tidying up is simple: the server process
+exits when no clients are connected to it.</p></div><div class="navfooter"><hr><table width="100%" summary="Navigation footer"><tr><td width="40%" align="left"><a accesskey="p" href="syscall-intercept.html">Prev</a>&#160;</td><td width="20%" align="center"><a accesskey="u" href="env.html">Up</a></td><td width="40%" align="right">&#160;<a accesskey="n" href="exec-obj.html">Next</a></td></tr><tr><td width="40%" align="left" valign="top">Why not do interception of system calls using, for example, ptrace?&#160;</td><td width="20%" align="center"><a accesskey="h" href="index.html">Home</a></td><td width="40%" align="right" valign="top">&#160;Chapter&#160;4.&#160;Executable objects</td></tr></table></div></body></html>

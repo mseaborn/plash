@@ -28,6 +28,7 @@
 
 #include "region.h"
 #include "filesysobj.h"
+#include "filesysobj-real.h"
 #include "resolve-filename.h"
 #include "build-fs.h"
 #include "fs-operations.h"
@@ -136,12 +137,14 @@ struct state {
   struct arg_list *args;
   int args_count;
   const char *executable_filename;
+  int log_summary;
 };
 
 void usage(FILE *fp)
 {
   fprintf(fp,
-	  "Usage: \n"
+	  "Plash version " PLASH_VERSION "\n"
+	  "Usage: "
 	  NAME "\n"
 	  "  --prog <file>   Gives filename of executable to invoke\n"
 	  "  [ -f[awls]... <path>\n"
@@ -155,7 +158,8 @@ void usage(FILE *fp)
 	  "  ]...\n"
 	  "  [-B]            Grant access to /usr, /bin and /lib\n"
 	  "  [--x11]         Grant access to X11 Window System\n"
-	  "  [--net]         Grant access to network config files\n");
+	  "  [--net]         Grant access to network config files\n"
+	  "  [--log]         Print method calls client makes to file server\n");
 }
 
 struct flags {
@@ -173,10 +177,10 @@ int handle_flag(seqf_t flag, struct flags *f)
       f->build_fs |= FS_FOLLOW_SYMLINKS;
       return 0;
     case 's':
-      return 1;
+      return 0;
     case 'w':
       f->build_fs |= FS_SLOT_RWC;
-      return 1;
+      return 0;
   }
   if(seqf_equal(flag, seqf_string("objrw"))) {
     f->build_fs |= FS_OBJECT_RW;
@@ -198,6 +202,10 @@ int parse_flags(const char *str, struct flags *f, const char **arg)
   if(arg) { *arg = NULL; }
   
   for(; *str; str++) {
+    if(*str == '=' && arg) {
+      *arg = str + 1;
+      return 0;
+    }
     if(*str == ',') {
       /* Handle multi-char flags, separated by commas. */
       const char *p = str + 1;
@@ -208,11 +216,7 @@ int parse_flags(const char *str, struct flags *f, const char **arg)
 	flag.size = i;
 	if(handle_flag(flag, f)) { return 1; }
 	if(!p[i]) { break; }
-	if(p[i] == '=') {
-	  if(!arg) {
-	    fprintf(stderr, NAME_MSG "error: bad flags: \"%s\"\n", str);
-	    return 1;
-	  }
+	if(p[i] == '=' && arg) {
 	  *arg = p + i + 1;
 	  return 0;
 	}
@@ -382,7 +386,8 @@ int handle_arguments(region_t r, struct state *state,
     }
 
     if(!strcmp(arg, "--x11")) {
-      char *args[] = { "-fl,socket", "/tmp/.X11-unix/",
+      /* FIXME: change from "-flw" to "-fl,socket". */
+      char *args[] = { "-flw", "/tmp/.X11-unix/",
 		       "-fl", NULL };
       args[3] = getenv("XAUTHORITY");
       if(!args[3]) {
@@ -402,6 +407,11 @@ int handle_arguments(region_t r, struct state *state,
       goto arg_handled;
     }
 
+    if(!strcmp(arg, "--log")) {
+      state->log_summary = TRUE;
+      goto arg_handled;
+    }
+
     if(!strcmp(arg, "--help")) { usage(stdout); return 1; }
 
   unknown:
@@ -413,7 +423,38 @@ int handle_arguments(region_t r, struct state *state,
   return 0;
 }
 
-void args_to_exec_elf_program_from_fd
+static void args_to_exec_elf_program
+  (region_t r, const char *executable_filename,
+   int argc, const char **argv,
+   const char **cmd_out, int *argc_out, const char ***argv_out)
+{
+  int debug = 0;
+  int extra_args = 4 + (debug ? 1:0);
+  const char **argv2;
+  int i;
+
+  assert(argc >= 1);
+  argv2 = region_alloc(r, (argc + extra_args + 1) * sizeof(char *));
+  argv2[0] = argv[0];
+  if(under_plash) {
+    *cmd_out = "/run-as-anonymous";
+  }
+  else {
+    *cmd_out = PLASH_SETUID_BIN_INSTALL "/run-as-anonymous";
+  }
+  i = 1;
+  if(debug) argv2[i++] = "--debug";
+  argv2[i++] = "/special/ld-linux.so.2";
+  argv2[i++] = "--library-path";
+  argv2[i++] = PLASH_LD_LIBRARY_PATH;
+  argv2[i++] = executable_filename;
+  for(i = 1; i < argc; i++) { argv2[extra_args+i] = argv[i]; }
+  argv2[extra_args + argc] = NULL;
+  *argc_out = extra_args + argc;
+  *argv_out = argv2;
+}
+
+static void args_to_exec_elf_program_from_fd
   (region_t r, int fd, int argc, const char **argv,
    const char **cmd_out, int *argc_out, const char ***argv_out)
 {
@@ -431,7 +472,7 @@ void args_to_exec_elf_program_from_fd
     *cmd_out = "/run-as-anonymous";
   }
   else {
-    *cmd_out = BIN_INSTALL "/run-as-anonymous";
+    *cmd_out = PLASH_SETUID_BIN_INSTALL "/run-as-anonymous";
   }
   i = 1;
   if(debug) argv2[i++] = "--debug";
@@ -461,6 +502,7 @@ int main(int argc, char **argv)
   state.args = NULL;
   state.args_count = 0;
   state.executable_filename = NULL;
+  state.log_summary = FALSE;
 
   if(getenv("PLASH_CAPS")) {
     struct cap_args result;
@@ -501,7 +543,9 @@ int main(int argc, char **argv)
     return 1;
   }
   {
-    int executable_fd, executable_fd2;
+    int executable_fd;
+    // int executable_fd2;
+    const char *executable_filename2; /* of interpreter for #! scripts */
     const char **args_array, **args_array2;
     int args_count2;
     int socks[2];
@@ -571,7 +615,10 @@ int main(int argc, char **argv)
       if(exec_for_scripts(r, child_root, child_cwd,
 			  state.executable_filename, executable_fd,
 			  state.args_count + 1, args_array,
-			  &executable_fd2, &args_count2, &args_array2, &err) < 0) {
+			  // &executable_fd2,
+			  NULL,
+			  &executable_filename2,
+			  &args_count2, &args_array2, &err) < 0) {
 	fprintf(stderr, NAME_MSG "bad interpreter: %s: %s\n",
 		state.executable_filename, strerror(err));
 	return 1;
@@ -591,7 +638,7 @@ int main(int argc, char **argv)
 	}
 	shared->log = fdopen(fd, "w");
       }
-      shared->log_summary = 0;
+      shared->log_summary = state.log_summary;
       shared->log_messages = 0;
 
       // "fs_op;conn_maker;fs_op_maker;union_dir_maker"
@@ -602,14 +649,24 @@ int main(int argc, char **argv)
       caps[1] = conn_maker_make();
 
       /* Do I want to do a double fork so that the server process is no
-	 longer a child of the client process? */
+	 longer a child of the client process?  The client process might
+	 not be expecting to handle SIGCHILD signals.  Or perhaps these
+	 aren't delivered after an exec() call. */
       pid = fork();
       if(pid == 0) {
 	// monitor_this_process("server");
 	close(socks[0]);
 	cap_make_connection(r, socks[1], cap_seq_make(caps, cap_count),
 			    0, "to-client");
+	caps_free(cap_seq_make(caps, cap_count));
 	region_free(r);
+
+#ifdef GC_DEBUG
+	gc_init();
+	cap_mark_exported_objects();
+	gc_check();
+#endif
+
 	cap_run_server();
 	exit(0);
       }
@@ -633,9 +690,10 @@ int main(int argc, char **argv)
 
       {
 	const char *cmd;
-	args_to_exec_elf_program_from_fd(r, executable_fd2,
-					 args_count2, args_array2,
-					 &cmd, &args_count2, &args_array2);
+	args_to_exec_elf_program(r, executable_filename2,
+				 args_count2, args_array2,
+				 &cmd, &args_count2, &args_array2);
+#if 0
 	/* We must clear the close-on-exec flag explicitly for the
 	   executable FD. */
 	{
@@ -646,10 +704,11 @@ int main(int argc, char **argv)
 	    return 1;
 	  }
 	}
+#endif
 
 	if(0) {
 	  print_args(args_count2, args_array2);
-	  printf("exec_fd=%i, sock_fd=%i\n", socks[0], executable_fd2);
+	  // printf("exec_fd=%i, sock_fd=%i\n", socks[0], executable_fd2);
 	  list_fds();
 	  monitor_this_process("client");
 	}
@@ -663,8 +722,9 @@ int main(int argc, char **argv)
 	    if(flags >= 0 &&
 	       !(flags & FD_CLOEXEC) &&
 	       fd > 2 &&
-	       fd != socks[0] &&
-	       fd != executable_fd2) {
+	       fd != socks[0]
+	       // && fd != executable_fd2
+	       ) {
 	      fprintf(stderr, "fd %i left open\n", fd);
 	      fail = 1;
 	    }

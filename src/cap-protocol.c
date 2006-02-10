@@ -145,7 +145,7 @@ static struct c_server_state server_state =
     .max_fd = 0
   };
 
-extern struct filesys_obj_vtable remote_obj_vtable;
+DECLARE_VTABLE(remote_obj_vtable);
 struct remote_obj {
   struct filesys_obj hdr;
   struct connection *conn; /* null for a single-use capability that has been used */
@@ -475,9 +475,8 @@ static cap_t lookup_id(struct connection *conn, int full_id)
     case CAPP_NAMESPACE_SENDER:
     case CAPP_NAMESPACE_SENDER_SINGLE_USE:
       {
-        struct remote_obj *obj = amalloc(sizeof(struct remote_obj));
-        obj->hdr.refcount = 1;
-        obj->hdr.vtable = &remote_obj_vtable;
+        struct remote_obj *obj =
+	  filesys_obj_make(sizeof(struct remote_obj), &remote_obj_vtable);
         obj->conn = conn;
 	obj->single_use =
 	  (full_id & CAPP_NAMESPACE_MASK) == CAPP_NAMESPACE_SENDER_SINGLE_USE;
@@ -975,6 +974,25 @@ void cap_handle_select_result(fd_set *read_fds,
     assert(0); /* Could happen if select() is returning inconsistent info */
   }
 }
+
+
+
+#ifdef GC_DEBUG
+void cap_mark_exported_objects(void)
+{
+  struct connection *conn;
+  for(conn = server_state.list.next;
+      !conn->l.head;
+      conn = conn->l.next) {
+    int i;
+    for(i = 0; i < conn->export_size; i++) {
+      if(conn->export[i].used) {
+	filesys_obj_mark(conn->export[i].x.cap);
+      }
+    }
+  }
+}
+#endif
 
 
 

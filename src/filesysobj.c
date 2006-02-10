@@ -82,6 +82,25 @@ void close_our_fds()
 
 /* Abstract types */
 
+#ifdef GC_DEBUG
+static struct filesys_obj obj_list =
+  { .refcount = 0, .vtable = NULL, .next = &obj_list, .prev = &obj_list };
+
+void *filesys_obj_make(int size, const struct filesys_obj_vtable *vtable)
+{
+  struct filesys_obj *obj = amalloc(size);
+  obj->refcount = 1;
+  obj->vtable = vtable;
+
+  /* Insert into list. */
+  obj->prev = obj_list.prev;
+  obj->next = &obj_list;
+  obj_list.prev->next = obj;
+  obj_list.prev = obj;
+  return obj;
+}
+#endif
+
 DECLARE_VTABLE(invalid_vtable);
 
 void filesys_obj_free(struct filesys_obj *obj)
@@ -90,6 +109,14 @@ void filesys_obj_free(struct filesys_obj *obj)
   obj->refcount--;
   if(obj->refcount <= 0) {
     obj->vtable->free(obj);
+
+#ifdef GC_DEBUG
+    /* Remove from list. */
+    obj->prev->next = obj->next;
+    obj->next->prev = obj->prev;
+    obj->next = NULL;
+    obj->prev = NULL;
+#endif
 
     /* Ensures that using the pointer will fail but give a useful error. */
     obj->vtable = &invalid_vtable;
@@ -104,6 +131,33 @@ void filesys_obj_check(struct filesys_obj *obj)
   assert(obj->refcount > 0);
   assert(obj->vtable->sentinel == 1);
 }
+
+#ifdef GC_DEBUG
+
+void filesys_obj_mark(struct filesys_obj *obj)
+{
+  if(obj->mark_count++ == 0) {
+    if(obj->vtable->mark) { obj->vtable->mark(obj); }
+  }
+}
+
+void gc_init(void)
+{
+  struct filesys_obj *n;
+  for(n = obj_list.next; n != &obj_list; n = n->next) {
+    n->mark_count = 0;
+  }
+}
+
+void gc_check(void)
+{
+  struct filesys_obj *n;
+  for(n = obj_list.next; n != &obj_list; n = n->next) {
+    printf("obj: rc=%9i marks=%9i type=%s\n", n->refcount, n->mark_count, n->vtable->vtable_name);
+  }
+}
+
+#endif
 
 void caps_free(cap_seq_t c)
 {
@@ -1045,6 +1099,11 @@ cap_t dummy_make_union_dir(struct filesys_obj *obj, cap_t dir1, cap_t dir2)
 }
 
 
+void invalid_mark(struct filesys_obj *obj)
+{
+  assert(0);
+}
+
 void invalid_cap_invoke(struct filesys_obj *obj, struct cap_args args)
 {
   assert(0);
@@ -1163,27 +1222,4 @@ int invalid_socket_connect(struct filesys_obj *obj, int sock_fd, int *err)
   return -1;
 }
 
-struct filesys_obj_vtable invalid_vtable = {
-  /* .free = */ generic_free,
-  /* .cap_invoke = */ invalid_cap_invoke,
-  /* .cap_call = */ invalid_cap_call,
-  /* .single_use = */ 0,
-  /* .type = */ invalid_objt,
-  /* .stat = */ invalid_stat,
-  /* .utimes = */ invalid_utimes,
-  /* .chmod = */ invalid_chmod,
-  /* .open = */ invalid_open,
-  /* .socket_connect = */ invalid_socket_connect,
-  /* .traverse = */ invalid_traverse,
-  /* .list = */ invalid_list,
-  /* .create_file = */ invalid_create_file,
-  /* .mkdir = */ invalid_mkdir,
-  /* .symlink = */ invalid_symlink,
-  /* .rename = */ invalid_rename_or_link,
-  /* .link = */ invalid_rename_or_link,
-  /* .unlink = */ invalid_unlink,
-  /* .rmdir = */ invalid_rmdir,
-  /* .socket_bind = */ invalid_socket_bind,
-  /* .readlink = */ invalid_readlink,
-  1
-};
+#include "out-vtable-filesysobj.h"

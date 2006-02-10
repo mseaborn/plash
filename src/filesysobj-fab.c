@@ -108,6 +108,17 @@ void fab_dir_free(struct filesys_obj *obj1)
   }
 }
 
+#ifdef GC_DEBUG
+void fab_dir_mark(struct filesys_obj *obj1)
+{
+  struct fab_dir *obj = (void *) obj1;
+  struct obj_list *node;
+  for(node = obj->entries; node; node = node->next) {
+    filesys_obj_mark(node->obj);
+  }
+}
+#endif
+
 int fab_dir_stat(struct filesys_obj *obj, struct stat *st, int *err)
 {
   struct fab_dir *dir = (void *) obj;
@@ -207,6 +218,17 @@ void s_fab_dir_free(struct filesys_obj *obj1)
     node = next;
   }
 }
+
+#ifdef GC_DEBUG
+void s_fab_dir_mark(struct filesys_obj *obj1)
+{
+  struct s_fab_dir *obj = (void *) obj1;
+  struct slot_list *node;
+  for(node = obj->entries; node; node = node->next) {
+    filesys_obj_mark(node->slot);
+  }
+}
+#endif
 
 int s_fab_dir_stat(struct filesys_obj *obj, struct stat *st, int *err)
 {

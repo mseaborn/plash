@@ -12,6 +12,7 @@ my $subst =
      'methods',
      'internals',
      'bugs',
+     'copyright',
      'man_plash',
      'man_plash-opts',
      'man_exec-object',

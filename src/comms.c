@@ -32,10 +32,12 @@
 #define MOD_MSG HALF_NAME ":comm: "
 
 #ifdef IN_RTLD
-static int printf(const char *fmt, ...)
+
+static int my_printf(const char *fmt, ...)
 {
   return 0;
 }
+#define printf my_printf
 
 #else
 

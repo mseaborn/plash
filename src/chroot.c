@@ -31,6 +31,8 @@
 #include "marshal.h"
 
 
+__asm__(".weak plash_libc_reset_connection");
+
 int main(int argc, const char *argv[])
 {
   region_t r = region_make();
@@ -95,6 +97,7 @@ int main(int argc, const char *argv[])
     }
   }
   region_free(r);
+  assert(plash_libc_reset_connection);
   plash_libc_reset_connection();
   execve(argv[2], (char **) argv + 2, environ);
   perror("chroot: exec");

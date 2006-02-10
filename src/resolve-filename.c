@@ -35,9 +35,8 @@ DECLARE_VTABLE(dir_stack_vtable);
 /* Takes a non-owning reference.  Returns an owning reference. */
 struct dir_stack *dir_stack_root(struct filesys_obj *dir)
 {
-  struct dir_stack *root = amalloc(sizeof(struct dir_stack));
-  root->hdr.vtable = &dir_stack_vtable;
-  root->hdr.refcount = 1;
+  struct dir_stack *root =
+    filesys_obj_make(sizeof(struct dir_stack), &dir_stack_vtable);
   root->dir = inc_ref(dir);
   root->parent = 0;
   root->name = 0;
@@ -48,9 +47,8 @@ struct dir_stack *dir_stack_root(struct filesys_obj *dir)
 struct dir_stack *dir_stack_make(struct filesys_obj *dir,
 				 struct dir_stack *parent, char *name)
 {
-  struct dir_stack *stack = amalloc(sizeof(struct dir_stack));
-  stack->hdr.vtable = &dir_stack_vtable;
-  stack->hdr.refcount = 1;
+  struct dir_stack *stack =
+    filesys_obj_make(sizeof(struct dir_stack), &dir_stack_vtable);
   stack->dir = dir;
   stack->parent = parent;
   stack->name = name;
@@ -66,6 +64,17 @@ void dir_stack_method_free(struct filesys_obj *obj)
     free(stack->name);
   }
 }
+
+#ifdef GC_DEBUG
+void dir_stack_method_mark(struct filesys_obj *obj)
+{
+  struct dir_stack *stack = (void *) obj;
+  filesys_obj_mark(stack->dir);
+  if(stack->parent) {
+    filesys_obj_mark(dir_stack_downcast(stack->parent));
+  }
+}
+#endif
 
 struct dir_stack *dir_stack_upcast(struct filesys_obj *obj)
 {

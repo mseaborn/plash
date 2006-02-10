@@ -23,7 +23,7 @@
 #include "marshal.h"
 
 
-extern struct filesys_obj_vtable return_cont_vtable;
+DECLARE_VTABLE(return_cont_vtable);
 struct return_cont {
   struct filesys_obj hdr;
   /* This is set to null after the continuation is called: */
@@ -32,9 +32,8 @@ struct return_cont {
 
 cap_t make_return_cont(struct return_state *state)
 {
-  struct return_cont *cont = amalloc(sizeof(struct return_cont));
-  cont->hdr.refcount = 1;
-  cont->hdr.vtable = &return_cont_vtable;
+  struct return_cont *cont =
+    filesys_obj_make(sizeof(struct return_cont), &return_cont_vtable);
   cont->state = state;
   return (struct filesys_obj *) cont;
 }

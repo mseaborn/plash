@@ -36,9 +36,7 @@ int next_inode = 1;
 
 struct node *fs_make_empty_node()
 {
-  struct node *n = amalloc(sizeof(struct node));
-  n->hdr.refcount = 1;
-  n->hdr.vtable = &node_vtable;
+  struct node *n = filesys_obj_make(sizeof(struct node), &node_vtable);
   n->inode = next_inode++;
   n->symlink_dest = 0;
   n->attach_slot = 0;
@@ -61,6 +59,18 @@ void node_free(struct filesys_obj *obj)
   if(node->symlink_dest) free(node->symlink_dest);
   if(node->attach_slot) filesys_obj_free(node->attach_slot);
 }
+
+#ifdef GC_DEBUG
+void node_mark(struct filesys_obj *obj)
+{
+  struct node *node = (void *) obj;
+  struct node_list *l;
+  for(l = node->children; l; l = l->next) {
+    filesys_obj_mark((cap_t) l->node);
+  }
+  if(node->attach_slot) filesys_obj_mark(node->attach_slot);
+}
+#endif
 
 /* Move down the filesystem being constructed.  Create a new node
    if necessary. */

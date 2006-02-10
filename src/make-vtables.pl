@@ -24,6 +24,7 @@ use IO::File;
 # Fields of a vtable.  All must be filled in.
 my $methods =
   [qw(free
+      mark
       cap_invoke
       cap_call
       single_use
@@ -61,6 +62,7 @@ my $methods_hash = { map { $_ => 1 } @$methods };
 # Default values for fields of the vtable.
 my $defaults =
     { 'free' => undef,
+      'mark' => undef,
       'cap_invoke' => 'local_obj_invoke',
       'cap_call' => 'marshal_cap_call',
       'single_use' => '0',
@@ -125,11 +127,52 @@ my @i_slot = ('slot_get',
 	      'slot_socket_bind');
 
 
-put('src/out-vtable-filesysobj-real.h',
+put('gensrc/out-vtable-filesysobj.h',
+    [{ Name => 'invalid_vtable',
+       Interfaces => [@$methods],
+       Contents =>
+         [['free', 'generic_free'],
+	  ['mark', 'invalid_mark'],
+	  ['cap_invoke', 'invalid_cap_invoke'],
+	  ['cap_call', 'invalid_cap_call'],
+	  ['type', 'invalid_objt'],
+	  ['stat', 'invalid_stat'],
+	  ['utimes', 'invalid_utimes'],
+	  ['chmod', 'invalid_chmod'],
+	  ['open', 'invalid_open'],
+	  ['socket_connect', 'invalid_socket_connect'],
+	  ['traverse', 'invalid_traverse'],
+	  ['list', 'invalid_list'],
+	  ['create_file', 'invalid_create_file'],
+	  ['mkdir', 'invalid_mkdir'],
+	  ['symlink', 'invalid_symlink'],
+	  ['rename', 'invalid_rename_or_link'],
+	  ['link', 'invalid_rename_or_link'],
+	  ['unlink', 'invalid_unlink'],
+	  ['rmdir', 'invalid_rmdir'],
+	  ['socket_bind', 'invalid_socket_bind'],
+	  ['readlink', 'invalid_readlink'],
+	  ['slot_get', 'NULL'],
+	  ['slot_create_file', 'NULL'],
+	  ['slot_mkdir', 'NULL'],
+	  ['slot_symlink', 'NULL'],
+	  ['slot_unlink', 'NULL'],
+	  ['slot_rmdir', 'NULL'],
+	  ['slot_socket_bind', 'NULL'],
+	  ['make_conn', 'NULL'],
+	  ['make_conn2', 'NULL'],
+	  ['make_fs_op', 'NULL'],
+	  ['make_union_dir', 'NULL'],
+	 ]
+     }]);
+
+
+put('gensrc/out-vtable-filesysobj-real.h',
     [{ Name => 'real_file_vtable',
        Interfaces => [@i_file],
        Contents =>
          [['free', 'real_file_free'],
+	  ['mark', 'NULL'],
 	  ['type', 'objt_file'],
 	  ['stat', 'real_file_stat'],
 	  ['utimes', 'real_file_utimes'],
@@ -142,6 +185,7 @@ put('src/out-vtable-filesysobj-real.h',
        Interfaces => [@i_dir],
        Contents =>
          [['free', 'real_dir_free'],
+	  ['mark', 'NULL'],
 	  ['type', 'objt_dir'],
 	  ['stat', 'real_dir_stat'],
 	  ['utimes', 'real_dir_utimes'],
@@ -162,6 +206,7 @@ put('src/out-vtable-filesysobj-real.h',
        Interfaces => [@i_symlink],
        Contents =>
          [['free', 'real_symlink_free'],
+	  ['mark', 'NULL'],
 	  ['type', 'objt_symlink'],
 	  ['stat', 'real_symlink_stat'],
 	  ['utimes', 'real_symlink_utimes'],
@@ -170,11 +215,12 @@ put('src/out-vtable-filesysobj-real.h',
      },
     ]);
 
-put('src/out-vtable-filesysobj-fab.h',
+put('gensrc/out-vtable-filesysobj-fab.h',
     [{ Name => 'fab_symlink_vtable',
        Interfaces => [@i_symlink],
        Contents =>
          [['free', 'fab_symlink_free'],
+	  ['mark', 'NULL'],
 	  ['type', 'objt_symlink'],
 	  ['stat', 'fab_symlink_stat'],
 	  ['utimes', 'refuse_utimes'],
@@ -185,6 +231,7 @@ put('src/out-vtable-filesysobj-fab.h',
        Interfaces => [@i_dir],
        Contents =>
          [['free', 'fab_dir_free'],
+	  ['mark', 'fab_dir_mark'],
 	  ['type', 'objt_dir'],
 	  ['stat', 'fab_dir_stat'],
 	  ['utimes', 'refuse_utimes'],
@@ -205,6 +252,7 @@ put('src/out-vtable-filesysobj-fab.h',
        Interfaces => [@i_dir],
        Contents =>
          [['free', 's_fab_dir_free'],
+	  ['mark', 's_fab_dir_mark'],
 	  ['type', 'objt_dir'],
 	  ['stat', 's_fab_dir_stat'],
 	  ['utimes', 'refuse_utimes'],
@@ -223,11 +271,12 @@ put('src/out-vtable-filesysobj-fab.h',
      },
     ]);
 
-put('src/out-vtable-filesysslot.h',
+put('gensrc/out-vtable-filesysslot.h',
     [{ Name => 'gen_slot_vtable',
        Interfaces => [@i_slot],
        Contents =>
          [['free', 'gen_slot_free'],
+	  ['mark', 'gen_slot_mark'],
 	  ['slot_get', 'gen_slot_get'],
 	  ['slot_create_file', 'gen_slot_create_file'],
 	  ['slot_mkdir', 'gen_slot_mkdir'],
@@ -241,6 +290,7 @@ put('src/out-vtable-filesysslot.h',
        Interfaces => [@i_slot],
        Contents =>
          [['free', 'ro_slot_free'],
+	  ['mark', 'ro_slot_mark'],
 	  ['slot_get', 'ro_slot_get'],
 	  ['slot_create_file', 'ro_slot_create_file'],
 	  ['slot_mkdir', 'ro_slot_mkdir'],
@@ -252,11 +302,12 @@ put('src/out-vtable-filesysslot.h',
      },
     ]);
 
-put('src/out-vtable-filesysobj-readonly.h',
+put('gensrc/out-vtable-filesysobj-readonly.h',
     [{ Name => 'readonly_obj_vtable',
        Interfaces => [@i_file, @i_dir, @i_symlink],
        Contents =>
          [['free', 'readonly_free'],
+	  ['mark', 'readonly_mark'],
 	  ['type', 'readonly_type'],
 	  ['stat', 'readonly_stat'],
 	  ['utimes', 'refuse_utimes'],
@@ -278,11 +329,12 @@ put('src/out-vtable-filesysobj-readonly.h',
      }
     ]);
 
-put('src/out-vtable-filesysobj-union.h',
+put('gensrc/out-vtable-filesysobj-union.h',
     [{ Name => 'union_dir_vtable',
        Interfaces => [@i_dir],
        Contents =>
          [['free', 'union_dir_free'],
+	  ['mark', 'union_dir_mark'],
 	  ['type', 'objt_dir'],
 	  ['stat', 'union_dir_stat'],
 	  ['utimes', 'refuse_utimes'],
@@ -323,11 +375,12 @@ my $marshal_methods =
           map { [$_, "marshal_$_"] } qw(make_conn make_fs_op make_union_dir)
   ];
 
-put('src/out-vtable-cap-protocol.h',
+put('gensrc/out-vtable-cap-protocol.h',
     [{ Name => 'remote_obj_vtable',
        Interfaces => [@$methods],
        Contents =>
          [['free', 'remote_obj_free'],
+	  ['mark', 'NULL'],
 	  ['cap_invoke', 'remote_obj_invoke'],
 	  ['cap_call', 'generic_obj_call'],
 	  ['single_use', '0'],
@@ -336,11 +389,12 @@ put('src/out-vtable-cap-protocol.h',
      }
     ]);
 
-put('src/out-vtable-cap-call-return.h',
+put('gensrc/out-vtable-cap-call-return.h',
     [{ Name => 'return_cont_vtable',
        Interfaces => [],
        Contents =>
          [['free', 'return_cont_free'],
+	  ['mark', 'NULL'],
 	  ['cap_invoke', 'return_cont_invoke'],
 	  ['cap_call', 'generic_obj_call'],
 	  ['single_use', '1'],
@@ -348,30 +402,61 @@ put('src/out-vtable-cap-call-return.h',
      }
     ]);
 
-put('src/out-vtable-fs-operations.h',
-    [{ Name => 'conn_maker_vtable',
+put('gensrc/out-vtable-fs-operations.h',
+    [{ Name => 'fs_op_vtable',
+       Contents =>
+         [['free', 'fs_op_free'],
+	  ['mark', 'fs_op_mark'],
+	  ['cap_call', 'fs_op_call'],
+	 ]
+     },
+     { Name => 'fs_op_maker_vtable',
+       Contents =>
+         [['free', 'fs_op_maker_free'],
+	  ['mark', 'NULL'],
+	  ['cap_call', 'fs_op_maker_call'],
+	 ]
+     },
+     { Name => 'conn_maker_vtable',
        Contents =>
          [['free', 'conn_maker_free'],
+	  ['mark', 'NULL'],
 	  ['make_conn', 'conn_maker_make_conn'],
 	 ]
-     }
+     },
+     { Name => 'fab_dir_maker_vtable',
+       Contents =>
+         [['free', 'generic_free'],
+	  ['mark', 'NULL'],
+	  ['cap_call', 'fab_dir_maker_call'],
+	 ]
+     },
+     { Name => 'union_dir_maker_vtable',
+       Contents =>
+         [['free', 'generic_free'],
+	  ['mark', 'NULL'],
+	  ['cap_call', 'union_dir_maker_call'],
+	 ]
+     },
     ]);
 
-put('src/out-vtable-log-proxy.h',
+put('gensrc/out-vtable-log-proxy.h',
     [{ Name => 'log_proxy_vtable',
        Contents =>
          [['free', 'log_proxy_free'],
+	  ['mark', 'log_proxy_mark'],
 	  ['cap_call', 'log_proxy_call'],
 	  @$marshal_methods
 	 ]
      }
     ]);
 
-put('src/out-vtable-shell.h',
+put('gensrc/out-vtable-shell.h',
     [{ Name => 'd_conn_maker_vtable',
        Interfaces => [],
        Contents =>
          [['free', 'd_conn_maker_free'],
+	  ['mark', 'NULL'],
 	  ['make_conn', 'd_make_conn'],
 	  ['make_conn2', 'd_make_conn2'],
 	 ]
@@ -380,6 +465,7 @@ put('src/out-vtable-shell.h',
        Interfaces => [],
        Contents =>
          [['free', 'proc_return_free'],
+	  ['mark', 'NULL'],
 	  ['cap_invoke', 'proc_return_invoke'],
 	 ]
      },
@@ -387,16 +473,18 @@ put('src/out-vtable-shell.h',
        Interfaces => [],
        Contents =>
          [['free', 'options_obj_free'],
+	  ['mark', 'NULL'],
 	  ['cap_call', 'options_obj_call'],
 	 ]
      },
     ]);
 
-put('src/out-vtable-reconnectable-obj.h',
+put('gensrc/out-vtable-reconnectable-obj.h',
     [{ Name => 'reconnectable_obj_vtable',
        Interface => [@$methods],
        Contents =>
          [['free', 'reconnectable_obj_free'],
+	  ['mark', 'reconnectable_obj_mark'],
 	  ['cap_invoke', 'reconnectable_obj_invoke'],
 	  ['cap_call', 'reconnectable_obj_call'],
 	  ['single_use', '0'],
@@ -405,26 +493,31 @@ put('src/out-vtable-reconnectable-obj.h',
      }
     ]);
 
-put('src/out-vtable-resolve-filename.h',
+put('gensrc/out-vtable-resolve-filename.h',
     [{ Name => 'dir_stack_vtable',
        Interfaces => [],
        Contents =>
-         [['free', 'dir_stack_method_free']]
+         [['free', 'dir_stack_method_free'],
+	  ['mark', 'dir_stack_method_mark'],
+	 ]
      }
     ]);
 
-put('src/out-vtable-build-fs.h',
+put('gensrc/out-vtable-build-fs.h',
     [{ Name => 'node_vtable',
        Interfaces => [],
        Contents =>
-         [['free', 'node_free']]
+         [['free', 'node_free'],
+	  ['mark', 'node_mark'],
+	 ]
      }
     ]);
-put('src/out-vtable-build-fs-dynamic.h',
+put('gensrc/out-vtable-build-fs-dynamic.h',
     [{ Name => 'comb_dir_vtable',
        Interfaces => [@i_dir],
        Contents =>
          [['free', 'comb_dir_free'],
+	  ['mark', 'comb_dir_mark'],
 	  ['type', 'objt_dir'],
 	  ['stat', 'comb_dir_stat'],
 	  ['utimes', 'refuse_utimes'],
@@ -443,11 +536,12 @@ put('src/out-vtable-build-fs-dynamic.h',
      }
     ]);
 
-put('src/out-vtable-exec-object.h',
+put('gensrc/out-vtable-exec-object.h',
     [{ Name => 'exec_obj_vtable',
        Interfaces => [@i_file],
        Contents =>
          [['free', 'exec_obj_free'],
+	  ['mark', 'exec_obj_mark'],
 	  ['cap_invoke', 'exec_obj_invoke'],
 	  ['cap_call', 'exec_obj_call'], # deals with `exec'
 	  ['type', 'objt_file'],
@@ -459,11 +553,12 @@ put('src/out-vtable-exec-object.h',
 	 ]
      }
     ]);
-put('src/out-vtable-run-emacs.h',
+put('gensrc/out-vtable-run-emacs.h',
     [{ Name => 'edit_obj_vtable',
        Interfaces => [@i_file],
        Contents =>
          [['free', 'edit_obj_free'],
+	  ['mark', 'edit_obj_mark'],
 	  ['cap_invoke', 'edit_obj_invoke'],
 	  ['cap_call', 'edit_obj_call'], # deals with `exec'
 	  ['type', 'objt_file'],
@@ -519,7 +614,7 @@ sub put_vtable {
   }
 
   print $f "\n";
-  print $f "struct filesys_obj_vtable $vtable->{Name} = {\n";
+  print $f "const struct filesys_obj_vtable $vtable->{Name} = {\n";
   foreach my $meth (@$methods) {
     my $x = $got{$meth};
     if(!defined $x) {
@@ -529,10 +624,12 @@ sub put_vtable {
       elsif(defined $defaults->{$meth}) {
 	$x = $defaults->{$meth}
       }
-      else { die "No default for `$meth'" }
+      else { die "$vtable->{Name}: No default for `$meth'" }
     }
+    print $f "#ifdef GC_DEBUG\n" if $meth eq 'mark';
     printf $f ("  /* .%s = */ %s,\n",
 	       $meth, $x);
+    print $f "#endif\n" if $meth eq 'mark';
   }
   print $f "  1 /* sentinel for type-checking */\n";
   print $f "};\n";

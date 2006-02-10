@@ -33,6 +33,14 @@ static void gen_slot_free(struct filesys_obj *obj)
   free(slot->leaf);
 }
 
+#ifdef GC_DEBUG
+static void gen_slot_mark(struct filesys_obj *obj)
+{
+  struct filesys_generic_slot *slot = (void *) obj;
+  filesys_obj_mark(slot->dir);
+}
+#endif
+
 static struct filesys_obj *gen_slot_get(struct filesys_obj *obj)
 {
   struct filesys_generic_slot *slot = (void *) obj;
@@ -79,9 +87,7 @@ static int gen_slot_socket_bind(struct filesys_obj *obj, int sock_fd, int *err)
 struct filesys_obj *make_generic_slot(struct filesys_obj *dir, char *leaf)
 {
   struct filesys_generic_slot *slot =
-    amalloc(sizeof(struct filesys_generic_slot));
-  slot->hdr.refcount = 1;
-  slot->hdr.vtable = &gen_slot_vtable;
+    filesys_obj_make(sizeof(struct filesys_generic_slot), &gen_slot_vtable);
   slot->dir = dir;
   slot->leaf = leaf;
   return (void *) slot;
@@ -94,6 +100,14 @@ static void ro_slot_free(struct filesys_obj *obj)
   struct filesys_read_only_slot *slot = (void *) obj;
   filesys_obj_free(slot->obj);
 }
+
+#ifdef GC_DEBUG
+static void ro_slot_mark(struct filesys_obj *obj)
+{
+  struct filesys_read_only_slot *slot = (void *) obj;
+  filesys_obj_mark(slot->obj);
+}
+#endif
 
 static struct filesys_obj *ro_slot_get(struct filesys_obj *obj)
 {
@@ -142,9 +156,7 @@ static int ro_slot_socket_bind(struct filesys_obj *slot, int sock_fd, int *err)
 struct filesys_obj *make_read_only_slot(struct filesys_obj *obj)
 {
   struct filesys_read_only_slot *slot =
-    amalloc(sizeof(struct filesys_read_only_slot));
-  slot->hdr.refcount = 1;
-  slot->hdr.vtable = &ro_slot_vtable;
+    filesys_obj_make(sizeof(struct filesys_read_only_slot), &ro_slot_vtable);
   slot->obj = obj;
   return (void *) slot;
 }

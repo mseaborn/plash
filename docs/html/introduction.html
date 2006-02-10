@@ -1,0 +1,23 @@
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ANSI_X3.4-1968"><title>Chapter&#160;1.&#160;Introduction</title><meta name="generator" content="DocBook XSL Stylesheets V1.68.1"><link rel="start" href="index.html" title="Plash: the Principle of Least Authority shell"><link rel="up" href="index.html" title="Plash: the Principle of Least Authority shell"><link rel="prev" href="index.html" title="Plash: the Principle of Least Authority shell"><link rel="next" href="shell.html" title="Chapter&#160;2.&#160;The Plash shell"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="navheader"><table width="100%" summary="Navigation header"><tr><th colspan="3" align="center">Chapter&#160;1.&#160;Introduction</th></tr><tr><td width="20%" align="left"><a accesskey="p" href="index.html">Prev</a>&#160;</td><th width="60%" align="center">&#160;</th><td width="20%" align="right">&#160;<a accesskey="n" href="shell.html">Next</a></td></tr></table><hr></div><div class="chapter" lang="en"><div class="titlepage"><div><div><h2 class="title"><a name="introduction"></a>Chapter&#160;1.&#160;Introduction</h2></div></div></div><p>Plash is a restricted execution environment for running Linux programs
+with minimum privileges necessary.  It is similar to chroot jails, but
+more lightweight and flexible.  Plash lets you grant a process
+read-only or read-write access to specific files and directories,
+which can be mapped at any point in the filesystem namespace.</p><p>Plash provides three interfaces:</p><div class="itemizedlist"><ul type="disc"><li><p><span><strong class="command">pola-run</strong></span>, a command line tool for starting a
+  program with a subset of the calling process's authority.</p></li><li><p>The Plash shell, which has a syntax similar to the Bourne
+  shell or Bash.  Unlike Bash, it distinguishes string arguments and
+  file arguments, because it needs to know which files to grant to the
+  program being invoked.  By default, the shell grants only read-only
+  access to files and directories.  There is extra syntax for granting
+  read-write-create access.</p><p>  The Plash shell has a compact syntax and is intended for interactive
+  use.  In contrast, <span><strong class="command">pola-run</strong></span> has a more verbose syntax
+  which is intended to be used from Bash scripts and other programs.</p></li><li><p><span><strong class="command">run-emacs</strong></span> is a tool for running XEmacs and
+  then dynamically granting it access to individual files and
+  directories.  In the future, this functionality will be generalised
+  to be available for other GUI programs.</p></li></ul></div><p>The Plash execution environment doesn't require a modified Linux
+kernel -- it uses chroot() and UIDs.  It works with existing Linux
+executables, provided they are dynamically linked, because Plash uses
+a modified version of GNU libc.</p><p>Plash virtualizes the filesystem.  A process can request to open a
+file by sending a request via a socket.  The server can send a file
+descriptor across the socket in response.  Usually performance is not
+affected, because the most frequently used system calls (such as
+read() and write()) work on kernel-level file descriptors as before.</p></div><div class="navfooter"><hr><table width="100%" summary="Navigation footer"><tr><td width="40%" align="left"><a accesskey="p" href="index.html">Prev</a>&#160;</td><td width="20%" align="center">&#160;</td><td width="40%" align="right">&#160;<a accesskey="n" href="shell.html">Next</a></td></tr><tr><td width="40%" align="left" valign="top">Plash: the Principle of Least Authority shell&#160;</td><td width="20%" align="center"><a accesskey="h" href="index.html">Home</a></td><td width="40%" align="right" valign="top">&#160;Chapter&#160;2.&#160;The Plash shell</td></tr></table></div></body></html>

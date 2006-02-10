@@ -2,13 +2,11 @@ Source: plash
 Section: shells
 Priority: optional
 Maintainer: Mark Seaborn <mseaborn@onetel.com>
-# perl is for plash
-# All else in Build-Depends is taken from Debian's glibc package
-Build-Depends: perl, gettext (>= 0.10.37-1), make (>= 3.80-1), dpkg-dev (>= 1.4.1.5), debianutils (>= 1.13.1), tar (>= 1.13.11), bzip2, texinfo (>= 4.0), linux-kernel-headers (>= 2.5.999-test7-bk-9) [!hurd-i386], mig (>= 1.3-2) [hurd-i386], hurd-dev (>= 20020608-1) [hurd-i386], gnumach-dev [hurd-i386], texi2html, file, gcc-3.3 [!ia64] | gcc-3.4 [!ia64], gcc-3.3 (>= 1:3.3.5-5) [ia64] | gcc-3.4 (>= 3.4.3-2) [ia64], autoconf, binutils (>= 2.14.90.0.7-5), sed (>= 4.0.5-4), gawk, debhelper (>= 4.1.76)
+Build-Depends: perl, gcc-3.3, libc6-pic, dietlibc, libgtk2.0-dev, libreadline4-dev
 
 Package: plash
 Architecture: any
-Depends: ${shlibs:Depends}
+Depends: libc6 (>= 2.3.2.ds1-13), libncurses5 (>= 5.4-1), libreadline4 (>= 4.3-1)
 Description: The Principle of Least Authority shell (Plash)
  Plash (the Principle of Least Authority shell) is a replacement Unix
  shell which lets the user run Linux programs with access only to the

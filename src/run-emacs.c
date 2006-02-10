@@ -38,6 +38,9 @@
 #include "parse-filename.h"
 
 
+__asm__(".weak plash_libc_reset_connection");
+
+
 /* If `path' is a cwd-relative pathname, expands it relative to `dir'.
    Otherwise, `path', unmodified, is the result. */
 /* Returns 0 for success, -1 for an invalid (empty) pathname. */
@@ -83,6 +86,14 @@ void edit_obj_free(struct filesys_obj *obj1)
   free_node(obj->root_node);
   if(obj->emacs_fd >= 0) close(obj->emacs_fd);
 }
+
+#ifdef GC_DEBUG
+void edit_obj_mark(struct filesys_obj *obj1)
+{
+  struct edit_obj *obj = (void *) obj1;
+  mark_node(obj->root_node);
+}
+#endif
 
 #define STAT_DEVICE 101
 
@@ -388,6 +399,7 @@ int main(int argc, const char *argv[])
 	snprintf(buf, sizeof(buf), "%i", sock_fd);
 	setenv("PLASH_COMM_FD", buf, 1);
 	setenv("PLASH_CAPS", "fs_op;conn_maker;fs_op_maker", 1);
+	assert(plash_libc_reset_connection);
 	plash_libc_reset_connection();
 	region_free(r);
 	
@@ -400,9 +412,8 @@ int main(int argc, const char *argv[])
   }
   {
     cap_t edit_obj;
-    struct edit_obj *obj = amalloc(sizeof(struct edit_obj));
-    obj->hdr.refcount = 1;
-    obj->hdr.vtable = &edit_obj_vtable;
+    struct edit_obj *obj =
+      filesys_obj_make(sizeof(struct edit_obj), &edit_obj_vtable);
     obj->root_node = root_node;
     obj->emacs_fd = -1;
     edit_obj = (struct filesys_obj *) obj;

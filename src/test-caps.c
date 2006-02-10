@@ -106,9 +106,7 @@ int main()
     struct hellow_obj *hw;
     close(socks[1]);
 
-    hw = amalloc(sizeof(struct hellow_obj));
-    hw->hdr.refcount = 1;
-    hw->hdr.vtable = &hellow_obj_vtable;
+    hw = filesys_obj_make(sizeof(struct hellow_obj), &hellow_obj_vtable);
     
     cap_make_connection(r, socks[0], mk_caps1(r, (cap_t) hw), 0, "b");
     filesys_obj_free((cap_t) hw);

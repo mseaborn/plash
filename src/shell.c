@@ -40,6 +40,8 @@
 
 #include "region.h"
 #include "config.h"
+#include "filesysobj.h"
+#include "filesysobj-real.h"
 #include "shell-variants.h"
 #include "shell.h"
 #include "shell-fds.h"
@@ -54,6 +56,8 @@
 #include "serialise.h"
 #include "marshal.h"
 
+
+extern char **environ;
 
 int f_command(const char **err_pos, region_t r,
 	      const char *pos_in1, const char *end,
@@ -219,7 +223,6 @@ void env_bind(struct env_list **env_slot, const char *name, cap_t obj)
 }
 
 
-#define USE_CHROOT 1
 #define MOD_DEBUG 0
 
 /* Includes null terminator in result, assuming input is null-terminated too. */
@@ -518,35 +521,34 @@ int flatten_args(region_t r, struct flatten_params *p,
   return 1;
 }
 
-extern char **environ;
-
-#if 0
-void exec_elf_program_from_filename(const char *cmd, int argc, const char **argv)
+void args_to_exec_elf_program
+  (region_t r, const char *executable_filename,
+   int argc, const char **argv,
+   const char **cmd_out, int *argc_out, const char ***argv_out)
 {
-  int extra_args = 4;
-  const char *cmd2;
+  int debug = 0;
+  int extra_args = 4 + (debug ? 1:0);
   const char **argv2;
   int i;
+  assert(argc >= 1);
 
-  /* Check whether we can "exec" the file first. */
-  /* This simply gives a more intelligible error than when ld-linux
-     finds it can't access the file. */
-  if(access(cmd, X_OK) < 0) { perror("access/exec"); exit(1); }
-      
-  argv2 = alloca((argc + extra_args + 1) * sizeof(char *));
+  argv2 = region_alloc(r, (argc + extra_args + 1) * sizeof(char *));
   argv2[0] = argv[0];
-  cmd2 = BIN_INSTALL "/run-as-anonymous";
-  argv2[1] = BIN_INSTALL "/ld-linux.so.2";
-  argv2[2] = "--library-path";
-  argv2[3] = PLASH_LD_LIBRARY_PATH;
-  argv2[4] = cmd;
-  for(i = 1; i < argc; i++) argv2[extra_args+i] = argv[i];
-  argv2[extra_args + argc] = 0;
-
-  execve(cmd2, (char **) argv2, environ);
+  *cmd_out = PLASH_SETUID_BIN_INSTALL "/run-as-anonymous";
+  i = 1;
+  if(debug) argv2[i++] = "--debug";
+  argv2[i++] = "/special/ld-linux.so.2";
+  argv2[i++] = "--library-path";
+  argv2[i++] = PLASH_LD_LIBRARY_PATH;
+  argv2[i++] = executable_filename;
+  for(i = 1; i < argc; i++) { argv2[extra_args + i] = argv[i]; }
+  argv2[extra_args + argc] = NULL;
+  *argc_out = extra_args + argc;
+  *argv_out = argv2;
 }
-#endif
 
+/* Not used, now that I have removed support for the "--fd" option
+   from ld.so. */
 void args_to_exec_elf_program_from_fd
   (region_t r, int fd, int argc, const char **argv,
    const char **cmd_out, int *argc_out, const char ***argv_out)
@@ -559,29 +561,15 @@ void args_to_exec_elf_program_from_fd
 
   argv2 = region_alloc(r, (argc + extra_args + 1) * sizeof(char *));
   argv2[0] = argv[0];
-#if 0
-  *cmd_out = "/usr/bin/strace";
-  argv2[1] = JAIL_DIR "/special/ld-linux.so.2";
-#else
- #ifdef USE_CHROOT
-  #if 1
-  *cmd_out = BIN_INSTALL "/run-as-anonymous";
-  #else
-  *cmd_out = BIN_INSTALL "/run-as-nobody+chroot";
-  #endif
+  *cmd_out = PLASH_SETUID_BIN_INSTALL "/run-as-anonymous";
   argv2[1] = "/special/ld-linux.so.2";
- #else
-  *cmd_out = BIN_INSTALL "/run-as-nobody";
-  argv2[1] = JAIL_DIR "/special/ld-linux.so.2";
- #endif
-#endif
   argv2[2] = "--library-path";
   argv2[3] = PLASH_LD_LIBRARY_PATH;
   argv2[4] = "--fd";
   snprintf(buf, buf_size, "%i", fd);
   argv2[5] = buf;
-  for(i = 0; i < argc; i++) argv2[extra_args+i] = argv[i];
-  argv2[extra_args + argc] = 0;
+  for(i = 0; i < argc; i++) { argv2[extra_args+i] = argv[i]; }
+  argv2[extra_args + argc] = NULL;
   *argc_out = extra_args + argc;
   *argv_out = argv2;
 }
@@ -971,6 +959,11 @@ int fork_server_process(region_t sock_r, struct shell_state *shell_state,
       }
       region_free(r);
     }
+#ifdef GC_DEBUG
+    gc_init();
+    cap_mark_exported_objects();
+    gc_check();
+#endif
     cap_run_server();
     exit(0);
   }
@@ -1275,9 +1268,8 @@ void spawn_inv_process(void *spawn_h, struct process_desc_fork *f,
   
   cap_t return_cont;
   {
-    struct proc_return *c = amalloc(sizeof(struct proc_return));
-    c->hdr.refcount = 1;
-    c->hdr.vtable = &proc_return_vtable;
+    struct proc_return *c =
+      filesys_obj_make(sizeof(struct proc_return), &proc_return_vtable);
     c->p = p;
     return_cont = (cap_t) c;
   }
@@ -1534,7 +1526,8 @@ int command_invocation_sec
   int executable_fd;
   int argc2;
   const char **argv2;
-  int executable_fd2;
+  // int executable_fd2;
+  const char *cmd_filename2; /* of interpreter for #! scripts */
   struct filesys_obj *root = 0;
   struct dir_stack *cwd;
   int err;
@@ -1642,13 +1635,16 @@ int command_invocation_sec
   /* Handle scripts using the `#!' syntax. */
   if(exec_for_scripts(r, root, cwd,
 		      cmd_filename.data, executable_fd, arg_count + 1, argv,
-		      &executable_fd2, &argc2, &argv2, &err) < 0) {
+		      // &executable_fd2,
+		      NULL,
+		      &cmd_filename2,
+		      &argc2, &argv2, &err) < 0) {
     printf("plash: bad interpreter: ");
     fprint_d(stdout, cmd_filename);
     printf(": %s\n", strerror(err));
     goto error;
   }
-  region_add_finaliser(r, finalise_close_fd, (void *) executable_fd2);
+  // region_add_finaliser(r, finalise_close_fd, (void *) executable_fd2);
 
   /* Construct the connection to the server. */
   {
@@ -1716,22 +1712,30 @@ int command_invocation_sec
 #endif
     
     {
-      int proc_sock_fd, proc_exec_fd;
+      int proc_sock_fd;
+      // int proc_exec_fd;
       struct process_desc_sec *proc;
       struct process_spawn_list *proc_list;
 	
       proc_sock_fd = array_get_free_index(&p.fds);
       array_set_fd(r, &p.fds, proc_sock_fd, sock_fd);
+      /*
       proc_exec_fd = array_get_free_index(&p.fds);
       array_set_fd(r, &p.fds, proc_exec_fd, executable_fd2);
+      */
 	
       proc = region_alloc(r, sizeof(struct process_desc_sec));
       proc->d.fds.count = p.fds.count;
       proc->d.fds.fds = p.fds.fds;
       proc->comm_fd = proc_sock_fd;
       proc->caps_names = caps_names;
+#if 0
       args_to_exec_elf_program_from_fd
 	(r, proc_exec_fd /* executable_fd */, argc2, argv2,
+	 &proc->d.cmd, &proc->d.argc, &proc->d.argv);
+#endif
+      args_to_exec_elf_program
+	(r, cmd_filename2, argc2, argv2,
 	 &proc->d.cmd, &proc->d.argc, &proc->d.argv);
       proc->d.set_up_process = set_up_sec_process;
 
@@ -2037,9 +2041,7 @@ cap_t eval_expr(struct shell_state *state, struct shell_expr *expr)
     job_cons.fs_op_maker = fs_op_maker_make(job_cons.shared);
 
     if(state->fork_server_per_job) {
-      d_conn = amalloc(sizeof(struct d_conn_maker));
-      d_conn->hdr.refcount = 1;
-      d_conn->hdr.vtable = &d_conn_maker_vtable;
+      d_conn = filesys_obj_make(sizeof(struct d_conn_maker), &d_conn_maker_vtable);
       d_conn->r = region_make();
       d_conn->conns = 0;
       job_cons.conn_maker = (cap_t) d_conn;
@@ -2134,9 +2136,7 @@ void shell_command(region_t r, struct shell_state *state, struct command *comman
       job_cons.fs_op_maker = fs_op_maker_make(job_cons.shared);
 
       if(state->fork_server_per_job) {
-	d_conn = amalloc(sizeof(struct d_conn_maker));
-	d_conn->hdr.refcount = 1;
-	d_conn->hdr.vtable = &d_conn_maker_vtable;
+	d_conn = filesys_obj_make(sizeof(struct d_conn_maker), &d_conn_maker_vtable);
 	d_conn->r = region_make();
 	d_conn->conns = 0;
 	job_cons.conn_maker = (cap_t) d_conn;
@@ -2546,7 +2546,7 @@ void run_gc_uid_locks()
   if(pid == 0) {
     /* Put it into its own process group, just in case user presses Ctrl-C. */
     setpgid(0, 0);
-    execl(BIN_INSTALL "/gc-uid-locks", "gc-uid-locks", "--gc", 0);
+    execl(PLASH_SETUID_BIN_INSTALL "/gc-uid-locks", "gc-uid-locks", "--gc", 0);
     perror("plash/gc-uid-locks: exec");
     exit(1);
   }
@@ -2712,9 +2712,8 @@ int main(int argc, char *argv[])
   if(gtk_init_check(&argc, &argv)) gtk_available = 1;
 #endif
   {
-    struct options_obj *obj = amalloc(sizeof(struct options_obj));
-    obj->hdr.refcount = 1;
-    obj->hdr.vtable = &options_obj_vtable;
+    struct options_obj *obj =
+      filesys_obj_make(sizeof(struct options_obj), &options_obj_vtable);
     obj->state = &state;
     env_bind(&state.env, "options", make_reconnectable((cap_t) obj));
   }

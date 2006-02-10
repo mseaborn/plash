@@ -11,7 +11,7 @@ fi
 
 
 cd docs && (
-./parse.pl >out-doc.xml
+./parse.pl index.xxml >out-doc.xml
 
 mkdir -p out-html
 time xmlto html -m config.xsl -o out-html/ out-doc.xml

@@ -282,3 +282,46 @@ file descriptor to functions which aren't useful for directory file
 descriptors, such as {\f:select()} or {\f:write()}.
 
 }
+
+{\sect1 id={syscall-intercept}: \title- Why not do interception of system calls using eg. ptrace?
+\ps:
+
+Another way to do what Plash does is to intercept system calls.
+
+One way to do this is to use the ptrace mechanism, which is available
+in standard versions of Linux.  Using ptrace, all the syscalls a
+process makes can be handled by another process.  The problems with
+ptrace are security and performance.  Firstly, fork() cannot be
+handled securely with ptrace.  Secondly, redirecting system calls with
+ptrace is slow, but it can't be done selectively.  ptrace doesn't let
+you redirect some syscalls (such as "open") while letting others
+through (such as "read").  (See David Wagner's Master's thesis,
+"Janus: an approach for confinement of untrusted applications".)
+
+systrace provides a mechanism that is similar to ptrace.  It provides
+better performance, because it allows system calls to be intercepted
+selectively.  It allows race-free handling of fork().  However, it is
+not part of standard releases of Linux.  Using it requires recompiling
+your kernel and rebooting.  Plash is intended to be immediately usable
+without recompiling your kernel.  That said, it would be useful to add
+systrace support to Plash in addition to its current approach.
+
+Ostia provides a different mechanism intercepting system calls.
+Rather than redirecting a system call to a second process, it will
+bounce a system call back to the process that issued it.  Then, much
+like in Plash, the process makes the request via a socket.  This
+approach is simpler than systrace.  Unlike Plash, it doesn't require
+modifying libc.  A separate library handles the syscalls that get
+bounced back.  Ostia is implemented by a Linux kernel module.
+Unfortunately, the code is not publicly available.  (See "Ostia: A
+Delegating Architecture for Secure System Call Interposition" by Tal
+Garfinkel, Ben Pfaff and Mendel Rosenblum, 2004.)
+
+Plash could benefit by using syscall interception.  Using chroot and
+UIDs, Plash is able to control a process's ability to access the
+filesystem and interfere with other processes.  However, Plash does
+not prevent a process from connecting to or listening on network
+sockets.  This could be done if there was a way for Plash to prevent a
+process from doing connect() and bind() system calls.
+
+}

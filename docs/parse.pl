@@ -19,9 +19,13 @@ my $subst =
      'man_socket-publish',
      'man_socket-connect',
      'man_run-emacs',
+     'man_run-as-anonymous',
+     'man_gc-uid-locks',
+     'man_pola-run',
     ) };
 
-my $got = XXMLParse::read_file('index.xxml');
+if(scalar(@ARGV) != 1) { die }
+my $got = XXMLParse::read_file($ARGV[0]);
 
 # use Data::Dumper;
 # print Dumper($got);

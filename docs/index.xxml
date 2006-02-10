@@ -13,27 +13,46 @@
 \ps:
 
 Plash is a restricted execution environment for running Linux programs
-with minimum privileges necessary.  You can grant a process read-only
-or read-write access to specific files and directories, which can be
-mapped at any point in the filesystem namespace.
+with minimum privileges necessary.  It is similar to chroot jails, but
+more lightweight and flexible.  Plash lets you grant a process
+read-only or read-write access to specific files and directories,
+which can be mapped at any point in the filesystem namespace.
 
-The execution environment doesn't require a modified Linux kernel --
-it uses chroot() and UIDs.  It works with existing Linux executables,
-provided they are dynamically linked, because Plash uses a modified
-version of GNU libc.
+Plash provides three interfaces:
+
+{\ul:
+
+  {\li\ps: {\command:pola-run}, a command line tool for starting a
+  program with a subset of the calling process's authority.}
+
+  {\li\ps: The Plash shell, which has a syntax similar to the Bourne
+  shell or Bash.  Unlike Bash, it distinguishes string arguments and
+  file arguments, because it needs to know which files to grant to the
+  program being invoked.  By default, the shell grants only read-only
+  access to files and directories.  There is extra syntax for granting
+  read-write-create access.
+
+  The Plash shell has a compact syntax and is intended for interactive
+  use.  In contrast, {\command:pola-run} has a more verbose syntax
+  which is intended to be used from Bash scripts and other programs.}
+
+  {\li\ps: {\command:run-emacs} is a tool for running XEmacs and
+  then dynamically granting it access to individual files and
+  directories.  In the future, this functionality will be generalised
+  to be available for other GUI programs.}
+
+}
+
+The Plash execution environment doesn't require a modified Linux
+kernel -- it uses chroot() and UIDs.  It works with existing Linux
+executables, provided they are dynamically linked, because Plash uses
+a modified version of GNU libc.
 
 Plash virtualizes the filesystem.  A process can request to open a
 file by sending a request via a socket.  The server can send a file
 descriptor across the socket in response.  Usually performance is not
 affected, because the most frequently used system calls (such as
 read() and write()) work on kernel-level file descriptors as before.
-
-Plash provides a shell, with a syntax similar to the Bourne shell or
-Bash.  Unlike Bash, it distinguishes string arguments and file
-arguments, because it needs to know which files to grant the program
-access to.  By default, the shell grants only read-only access to
-files and directories, so there is extra syntax for granting
-read-write-create access.
 
 }
 
@@ -47,13 +66,16 @@ read-write-create access.
 }
 
 {\chapter id={man-pages}: \title- Man pages
+\splice name={man_pola-run};
 \splice name={man_plash};
 \splice name={man_plash-opts};
 \splice name={man_exec-object};
-\splice name={man_chroot};
+\splice name={man_run-emacs};
 \splice name={man_socket-publish};
 \splice name={man_socket-connect};
-\splice name={man_run-emacs};
+\splice name={man_chroot};
+\splice name={man_run-as-anonymous};
+\splice name={man_gc-uid-locks};
 }
 
 \splice name={internals};

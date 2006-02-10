@@ -17,7 +17,7 @@
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
    USA.  */
 
-/* Needed for strsignal() */
+/* Needed for strsignal() and environ */
 #define _GNU_SOURCE
 
 #ifdef USE_GTK
@@ -1598,6 +1598,7 @@ int command_invocation_sec
       printf(": %s\n", strerror(err));
       goto error;
     }
+    /* This function gives warnings about setuid/gid executables. */
     executable_fd = open_executable_file(obj, cmd_filename, &err);
     filesys_obj_free(obj);
     if(executable_fd < 0) {
@@ -2539,6 +2540,20 @@ void handle_server_exit(void *x, int status)
   printf("\n");
 }
 
+void run_gc_uid_locks()
+{
+  int pid = fork();
+  if(pid == 0) {
+    /* Put it into its own process group, just in case user presses Ctrl-C. */
+    setpgid(0, 0);
+    execl(BIN_INSTALL "/gc-uid-locks", "gc-uid-locks", "--gc", 0);
+    perror("plash/gc-uid-locks: exec");
+    exit(1);
+  }
+  if(pid < 0) perror("plash/gc-uid-locks: fork");
+  else w_add_process(pid, handle_gc_uid_locks_exit, 0);
+}
+
 int main(int argc, char *argv[])
 {
   int single_server = 0;
@@ -2548,18 +2563,7 @@ int main(int argc, char *argv[])
 
   state.env = 0;
 
-  {
-    int pid = fork();
-    if(pid == 0) {
-      /* Put it into its own process group, just in case user presses Ctrl-C. */
-      setpgid(0, 0);
-      execl(BIN_INSTALL "/gc-uid-locks", "gc-uid-locks", "--gc", 0);
-      perror("plash/gc-uid-locks: exec");
-      exit(1);
-    }
-    if(pid < 0) perror("plash/gc-uid-locks: fork");
-    else w_add_process(pid, handle_gc_uid_locks_exit, 0);
-  }
+  run_gc_uid_locks();
   
   state.conn_maker_local = conn_maker_make();
 

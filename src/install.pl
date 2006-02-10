@@ -26,6 +26,7 @@
 my $libs = [
   ['shobj/libc.so', 'libc.so.6'],
   ['shobj/libpthread.so', 'libpthread.so.0'],
+  ['glibc/math/libm.so', 'libm.so.6'],
   ['glibc/crypt/libcrypt.so', 'libcrypt.so.1'],
   ['glibc/dlfcn/libdl.so', 'libdl.so.2'],
   ['glibc/nis/libnsl.so', 'libnsl.so.1'],
@@ -33,10 +34,17 @@ my $libs = [
   ['glibc/nis/libnss_nisplus.so', 'libnss_nisplus.so.2'],
   ['glibc/nis/libnss_nis.so', 'libnss_nis.so.2'],
   ['glibc/nss/libnss_files.so', 'libnss_files.so.2'],
+  ['glibc/hesiod/libnss_hesiod.so', 'libnss_hesiod.so.2'],
   ['glibc/resolv/libresolv.so', 'libresolv.so.2'],
   ['glibc/resolv/libnss_dns.so', 'libnss_dns.so.2'],
+  ['glibc/resolv/libanl.so', 'libanl.so.1'],
   ['glibc/rt/librt.so', 'librt.so.1'],
   ['glibc/login/libutil.so', 'libutil.so.1'],
+  ['glibc/locale/libBrokenLocale.so', 'libBrokenLocale.so.1'],
+  # These don't have a number in their installed filename:
+  ['glibc/malloc/libmemusage.so', 'libmemusage.so'],
+  ['glibc/debug/libSegFault.so', 'libSegFault.so'],
+  ['glibc/debug/libpcprofile.so', 'libpcprofile.so'],
 ];
 
 if(scalar(@ARGV) == 2 && $ARGV[0] eq '--dest-dir') {

@@ -24,7 +24,7 @@ GLIBC_VERSION=2.3.3
 #CC=gcc-3.3
 
 set -e
-#set -x
+set -x
 
 OPTS_C="-Wall -nostdlib \
         -g \
@@ -95,14 +95,22 @@ build_server () {
 	obj/reconnectable-obj.o \
 	obj/parse-filename.o obj/comms.o \
 	obj/serialise.o obj/serialise-utils.o obj/region.o obj/utils.o
+
+  # It's important to link with libc.so, even when the references to it
+  # are weak.  (In that case, failing to link with libc.so will not give
+  # a link time error.)
+  # "glibc/dlfcn/libdl.so" is as a replacement for "-ldl" (which Gtk needs):
+  # if linking on a system with glibc 2.3.5, local libdl.so isn't
+  # compatible with our libc.so
+  LIBC_LINK="glibc/math/libm.so glibc/dlfcn/libdl.so
+             shobj/libc.so shobj/ld.so"
+
   # `pkg-config gtk+-2.0 --libs`
-  $CC $OPTS_S obj/shell.o obj/libplash.a \
+  $CC $OPTS_S $LIBC_LINK obj/shell.o obj/libplash.a \
 	-lreadline -ltermcap \
 	-o bin/plash
 
   $CC $OPTS_S src/test-caps.c obj/libplash.a -o bin/test-caps
-
-  LIBC_LINK="shobj/libc.so shobj/ld.so"
 
   $CC $OPTS_S -c src/shell-options.c -o obj/shell-options.o
   $CC $OPTS_S \
@@ -122,6 +130,7 @@ build_server () {
   $CC $OPTS_S src/socket-connect.c $LIBC_LINK obj/libplash.a -o bin/socket-connect
 
   $CC $OPTS_S src/run-emacs.c $LIBC_LINK obj/libplash.a -o bin/run-emacs
+  $CC $OPTS_S src/pola-run.c $LIBC_LINK obj/libplash.a -o bin/pola-run
 }
 
 
@@ -179,6 +188,8 @@ build_client () {
 	obj/region.os \
 	glibc/posix/getuid.os \
 	glibc/posix/getgid.os \
+	glibc/posix/geteuid.os \
+	glibc/posix/getegid.os \
 	glibc/posix/fork.os \
 	glibc/posix/execve.os \
 	glibc/socket/connect.os \
@@ -196,6 +207,10 @@ build_client () {
 	socket/rtld-sendmsg.os \
 	socket/rtld-send.os \
 	socket/cmsg_nxthdr.os \
+	posix/getuid.os \
+	posix/getgid.os \
+	posix/geteuid.os \
+	posix/getegid.os \
 	io/rtld-close.os \
 	io/rtld-fstat.os io/rtld-fxstat.os \
 	io/rtld-xstat64.os io/rtld-xstatconv.os"

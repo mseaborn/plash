@@ -18,7 +18,7 @@
 # USA.
 
 
-PLASH_VERSION=1.11
+PLASH_VERSION=1.12
 
 JAIL_DIR=/var/lib/plash-chroot-jail
 JAIL_INSTALL=$JAIL_DIR/special
@@ -28,6 +28,8 @@ LIB_INSTALL=/usr/lib/plash/lib
 UID_RANGE_START=0x100000
 UID_RANGE_END=0x200000
 UID_LOCK_DIR=$JAIL_DIR/plash-uid-locks
+# Pathname to use from within the chroot jail
+UID_LOCK_DIR2=/plash-uid-locks
 
 # This needs to include any directories that were in
 # /etc/ld.so.conf, which is usually used to build /etc/ld.so.cache,

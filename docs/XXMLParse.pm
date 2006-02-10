@@ -105,19 +105,27 @@ sub to_html {
     if($in_attr) { warn "Tag inside attribute"; }
     if(scalar(@{$t->{B}}) > 0) {
       print $out "<$t->{T}";
-      foreach my $a (@{$t->{A}}) {
-        print $out " $a->[0]";
-        if(defined $a->[1]) {
-          print $out '="';
-          to_html($out, $a->[1], 1);
-          print $out '"';
-        }
-      }
+      attrs_to_html($out, $t->{A});
       print $out ">";
       to_html($out, $t->{B});
       print $out "</$t->{T}>";
     }
-    else { print $out "<$t->{T} />" }
+    else {
+      print $out "<$t->{T}";
+      attrs_to_html($out, $t->{A});
+      print $out " />";
+    }
+  }
+}
+sub attrs_to_html {
+  my ($out, $attrs) = @_;
+  foreach my $a (@$attrs) {
+    print $out " $a->[0]";
+    if(defined $a->[1]) {
+      print $out '="';
+      to_html($out, $a->[1], 1);
+      print $out '"';
+    }
   }
 }
 

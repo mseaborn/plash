@@ -49,6 +49,10 @@
 #include <sys/time.h>
 #include <fcntl.h>
 #include <assert.h>
+#include <sys/file.h>
+
+#include <string.h>
+#include <signal.h>
 
 #include "config.h"
 
@@ -56,6 +60,17 @@
 #define NAME "run-as-anonymous"
 
 #define UID_RANGE_LEN	(UID_RANGE_END - UID_RANGE_START)
+
+/* In glibc, setuid() will try both the 16-bit and 32-bit versions of
+   the kernel system call, while glibc provides no setuid32() symbol.
+   In dietlibc, setuid() is the 16-bit syscall, and setuid32() is the
+   32-bit syscall. */
+#ifdef USE_DIETLIBC
+#define setuid setuid32
+#define setgid setgid32
+#define getuid getuid32
+#define getgid getgid32
+#endif
 
 
 char hex_digit(int x)
@@ -112,53 +127,91 @@ int main(int argc, char *argv[], char *envp[])
     return 1;
   }
   else {
+#if 0
+    int debug = 0;
+#endif
     char **argv2;
     int i;
     int uid;
+    int lock_file_fd;
 
-#if 0
-    int cwd_fd;
-    cwd_fd = open(".", O_RDONLY);
-    if(cwd_fd < 0) { perror(NAME ": open: can't save current directory"); return 1; }
-#endif
-
+#ifdef IN_CHROOT_JAIL
+    if(chdir(UID_LOCK_DIR2) < 0) {
+      perror(NAME ": chdir: can't change to lock directory");
+      return 1;
+    }
+#else
     if(chdir(UID_LOCK_DIR) < 0) {
       perror(NAME ": chdir: can't change to lock directory");
+      return 1;
+    }
+#endif
+
+    /* Claim non-exclusive lock before continuing. */
+    /* There is no race condition between instances of run-as-anonymous
+       without this (hence the non-exclusive lock), but there would be a
+       race condition with gc-uid-locks.  Between creating the lock file
+       for a UID and calling setgid()/setuid(), gc-uid-locks would
+       think that the UID is not in use. */
+    lock_file_fd = open("flock-file", O_RDONLY);
+    if(lock_file_fd < 0) {
+      perror(NAME ": open: " UID_LOCK_DIR "/flock-file");
+      return 1;
+    }
+    /* Get a shared lock.  Multiple instances of run-as-anonymous can
+       run concurrently with each other, but not concurrently with
+       gc-uid-locks. */
+    if(flock(lock_file_fd, LOCK_SH) < 0) {
+      perror(NAME ": flock");
       return 1;
     }
     
     uid = pick_uid();
     if(uid == 0) return 1;
 
+    argc--;
+    argv++;
 #if 0
-    if(fchdir(cwd_fd) < 0) {
-      perror(NAME ": fchdir: can't restore current directory"); return 1;
+    if(argc >= 2 && !strcmp(argv[0], "--debug")) {
+      debug = 1;
+      argc--;
+      argv++;
     }
 #endif
 
-    argv2 = alloca((argc-1+1) * sizeof(char *));
-    argv2[0] = argv[1];
-    for(i = 1; i < argc-1; i++) argv2[i] = argv[i+1];
+    argv2 = alloca((argc + 1) * sizeof(char *));
+    for(i = 0; i < argc; i++) argv2[i] = argv[i];
     argv2[i] = 0;
 
-    if(chroot(JAIL_DIR) < 0) { perror(NAME ": chroot"); return 1; }
-    if(chdir("/") < 0) { perror(NAME ": chdir"); return 1; }
+#if !defined IN_CHROOT_JAIL
+    if(chroot(JAIL_DIR) < 0) { perror(NAME ": chroot: " JAIL_DIR); return 1; }
+#endif
+    if(chdir("/") < 0) { perror(NAME ": chdir: /"); return 1; }
 
     if(setgroups(0, 0) < 0) { perror(NAME ": setgroups"); return 1; }
     if(setgid(uid) < 0) { perror(NAME ": setgid"); return 1; }
     if(setuid(uid) < 0) { perror(NAME ": setuid"); return 1; }
     if(getuid() != uid) {
-      fprintf(stderr, NAME ": uid not set correctly to %i -- "
-	      "does your kernel support 32-bit uids?\n", uid);
+      fprintf(stderr, NAME ": uid not set correctly to 0x%x (got 0x%x) -- "
+	      "does your kernel support 32-bit uids?\n", uid, getuid());
       return 1;
     }
     if(getgid() != uid) {
-      fprintf(stderr, NAME ": gid not set correctly to %i -- "
-	      "does your kernel support 32-bit uids?\n", uid);
+      fprintf(stderr, NAME ": gid not set correctly to 0x%x (got 0x%x) -- "
+	      "does your kernel support 32-bit uids?\n", uid, getgid());
       return 1;
     }
+
+    if(close(lock_file_fd) < 0) { perror(NAME ": close"); return 1; }
+
+#if 0
+    if(debug) {
+      fprintf(stderr, NAME ": stopping, pid %i\n", getpid());
+      if(raise(SIGSTOP) < 0) { perror(NAME ": raise(SIGSTOP)"); return 1; }
+    }
+#endif
     
-    execve(argv[1], argv2, envp);
+    execve(argv[0], argv2, envp);
     perror(NAME ": exec");
     return 1;
   }

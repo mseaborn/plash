@@ -1,6 +1,6 @@
 Summary: Principle of Least Authority shell (Plash)
 Name: plash
-Version: 1.11
+Version: 1.12
 Release: 1
 Packager: Mark Seaborn <mseaborn@onetel.com>
 Copyright: GPL and LGPL
@@ -57,6 +57,7 @@ mkdir -p %{buildroot}/usr/share/man/man1
 mkdir -p %{buildroot}/usr/lib/plash/lib
 mkdir -p %{buildroot}/var/lib/plash-chroot-jail/special
 mkdir -p %{buildroot}/var/lib/plash-chroot-jail/plash-uid-locks
+> %{buildroot}/var/lib/plash-chroot-jail/plash-uid-locks/flock-file
 mkdir -p %{buildroot}/usr/bin
 mkdir -p %{buildroot}/usr/share/emacs/site-lisp/plash/
 
@@ -76,6 +77,7 @@ cp -v plash/docs/out-man/plash.1 \
       plash/docs/out-man/plash-opts.1 \
       plash/docs/out-man/plash-chroot.1 \
       plash/docs/out-man/plash-run-emacs.1 \
+      plash/docs/out-man/pola-run.1 \
       plash/docs/out-man/plash-socket-connect.1 \
       plash/docs/out-man/plash-socket-publish.1 \
       %{buildroot}/usr/share/man/man1/
@@ -87,26 +89,13 @@ gzip -9 %{buildroot}/usr/share/man/man1/*.1
 strip --remove-section=.comment --remove-section=.note plash/shobj/ld.so -o %{buildroot}/var/lib/plash-chroot-jail/special/ld-linux.so.2
 chmod +x %{buildroot}/var/lib/plash-chroot-jail/special/ld-linux.so.2
 
-# Install executables
-STRIP_ARGS="--remove-section=.comment --remove-section=.note"
-# cp -v plash/bin/plash           %{buildroot}/usr/bin/
-# cp -v plash/bin/plash-chroot    %{buildroot}/usr/bin/
-# cp -v plash/bin/plash-opts      %{buildroot}/usr/bin/
-# cp -v plash/bin/plash-opts-gtk  %{buildroot}/usr/bin/
-# cp -v plash/bin/exec-object     %{buildroot}/usr/bin/
-strip $STRIP_ARGS plash/bin/plash           -o %{buildroot}/usr/bin/plash
-strip $STRIP_ARGS plash/bin/plash-chroot    -o %{buildroot}/usr/bin/plash-chroot
-strip $STRIP_ARGS plash/bin/plash-opts      -o %{buildroot}/usr/bin/plash-opts
-strip $STRIP_ARGS plash/bin/plash-opts-gtk  -o %{buildroot}/usr/bin/plash-opts-gtk
-strip $STRIP_ARGS plash/bin/exec-object     -o %{buildroot}/usr/bin/exec-object
-strip $STRIP_ARGS plash/bin/socket-connect  -o %{buildroot}/usr/bin/plash-socket-connect
-strip $STRIP_ARGS plash/bin/socket-publish  -o %{buildroot}/usr/bin/plash-socket-publish
-strip $STRIP_ARGS plash/bin/run-emacs       -o %{buildroot}/usr/bin/plash-run-emacs
+( cd plash && ./pkg-install.sh %{buildroot} )
 
 # cp -v plash/mrs/run-as-nobody %{buildroot}/usr/lib/plash/
 # cp -v plash/mrs/run-as-nobody+chroot %{buildroot}/usr/lib/plash/
 cp -v plash/setuid/run-as-anonymous %{buildroot}/usr/lib/plash/
 cp -v plash/setuid/gc-uid-locks %{buildroot}/usr/lib/plash/
+cp -v plash/setuid/run-as-anonymous %{buildroot}/var/lib/plash-chroot-jail/run-as-anonymous
 
 # Install Emacs Lisp file
 cp -v plash/src/plash-gnuserv.el %{buildroot}/usr/share/emacs/site-lisp/plash/
@@ -130,6 +119,7 @@ cp -v plash/src/plash-gnuserv.el %{buildroot}/usr/share/emacs/site-lisp/plash/
 # %attr(06755,root,root) /usr/lib/plash/run-as-nobody+chroot
 %attr(06755,root,root) /usr/lib/plash/run-as-anonymous
 %attr(06755,root,root) /usr/lib/plash/gc-uid-locks
+%attr(06755,root,root) /var/lib/plash-chroot-jail/run-as-anonymous
 %attr(00700,root,root) /var/lib/plash-chroot-jail/plash-uid-locks
 
 

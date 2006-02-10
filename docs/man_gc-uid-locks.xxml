@@ -1,0 +1,50 @@
+
+\refentry id={gc-uid-locks}:
+
+\refmeta~
+\refentrytitle- gc-uid-locks
+\manvolnum- 1
+
+\refnamediv~
+\refname- gc-uid-locks
+\refpurpose- Garbage collect the lock files used for reserving UIDs
+
+{\refsynopsisdiv:
+\synopsis:
+gc-uid-locks --gc
+}
+
+
+{\refsect1: \title- Description
+\ps:
+
+gc-uid-locks garbage collects the lock files that are used for
+reserving user IDs.  The lock files it removes are those created by
+run-as-anonymous, which assigns each process it starts a different
+UID.
+
+gc-uid-locks works by scanning {\filename: /proc} to see what
+processes are running, and what user IDs they are running under.
+
+The Plash shell runs gc-uid-locks when it starts up.  It may turn out
+to be desirable to run gc-uid-locks more often than this.
+
+gc-uid-locks is a setuid root program.  It is one of the small parts
+of Plash that requires root access to install.
+
+}
+
+
+{\refsect1: \title- See also
+  \ps:
+
+  {\command:run-as-anonymous}, {\command:plash}
+
+  /usr/share/doc/plash
+}
+
+{\refsect1: \title- Author
+  \ps:
+
+  Mark Seaborn <mseaborn@onetel.com>
+}

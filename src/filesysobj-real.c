@@ -57,6 +57,7 @@ struct filesys_obj *initial_dir(const char *pathname, int *err)
   
   fd = open(pathname, O_RDONLY | O_DIRECTORY);
   if(fd < 0) { *err = errno; return 0; }
+  set_close_on_exec_flag(fd, 1);
   if(fstat(fd, &stat) < 0) { *err = errno; return 0; }
   new_obj = amalloc(sizeof(struct real_dir));
   new_obj = amalloc(sizeof(struct real_dir));

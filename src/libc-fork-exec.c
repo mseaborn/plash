@@ -347,6 +347,12 @@ static int exec_object(cap_t obj, int argc, const char **argv,
   return -1;
 }
 
+/* EXPORT: plash_libc_kernel_execve */
+int plash_libc_kernel_execve(const char *cmd_filename, char *argv[], char *envp[])
+{
+  return execve(cmd_filename, argv, envp);
+}
+
 /* EXPORT: new_execve => WEAK:execve __execve */
 /* This execs an executable using a particular dynamic linker.
    Won't work for shell scripts (using "#!") or for setuid executables. */

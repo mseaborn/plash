@@ -1,0 +1,289 @@
+
+\refentry id={pola-run}:
+
+\refmeta~
+\refentrytitle- pola-run
+\manvolnum- 1
+
+\refnamediv~
+\refname- pola-run
+\refpurpose- Run a program, giving it less authority than the caller
+
+{\refsynopsisdiv:
+\synopsis:
+pola-run
+  {\option:--prog} {\r:filename}
+  [ {\option:-f}[awls]... {\r:pathname}
+  | {\option:-t}[awls]... {\r:pathname} {\r:pathname}
+  | {\option:-a} {\r:string}
+  | {\option:--cwd} {\r:dir}
+  | {\option:--no-cwd}
+  | {\option:--copy-cwd} ]...
+  [{\option:-B}] [{\option:--x11}] [{\option:--net}]
+}
+
+
+{\refsect1: \title- Description
+\ps:
+
+pola-run runs programs under the Plash environment.  It starts a
+process with a subset of the caller process's authority.  The caller
+can grant the callee read-only or read-write access to specific files
+and directories, which can be mapped at any point in the callee's
+filesystem namespace.
+
+pola-run provides a programmatic interface.  It is intended to be used
+from Bash shell scripts and other programs.  Since it works via the
+command line, it can be used from virtually any language, in contrast
+to a C API.  pola-run is different from the Plash shell, which does
+not provide a programmatic interface: Plash shell commands are
+intended to be written by hand, not generated automatically.
+
+pola-run constructs two things to pass to the callee program: a list
+of argument strings (as received by {\function:main()}), and a file
+namespace.  The {\option:-a} option adds strings to the argument list,
+in order.  The {\option:-f} and {\option:-t} options add files and
+directories to the file namespace.  These can be combined:
+{\option:-fa} and {\option:-ta} add an object to the file namespace
+and a corresponding filename to the argument list.
+
+Unlike the Plash shell, pola-run grants access to no files by default.
+The {\option:-B} option will grant access to a fairly safe but large
+installation endowment, which includes /usr, /bin and /lib.
+(Currently this is different to the shell's default installation
+endowment, which includes /etc as well.)
+
+pola-run can be used to invoke executable objects, in which case the
+callee can have access to objects that the caller doesn't have access
+to.
+
+\em~ NB. The implementation is incomplete.  Some things mentioned here
+aren't implemented yet.
+
+}
+
+{\refsect1: \title- Options
+
+{\ps:
+
+For arguments that take one parameter, there are two forms to choose
+from: "{\option:--arg} {\r:param}" and "{\option:--arg}={\r:param}".
+The first form may be more convenient to generate in a C program.  The
+latter may be more readable in hand-written shell scripts.
+
+}
+
+\dl:
+
+\dt- {\option:--prog} {\r:filename}
+\dt- {\option:--prog}={\r:filename}
+{\dd\ps:
+
+This gives the filename of the executable to be invoked.  If it
+doesn't contain a slash, it will be looked up in {\envar:PATH}.
+
+Note that if the executable is a "#!" script, access to the
+interpreter specified in the "#!" line will {\emphasis:not} be
+implicitly granted.
+
+}
+
+\dt- {\option:--prog-sock} {\r:filename}
+\dt- {\option:--prog-sock}={\r:filename}
+{\dd\ps:
+
+Invoke an executable object rather than an executable file.  The
+executable object is taken from the socket named by {\r:filename}.  An
+object can be exported to a socket using
+{\command:plash-socket-publish}.
+
+This option implies {\option:--no-default}.
+
+}
+
+\dt- {\option:-f}[awls]...[,{\r:option}]... {\r:pathname}
+\dt- {\option:-f}[awls]...[,{\r:option}]...={\r:pathname}
+{\dd\ps:
+
+Grant access to a file or directory (given by {\r:pathname}), and
+optionally add {\r:pathname} to the argument list.  This takes the
+following single-letter options.  The multi-character options must be
+separated by commas.
+
+{\dl:
+
+	\dt- {\option:a}
+
+	\dd\ps~ Add {\r:pathname} to the argument list.  Equivalent to
+	adding the argument "{\option:-a} {\r:pathname}".
+
+	\dt- {\option:w}
+
+	\dd\ps~ Grant read/write access to the slot specified by
+	{\r:pathname}.  By default, without this option, read-only
+	access is granted to the file or directory specified by
+	{\r:pathname}.
+
+	\dt- {\option:l}
+
+	\dd\ps~ Follow symbolic links (the "l" is for "foLLow").  If
+	symbolic links are encountered when pola-run resolves
+	{\r:pathname}, these links will be followed.  When the symlink
+	occurs at the last element in a pathname, this will cause
+	pola-run to grant access to both the symlink object and the
+	destination object (or the slots containing them, when the
+	{\option:w} option is used).  If {\r:pathname} resolves to a
+	directory, this option does not affect the treatment of
+	symlinks inside the directory.
+
+	\dt- {\option:s}
+
+	\dd\ps~ Grant permission to create symbolic links.  (Only
+	relevant if {\option:w} is used.)
+
+	\dt- {\option:objrw}
+
+	\dd\ps~ Grant read/write access to the file or directory
+	object, but not the slot, specified by {\r:pathname}.  This is
+	useful for granting access to writable devices such as
+	{\r:/dev/null}.
+
+	\dt- {\option:socket}
+
+	\dd\ps~ Grant permission to connect to Unix domain sockets (as
+	the {\option:w} option does), but without granting write
+	access to file and directory objects.
+
+}
+
+}
+
+\dt- {\option:-t}[awls]...[,{\r:option}]... {\r:dest-pathname} {\r:source-pathname}
+{\dd\ps:
+
+Grant access to a file or directory ({\r:source-pathname}), but attach
+it to a different pathname in the file namespace({\r:dest-pathname}).
+Optionally add {\r:dest-pathname} to the argument list.  This takes
+the same options as {\option:-f}.
+
+Note that "{\option:-f}{\r:options} {\r:pathname}" is {\emphasis:not}
+exactly equivalent to "{\option:-t}{\r:options} {\r:pathname}
+{\r:pathname}".  {\option:-t} will not introduce symlinks at the
+directory components of {\r:dest-pathname}, and it will fail if there
+are any symlinks in these locations.
+
+}
+
+\dt- {\option:-a} {\r:string}
+\dt- {\option:-a}={\r:string}
+{\dd\ps:
+
+Add {\r:string} to the argument list.
+
+}
+
+\dt- {\option:--cwd} {\r: dir}
+\dt- {\option:--cwd}={\r: dir}
+\dt- {\option:--no-cwd}
+\dt- {\option:--copy-cwd}
+{\dd\ps:
+
+These options set the current working directory (cwd) for the process.
+
+{\option:--copy-cwd} will use the calling process's cwd.  This is the
+default.
+
+{\option:--no-cwd} unsets the cwd, so that using a pathname relative
+to the cwd will give an error.
+
+{\option:--cwd} sets the cwd to a directory given by a pathname.
+
+In any case, if the directory's pathname does not exist in the
+namespace created for the process, the cwd will be left unset.
+
+These options also affect how the pathnames in other arguments are
+interpreted.  You can use multiple cwd arguments.  An argument
+pathname is resolved relative to the most recent one.  The final cwd
+argument also sets the process's cwd.
+
+}
+
+\dt- {\option:-B}
+{\dd\ps:
+
+Grant access to a default installation endowment.  This is equivalent
+to the options:
+
+\pre~
+-fl /usr
+-fl /bin
+-fl /lib
+-fl,objrw /dev/null
+-fl,objrw /dev/tty
+
+}
+
+\dt- {\option:--x11}
+{\dd\ps:
+
+Grant access to the X11 Window System.  This is currently equivalent
+to the options:
+
+\pre~
+-fl,socket /tmp/.X11-unix/
+-fl ~/.Xauthority
+
+In the future, {\option:--x11} may work using an X11 proxy.
+
+}
+
+\dt- {\option:--net}
+{\dd\ps:
+
+This grants access to some files that are important for accessing the
+Internet.  When Plash gains the ability to deny a process access to
+the network, this option will gain the function of passing network
+access on to the callee.
+
+Currently, this is equivalent to:
+
+\pre~
+-fl /etc/resolv.conf
+-fl /etc/hosts
+-fl /etc/services
+
+}
+
+}
+
+{\refsect1: \title- Examples
+\ps:
+
+In Bash:
+
+\pre- gcc -c foo.c -o foo.o
+
+In the Plash shell:
+
+\pre- gcc -c foo.c => -o foo.o + .
+
+This would become:
+
+\pre- pola-run -B --prog=gcc  -a=-c  -fa=foo.c  -a=-o  -faw=foo.o  -f=.
+
+}
+
+
+{\refsect1: \title- See also
+\ps:
+
+  {\command:plash}, {\command:plash-socket-publish}
+
+  /usr/share/doc/plash
+}
+
+{\refsect1: \title- Author
+  \ps:
+
+  Mark Seaborn <mseaborn@onetel.com>
+}

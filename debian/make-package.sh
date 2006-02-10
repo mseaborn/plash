@@ -36,6 +36,8 @@ install -d debian/tmp/DEBIAN \
 	-d debian/tmp/usr/bin \
 	-d debian/tmp/usr/share/emacs/site-lisp/plash/
 
+> $CHROOT_JAIL/plash-uid-locks/flock-file
+
 cp -pv debian/copyright debian/tmp/usr/share/doc/$PACKAGE/
 cp -pv debian/changelog debian/tmp/usr/share/doc/$PACKAGE/changelog
 gzip -9 debian/tmp/usr/share/doc/$PACKAGE/changelog
@@ -48,6 +50,7 @@ cp -pv  docs/out-man/plash.1 \
 	docs/out-man/plash-opts.1 \
 	docs/out-man/plash-chroot.1 \
 	docs/out-man/plash-run-emacs.1 \
+	docs/out-man/pola-run.1 \
 	docs/out-man/plash-socket-connect.1 \
 	docs/out-man/plash-socket-publish.1 \
 	debian/tmp/usr/share/man/man1/
@@ -62,27 +65,13 @@ STRIP_ARGS="--remove-section=.comment --remove-section=.note"
 # strip $STRIP_ARGS setuid/run-as-nobody+chroot -o debian/tmp/usr/lib/plash/run-as-nobody+chroot
 strip $STRIP_ARGS setuid/run-as-anonymous -o debian/tmp/usr/lib/plash/run-as-anonymous
 strip $STRIP_ARGS setuid/gc-uid-locks -o debian/tmp/usr/lib/plash/gc-uid-locks
+strip $STRIP_ARGS setuid/run-as-anonymous_static -o $CHROOT_JAIL/run-as-anonymous
 strip $STRIP_ARGS shobj/ld.so -o $CHROOT_JAIL/special/ld-linux.so.2
 ./src/install.pl --dest-dir $LIBDIR/
 
 # Install executables
-strip $STRIP_ARGS bin/plash          -o debian/tmp/usr/bin/plash
-strip $STRIP_ARGS bin/plash-chroot   -o debian/tmp/usr/bin/plash-chroot
-strip $STRIP_ARGS bin/plash-opts     -o debian/tmp/usr/bin/plash-opts
-strip $STRIP_ARGS bin/plash-opts-gtk -o debian/tmp/usr/bin/plash-opts-gtk
-strip $STRIP_ARGS bin/exec-object    -o debian/tmp/usr/bin/exec-object
-strip $STRIP_ARGS bin/socket-connect -o debian/tmp/usr/bin/plash-socket-connect
-strip $STRIP_ARGS bin/socket-publish -o debian/tmp/usr/bin/plash-socket-publish
-strip $STRIP_ARGS bin/run-emacs      -o debian/tmp/usr/bin/plash-run-emacs
-dpkg-shlibdeps \
-	bin/plash \
-	bin/plash-chroot \
-	bin/plash-opts \
-	bin/plash-opts-gtk \
-	bin/exec-object \
-	bin/socket-connect \
-	bin/socket-publish \
-	bin/run-emacs
+./pkg-install.sh debian/tmp
+dpkg-shlibdeps debian/tmp/usr/bin/*
 
 # Install Emacs Lisp file
 cp -pv src/plash-gnuserv.el debian/tmp/usr/share/emacs/site-lisp/plash/
@@ -97,5 +86,6 @@ chmod +x $CHROOT_JAIL/special/ld-linux.so.2
 # chmod +s debian/tmp/usr/lib/plash/run-as-nobody+chroot
 chmod +s debian/tmp/usr/lib/plash/run-as-anonymous
 chmod +s debian/tmp/usr/lib/plash/gc-uid-locks
+chmod +s $CHROOT_JAIL/run-as-anonymous
 
 dpkg --build debian/tmp ..

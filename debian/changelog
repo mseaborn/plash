@@ -1,3 +1,40 @@
+plash (1.12) unstable; urgency=low
+
+  * libc.map, libc-fork-exec.c:  Add plash_libc_kernel_execve.
+    Remove the version PLASH_GLIBC:  this causes problems now that I want
+    to have weak links to plash_libc_* symbols.  In this case, the linker
+    still puts the symbol PLASH_GLIBC into the executable, which is no
+    good.
+  * Install a statically-linked copy of run-as-anonymous inside the
+    chroot jail.  This uses a different path for "plash-uid-locks" and
+    doesn't call chroot().  This is compiled using dietlibc (with a glibc
+    fallback).
+  * make.sh:  Corrected the build of libc.so and ld.so to link
+    Plash's libc-getuid.os with the real gete[ug]id.os.  Before, they
+    were mapping geteuid() to new_geteuid(), causing an infinite loop
+    when PLASH_FAKE_EUID wasn't defined, exhausting the stack.
+    Discovered this when writing plash-exec, which was not setting
+    PLASH_FAKE_EUID.
+  * run-as-anonymous.c and gc-uid-locks.c:  Fixed race conditions.
+    They now use flock() on a lock file.  In addition, gc-uid-locks
+    re-checks the process list that it gets by listing the contents of
+    /proc (a non-atomic operation) to ensure that it is consistent.
+    There is still a small possibility that it could get an inconsistent
+    list, which could cause it to miss a process.
+  * The following libraries are now included.  I discovered this problem
+    when upgrading Debian to glibc 2.3.5: its libm.so was getting used by
+    programs under Plash, but it's not compatible with Plash's 2.3.3 glibc.
+    math/libm.so
+    hesiod/libnss_hesiod.so
+    resolv/libanl.so
+    locale/libBrokenLocale.so
+    linuxthreads_db/libthread_db.so
+    malloc/libmemusage.so
+    debug/libSegFault.so
+    debug/libpcprofile.so
+
+ -- Mark Seaborn <mseaborn@onetel.com>  Mon, 19 Sep 2005 21:32:37 +0100
+
 plash (1.11) unstable; urgency=low
 
   * Add run-emacs.c and plash-gnuserv.el:  major new feature.

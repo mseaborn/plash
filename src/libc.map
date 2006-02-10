@@ -1,5 +1,14 @@
 GLIBC_2.0 {
   global:
+    # These used to go under the version PLASH_GLIBC.  However, I want
+    # some executables to link these symbols weakly, so that they don't
+    # have to be defined for the executable to work.  Unfortunately,
+    # the linker still makes the executable require the PLASH_GLIBC
+    # symbol in that case.
+    plash_libc_duplicate_connection;
+    plash_libc_reset_connection;
+    plash_libc_kernel_execve;
+
     __sigaction;
     _IO_adjust_column; _IO_clearerr; _IO_default_doallocate;
     _IO_default_finish; _IO_default_pbackfail; _IO_default_uflow;
@@ -817,7 +826,8 @@ GCC_3.0 {
     __register_frame_info_table_bases; _Unwind_Find_FDE;
 };
 
-PLASH_GLIBC {
-  plash_libc_duplicate_connection;
-  plash_libc_reset_connection;
-};
+# PLASH_GLIBC {
+#   plash_libc_duplicate_connection;
+#   plash_libc_reset_connection;
+#   plash_libc_kernel_execve;
+# };

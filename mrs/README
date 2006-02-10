@@ -32,6 +32,9 @@ chroot jail, so that they can't access any files using the usual
 system calls, and must go through the file server instead.  This
 approach doesn't require modifying the kernel at all.
 
+Plash can run Linux binaries unmodified, provided they are dynamically
+linked with libc, which is almost always the case.
+
 
 Shell overview
 ==============
@@ -86,12 +89,24 @@ tar -cvzf { => foo.tar.gz } dir1
   be read-only in the argument list, you can limit the scope of the
   `=>' operator by enclosing arguments in curly brackets { ... }.
 
+grep 'pattern' file | less
+
+  Pipes work as in conventional shells.
+
+!!bash
+
+  If you want to execute a command in the conventional way, without
+  running the process with a virtualised filesystem, in a chroot jail,
+  etc., you can prefix it with "!!".  This can be applied to individual
+  command invocations in a pipeline.  The syntax for command invocations
+  is the same whether "!!" is used or not, but when it is used, files
+  listed after the "+" operator are ignored.
+
 cd directory
 
   Changing directory works as before.
 
 Many standard shell features are not implemented yet.  This includes:
- * pipes
  * redirecting file descriptors to files
  * globbing (wildcards in filenames)
  * expanding and setting environment variables
@@ -117,6 +132,20 @@ The filesystem is also populated with `/usr', `/etc', `/bin', `/lib',
 One future extension would be to allow the user to attach an existing
 file or directory at a different location in the new filesystem
 (ie. with a different pathname).
+
+Other commands
+--------------
+
+fg <N>
+bg <N>
+
+  Used for job control: puts jobs in the foreground or background.
+
+opts
+
+  Opens an options window (using Gtk).  This provides some options for
+  debugging processes under Plash.  You can get the file server to
+  print a log of (some of) the calls the processes make.
 
 
 Architecture overview
@@ -393,7 +422,7 @@ libc:
   libc-comms.[ch]
   libc-connect.c -- provides the connect() function
   libc-fork-exec.c -- provides fork() and execve()
-  open.c -- provides all the other functions to put into libc
+  libc-misc.c -- provides all the other functions to put into libc
 
 server:
   parse-filename.[ch]
@@ -439,17 +468,17 @@ Setuid executables do not run setuid.
 This should be replaced by another mechanism.
 
 Many common shell features are not yet implemented.
-Pipes, FD redirection and globbing would be straightforward.
+FD redirection and globbing would be straightforward.
 Other features raise questions about the direction Plash should take
 as a language.  Should it become a full programming language?
 
-Plash does not handle job control or even SIGINT.
-This could be implemented.
-Another direction would be to replace the terminal emulator to that
-the shell itself creates a terminal for each command it starts.
-These would be combined into one window the way they are now, but
-it would provide some isolation between programs, and it would
-allow the shell to provide GUI-based features.
+Plash now handles job control.
+Another direction would be to replace the terminal emulator so that
+the shell itself creates a virtual terminal for each command it
+starts.  These would be combined into one window the way they are now,
+but it would provide some isolation between programs (eg. preventing
+them from pretending to be the shell), and it would allow the shell to
+provide GUI-based features.
 
 Tracing facilities: displaying the server log, attaching strace and
 gdb to the server and the client.  It would be convenient to make

@@ -30,6 +30,7 @@ typedef struct region *region_t;
 region_t region_make();
 void region_free(region_t r);
 void *region_alloc(region_t r, size_t size);
+void region_add_finaliser(region_t r, void (*f)(void *obj), void *obj);
 int region_allocated(region_t r);
 
 

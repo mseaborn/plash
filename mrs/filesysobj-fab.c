@@ -42,7 +42,14 @@ int refuse_chmod(struct filesys_obj *obj, int mode, int *err)
 void fab_dir_free(struct filesys_obj *obj1)
 {
   struct fab_dir *obj = (void *) obj1;
-  /* FIXME: not implemented */
+  struct obj_list *node = obj->entries;
+  while(node) {
+    struct obj_list *next = node->next;
+    free(node->name);
+    filesys_obj_free(node->obj);
+    free(node);
+    node = next;
+  }
 }
 
 /* Device number reported by stat.  FIXME: avoid clashes? */
@@ -193,7 +200,14 @@ struct filesys_obj_vtable fab_symlink_vtable = {
 void s_fab_dir_free(struct filesys_obj *obj1)
 {
   struct s_fab_dir *obj = (void *) obj1;
-  /* FIXME: not implemented */
+  struct slot_list *node = obj->entries;
+  while(node) {
+    struct slot_list *next = node->next;
+    free(node->name);
+    filesys_slot_free(node->slot);
+    free(node);
+    node = next;
+  }
 }
 
 int s_fab_dir_stat(struct filesys_obj *obj, struct stat *st)

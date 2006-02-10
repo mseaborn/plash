@@ -26,6 +26,7 @@ GLIBC_VERSION=2.3.3
 if [ -z $CC ]; then CC=gcc; fi
 if [ -z $BUILD_SERVER ]; then BUILD_SERVER=yes; fi
 if [ -z $BUILD_LIBC ]; then BUILD_LIBC=no; fi
+if [ -z $BUILD_LIBPTHREAD ]; then BUILD_LIBPTHREAD=no; fi
 if [ -z $BUILD_LDSO ]; then BUILD_LDSO=no; fi
 if [ "$1" = "-L" ]; then BUILD_LIBC=yes; fi
 
@@ -38,23 +39,27 @@ OPTS_C="-Wall -nostdlib \
         -g \
 	-D_REENTRANT \
 	-fPIC"
-OPTS_S="-Wall -g"
 
+
+./mrs/make-config-h.sh
 
 if [ $BUILD_SERVER = yes ]; then
+  OPTS_S="-Wall -g `pkg-config gtk+-2.0 --cflags`"
+
   # Server: compiled with glibc
   # Doesn't have to be position-independent (though that doesn't hurt)
   # I used to use dietlibc for this, but then I wanted to link with readline
   $CC $OPTS_S '-DHALF_NAME="server"' -c mrs/comms.c -o mrs/comms.o
   $CC $OPTS_S -c mrs/region.c -o mrs/region.o
   $CC $OPTS_S -c mrs/utils.c -o mrs/utils.o
-  $CC $OPTS_S -c mrs/driver.c -o mrs/driver.o
   $CC $OPTS_S -c mrs/parse-filename.c -o mrs/parse-filename.o
   $CC $OPTS_S -c mrs/filesysobj.c -o mrs/filesysobj.o
   $CC $OPTS_S -c mrs/filesysobj-fab.c -o mrs/filesysobj-fab.o
   $CC $OPTS_S -c mrs/filesysslot.c -o mrs/filesysslot.o
   $CC $OPTS_S -c mrs/build-fs.c -o mrs/build-fs.o
   $CC $OPTS_S -c mrs/shell.c -o mrs/shell.o
+  $CC $OPTS_S -DUSE_GTK -c mrs/shell.c -o mrs/shell.o
+  $CC $OPTS_S -c mrs/shell.c -o mrs/shell-nogtk.o
   $CC $OPTS_S -c mrs/shell-parse.c -o mrs/shell-parse.o
   $CC $OPTS_S -c mrs/shell-variants.c -o mrs/shell-variants.o
   $CC $OPTS_S -c mrs/server.c -o mrs/server.o
@@ -65,23 +70,29 @@ if [ $BUILD_SERVER = yes ]; then
 	mrs/build-fs.o mrs/shell.o mrs/shell-parse.o mrs/shell-variants.o \
 	mrs/server.o mrs/filesysslot.o mrs/filesysobj-fab.o mrs/filesysobj.o \
 	mrs/parse-filename.o mrs/comms.o mrs/region.o mrs/utils.o \
-	-lreadline -ltermcap -o mrs/shell
+	-lreadline -ltermcap `pkg-config gtk+-2.0 --libs` -o mrs/shell
+  $CC $OPTS_S  \
+	mrs/build-fs.o mrs/shell-nogtk.o mrs/shell-parse.o mrs/shell-variants.o \
+	mrs/server.o mrs/filesysslot.o mrs/filesysobj-fab.o mrs/filesysobj.o \
+	mrs/parse-filename.o mrs/comms.o mrs/region.o mrs/utils.o \
+	-lreadline -ltermcap -o mrs/shell-nogtk
 fi
 
 
 if [ $BUILD_LIBC = yes -o $BUILD_LDSO = yes ]; then
+  ./mrs/make-link-def.pl
 
   # Client: compiled with dietlibc, position-independent
   $CC $OPTS_C '-DHALF_NAME="client"' -c mrs/comms.c -o mrs/comms.os
   $CC $OPTS_C '-DHALF_NAME="client"' -DIN_RTLD -c mrs/comms.c -o mrs/rtld-comms.os
   $CC $OPTS_C -c mrs/region.c -o mrs/region.os
-  $CC $OPTS_C -c mrs/open.c -o mrs/open.os
+  $CC $OPTS_C -c mrs/dont-free.c -o mrs/dont-free.os
+  $CC $OPTS_C -c mrs/libc-misc.c -o mrs/libc-misc.os
   $CC $OPTS_C -c mrs/libc-comms.c -o mrs/libc-comms.os
   $CC $OPTS_C -c mrs/libc-fork-exec.c -o mrs/libc-fork-exec.os
   $CC $OPTS_C -c mrs/libc-connect.c -o mrs/libc-connect.os
 
   echo
-  echo Linking combined.os
   # NB. ordering of object files is important
   # --retain-symbols-file my-exports
   # The "-r" option is the same as "--relocateable", but in newer
@@ -92,14 +103,17 @@ if [ $BUILD_LIBC = yes -o $BUILD_LDSO = yes ]; then
   # May need io/fstat.oS (part of libc_nonshared.a), but if using
   # correct headers, will get an inline version instead that refers
   # to io/fxstat.os.  io/xstat64.os is needed to provide __have_no_stat64.
-  ld -r mrs/open.os mrs/libc-fork-exec.os mrs/libc-connect.os mrs/libc-comms.os mrs/comms.os mrs/region.os \
+  echo Linking combined.os
+  ld -r mrs/libc-misc.os mrs/libc-fork-exec.os mrs/libc-connect.os mrs/libc-comms.os mrs/comms.os mrs/region.os \
 	posix/fork.os posix/execve.os socket/connect.os \
 	io/fstat.oS io/fxstat.os io/xstat64.os io/xstatconv.os \
 	-o mrs/combined.os
   #ld -r mrs/combined1.os $DIET/bin-i386/dietlibc.a -o mrs/combined.os
   EXTRA="mrs/combined.os mrs/sysdeps/not-cancel.os"
 
-  ld -r mrs/open.os mrs/libc-comms.os mrs/rtld-comms.os mrs/region.os \
+  echo Linking rtld-combined.os
+  ld -r mrs/libc-misc.os mrs/libc-comms.os mrs/rtld-comms.os mrs/region.os \
+	mrs/dont-free.os \
 	socket/rtld-recvmsg.os socket/rtld-sendmsg.os socket/rtld-send.os socket/cmsg_nxthdr.os \
 	io/rtld-fstat.os io/rtld-fxstat.os io/rtld-xstat64.os io/rtld-xstatconv.os \
 	-o mrs/rtld-combined.os
@@ -110,7 +124,10 @@ if [ $BUILD_LIBC = yes -o $BUILD_LDSO = yes ]; then
   # is defined by xstat64.os.  Rather than mess around with linking to
   # xstat64.os but hiding its other symbols, I have just reimplemented
   # fstat{,64}.
-  EXCLUDE="io/open.os io/getcwd.os io/chdir.os io/fchdir.os
+  # open64.os used to be okay to leave in for glibc 2.2.5, because it
+  # was defined in terms of open().  But in 2.3.3 it includes a syscall.
+  EXCLUDE="io/open.os io/open64.os io/creat.os io/creat64.os
+	io/getcwd.os io/chdir.os io/fchdir.os
 	io/xmknod.os
 	io/xstat.os io/xstat64.os
 	io/lxstat.os io/lxstat64.os
@@ -150,51 +167,6 @@ if [ $BUILD_LIBC = yes -o $BUILD_LDSO = yes ]; then
   # of "fork", our one and dietlibc's.
   sh mrs/out-link_main.sh
   sh mrs/out-link_rtld.sh
-   #objcopy -G open -G __libc_open -G __open \
-   #	-G chdir -G __chdir -G fchdir -G __fchdir \
-   #	-G getcwd -G __getcwd \
-   #	-G __xstat \
-   #	-G __lxstat \
-   #	-G __fxstat \
-   #	-G __xstat64@@GLIBC_2.2 \
-   #	-G __lxstat64@@GLIBC_2.2 \
-   #	-G __fxstat64@@GLIBC_2.2 \
-   #	-G readlink -G __readlink \
-   #	-G new_access -G __access \
-   #	-G new_chmod -G __chmod \
-   #	-G new_chown \
-   #	-G link -G __link \
-   #	-G new_mkdir -G __mkdir \
-   #	-G new_mkfifo \
-   #	-G rmdir -G __rmdir \
-   #	-G new_statfs -G __statfs \
-   #	-G symlink -G __symlink \
-   #	-G unlink -G __unlink \
-   #	-G new_utime -G __utime \
-   #	-G __xmknod -G _xmknod \
-   #	-G new_connect -G __connect -G new_libc_connect \
-   #	-G opendir -G __opendir -G closedir -G __closedir \
-   #	-G readdir -G __readdir -G readdir64@@GLIBC_2.2 -G __readdir64 \
-   #	-G rewinddir \
-   #	-G telldir -G seekdir \
-   #	-G __getdents \
-   #	-G new_fork -G new_libc_fork -G __fork -G vfork -G __vfork \
-   #	-G new_execve -G __execve \
-   #	-G errno --redefine-sym glibc_getenv=getenv \
-   #	mrs/combined.os
-   #objcopy --redefine-sym new_fork=fork \
-   #	--redefine-sym new_libc_fork=__libc_fork \
-   #	--redefine-sym new_execve=execve \
-   #	--redefine-sym new_access=access \
-   #	--redefine-sym new_chmod=chmod \
-   #	--redefine-sym new_chown=chown \
-   #	--redefine-sym new_mkdir=mkdir \
-   #	--redefine-sym new_mkfifo=mkfifo \
-   #	--redefine-sym new_statfs=statfs \
-   #	--redefine-sym new_utime=utime \
-   #	--redefine-sym new_connect=connect \
-   #	--redefine-sym new_libc_connect=__libc_connect \
-   #	mrs/combined.os
 
   if false; then
     echo
@@ -256,6 +228,31 @@ if [ $BUILD_LDSO = yes ]; then
     ;;
   *) echo Unknown version ;;
  esac
+fi
+
+if [ $BUILD_LIBPTHREAD = yes ]; then
+  echo Linking libpthread.so
+  # For some reason, linuxthreads builds its own linuxthreads/libc.so
+  # and then links with it.  Why?
+
+  PTHREAD_OBJS="attr.os cancel.os condvar.os join.os manager.os mutex.os ptfork.os ptlongjmp.os pthread.os pt-sigsuspend.os signals.os specific.os errno.os lockfile.os semaphore.os spinlock.os rwlock.os pt-machine.os oldsemaphore.os events.os getcpuclockid.os pspinlock.os barrier.os ptclock_gettime.os ptclock_settime.os sighandler.os pthandles.os libc-tls-loc.os pt-allocrtsig.os
+	ptw-write.os ptw-read.os ptw-close.os ptw-fcntl.os ptw-recv.os ptw-recvfrom.os ptw-recvmsg.os ptw-send.os ptw-sendmsg.os ptw-sendto.os ptw-fsync.os ptw-lseek.os ptw-lseek64.os ptw-llseek.os ptw-msync.os ptw-nanosleep.os ptw-pause.os ptw-pread.os ptw-pread64.os ptw-pwrite.os ptw-pwrite64.os ptw-tcdrain.os ptw-wait.os ptw-waitpid.os
+	pt-system.os old_pthread_atfork.os pthread_atfork.os"
+  # removed:
+  # ptw-accept.os ptw-connect.os ptw-open.os ptw-open64.os
+  PTHREAD_OBJS2="mrs/sysdeps/linuxthreads-extras.os
+	`for F in $PTHREAD_OBJS; do echo linuxthreads/$F; done`"
+
+  $CC -shared -static-libgcc -Wl,-O1 -Wl,-z,defs \
+	-Wl,-dynamic-linker=/usr/local/lib/ld-linux.so.2 \
+	-Blinuxthreads -Bcsu \
+	-Wl,--version-script=libpthread.map -Wl,-soname=libpthread.so.0 \
+	-Wl,-z,combreloc \
+	-Wl,--enable-new-dtags,-z,nodelete \
+	-Wl,--enable-new-dtags,-z,initfirst \
+	-o mrs/libpthread.so \
+	-T shlib.lds \
+	csu/abi-note.o $PTHREAD_OBJS2 elf/interp.os linuxthreads/libc.so libc_nonshared.a elf/ld.so 
 fi
 
 if [ $BUILD_LIBC = yes ]; then

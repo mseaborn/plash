@@ -46,6 +46,13 @@ struct filesys_obj *resolve_file
   (region_t r, struct filesys_obj *root, struct dir_stack *cwd,
    seqf_t filename, int symlink_limit, int nofollow, int *err);
 
+int exec_for_scripts
+  (region_t r,
+   struct filesys_obj *root, struct dir_stack *cwd,
+   const char *cmd, int exec_fd, int argc, const char **argv,
+   int *exec_fd_out, int *argc_out, const char ***argv_out,
+   int *err);
+
 
 struct process {
   int sock_fd;
@@ -53,6 +60,26 @@ struct process {
   /* cwd may be null: processes may have an undefined current directory. */
   struct dir_stack *cwd;
 };
+
+struct process_list {
+  int id; /* 0 for the list head */
+  struct comm *comm;
+  struct process *proc;
+  struct process_list *prev, *next;
+};
+
+struct server_state {
+  struct process_list list;
+  int next_proc_id;
+
+  /* Arguments to select(): */
+  int max_fd;
+  fd_set set;
+
+  FILE *log; /* 0 if not doing logging */
+  int log_summary, log_messages;
+};
+
 /* This is the error given when trying to access something through the
    cwd when no cwd is defined.
    One choice is EACCES ("Permission denied"). */
@@ -60,10 +87,10 @@ struct process {
 
 struct filesys_obj *initial_dir(const char *pathname);
 struct process *process_create(void);
-void start_server(struct process *initial_proc);
-
-extern int server_log_messages;
-extern FILE *server_log;
+void init_server_state(struct server_state *state);
+void add_process(struct server_state *state, struct process *initial_proc);
+void remove_process(struct process_list *node);
+void run_server(struct server_state *state);
 
 #define SYMLINK_LIMIT 100
 

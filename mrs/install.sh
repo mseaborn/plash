@@ -45,6 +45,7 @@ else
 fi
 
 inst_hard_link () {
+  echo Installing $PREFIX$2
   ln -f $1 $PREFIX$2
 }
 
@@ -66,6 +67,7 @@ if [ -n "$MAIN_BIN_INSTALL" ]; then
 fi
 
 $INST mrs/libc.so $LIB_INSTALL/libc.so.6
+$INST mrs/libpthread.so $LIB_INSTALL/libpthread.so.0
 $INST crypt/libcrypt.so $LIB_INSTALL/libcrypt.so.1
 $INST dlfcn/libdl.so $LIB_INSTALL/libdl.so.2
 $INST nis/libnsl.so $LIB_INSTALL/libnsl.so.1
@@ -77,4 +79,3 @@ $INST resolv/libresolv.so $LIB_INSTALL/libresolv.so.2
 $INST resolv/libnss_dns.so $LIB_INSTALL/libnss_dns.so.2
 $INST rt/librt.so $LIB_INSTALL/librt.so.1
 $INST login/libutil.so $LIB_INSTALL/libutil.so.1
-$INST linuxthreads/libpthread.so $LIB_INSTALL/libpthread.so.0

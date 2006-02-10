@@ -41,11 +41,12 @@
 
 
 #define MOD_DEBUG 0
-#define MOD_LOG server_log_messages	/* logs input and output messages */
-#define MOD_SUMMARY 1	/* logs one-line summary of each input message */
 #define MOD_MSG "server: "
-int server_log_messages = 0;
-FILE *server_log = 0; /* need to set this before using this module */
+/* Logs whole messages and the replies */
+#define DO_LOG_MESSAGES(state) ((state)->log && (state)->log_messages)
+/* Logs one-line summary of each input message */
+#define DO_LOG_SUMMARY(state) ((state)->log && (state)->log_summary)
+FILE *server_log = 0;
 
 
 /* Takes a non-owning reference.  Returns an owning reference. */
@@ -756,22 +757,103 @@ seqt_t string_of_cwd(region_t r, struct dir_stack *dir)
   }
 }
 
+/* Checks for executables that are scripts using the `#!' syntax. */
+/* This is not done recursively.  If there's a script that says it should
+   be executed using another script, that won't work.  This is the
+   behaviour of Linux.  There didn't seem much point in generalising the
+   mechanism. */
+/* Takes an FD for an executable.  The initial executable is looked up
+   in the user's namespace.  But pathnames specified in the `#!' line
+   are looked up in the process's namespace. */
+/* Takes ownership of the FD it's given. */
+/* Returns -1 if there's an error. */
+int exec_for_scripts
+  (region_t r,
+   struct filesys_obj *root, struct dir_stack *cwd,
+   const char *cmd, int exec_fd, int argc, const char **argv,
+   int *exec_fd_out, int *argc_out, const char ***argv_out,
+   int *err)
+{
+  char buf[1024];
+  int got = 0;
+  
+  while(got < sizeof(buf)) {
+    int x = read(exec_fd, buf + got, sizeof(buf) - got);
+    if(x < 0) { *err = errno; return -1; }
+    if(x == 0) break;
+    got += x;
+  }
 
-struct process_list {
-  int id; /* 0 for the list head */
-  struct comm *comm;
-  struct process *proc;
-  struct process_list *prev, *next;
-};
+  /* No whitespace is allowed before the "#!" */
+  if(got >= 2 && buf[0] == '#' && buf[1] == '!') {
+    int icmd_start, icmd_end;
+    int arg_start, arg_end;
+    int i = 2;
+    seqf_t icmd;
+    region_t r2;
+    struct filesys_obj *obj;
+    int fd;
 
-struct server_state {
-  struct process_list list;
-  int next_proc_id;
+    close(exec_fd);
+    
+    while(i < got && buf[i] == ' ') i++; /* Skip spaces */
+    if(i >= got) { *err = EINVAL; return -1; }
+    icmd_start = i;
+    while(i < got && buf[i] != ' ' && buf[i] != '\n') i++; /* Skip to space */
+    if(i >= got) { *err = EINVAL; return -1; }
+    icmd_end = i;
+    while(i < got && buf[i] == ' ') i++; /* Skip spaces */
+    if(i >= got) { *err = EINVAL; return -1; }
+    arg_start = i;
+    while(i < got && buf[i] != '\n') i++; /* Skip to end of line */
+    if(i >= got) { *err = EINVAL; return -1; }
+    arg_end = i;
 
-  /* Arguments to select(): */
-  int max_fd;
-  fd_set set;
-};
+    icmd.data = buf + icmd_start;
+    icmd.size = icmd_end - icmd_start;
+    r2 = region_make();
+    obj = resolve_file(r2, root, cwd, icmd, SYMLINK_LIMIT,
+		       0 /* nofollow */, err);
+    region_free(r2);
+    if(!obj) return -1; /* Error */
+    fd = obj->vtable->open(obj, O_RDONLY, err);
+    filesys_obj_free(obj);
+    if(fd < 0) return -1; /* Error */
+
+    if(arg_end > arg_start) {
+      seqf_t arg = { buf + arg_start, arg_end - arg_start };
+      int i;
+      const char **argv2 = region_alloc(r, (argc + 2) * sizeof(char *));
+      argv2[0] = region_strdup_seqf(r, icmd);
+      argv2[1] = region_strdup_seqf(r, arg);
+      argv2[2] = cmd;
+      for(i = 1; i < argc; i++) argv2[i+2] = argv[i];
+      *exec_fd_out = fd;
+      *argc_out = argc + 2;
+      *argv_out = argv2;
+      return 0;
+    }
+    else {
+      int i;
+      const char **argv2 = region_alloc(r, (argc + 2) * sizeof(char *));
+      argv2[0] = region_strdup_seqf(r, icmd);
+      argv2[1] = cmd;
+      for(i = 1; i < argc; i++) argv2[i+1] = argv[i];
+      *exec_fd_out = fd;
+      *argc_out = argc + 1;
+      *argv_out = argv2;
+      return 0;
+    }
+  }
+  else {
+    /* Assume an ELF executable. */
+    *exec_fd_out = exec_fd;
+    *argc_out = argc;
+    *argv_out = argv;
+    return 0;
+  }
+}
+
 
 /* Sets up the arguments to select().  Needs to be called every time the
    process list is changed. */
@@ -811,6 +893,8 @@ void process_handle_msg(region_t r, struct server_state *state,
 		      mk_int(r, errno));
 	return;
       }
+      set_close_on_exec_flag(socks[0], 1);
+      set_close_on_exec_flag(socks[1], 1);
       proc2 = process_copy(proc);
       proc2->sock_fd = socks[1];
       node_new = amalloc(sizeof(struct process_list));
@@ -843,51 +927,59 @@ void process_handle_msg(region_t r, struct server_state *state,
       int extra_args = 5;
       int buf_size = 40;
       char *buf = region_alloc(r, buf_size);
-      seqf_t *argv;
-      seqf_t *argv2;
+      const char **argv, **argv2;
       seqf_t cmd_filename2;
       int i;
       int err;
       struct filesys_obj *obj;
+      int fd;
       
       argv = region_alloc(r, argc * sizeof(seqf_t));
       for(i = 0; i < argc; i++) {
-	m_lenblock(&ok, &msg, &argv[i]);
+	seqf_t arg;
+	m_lenblock(&ok, &msg, &arg);
+	argv[i] = region_strdup_seqf(r, arg);
 	if(!ok) goto exec_error;
       }
+      
+      obj = resolve_file(r, proc->root, proc->cwd, cmd_filename,
+			 SYMLINK_LIMIT, 0 /* nofollow */, &err);
+      if(!obj) goto exec_fail;
+      fd = obj->vtable->open(obj, O_RDONLY, &err);
+      filesys_obj_free(obj);
+      if(fd < 0) goto exec_fail;
+
+      if(exec_for_scripts(r, proc->root, proc->cwd,
+			  region_strdup_seqf(r, cmd_filename), fd, argc, argv,
+			  &fd, &argc, &argv, &err) < 0) goto exec_fail;
       
       argv2 = region_alloc(r, (argc + extra_args) * sizeof(seqf_t));
       argv2[0] = argv[0];
       cmd_filename2 = seqf_string("/special/ld-linux.so.2");
-      argv2[1] = seqf_string("--library-path");
-      argv2[2] = seqf_string(LIB_INSTALL ":/lib:/usr/lib:/usr/X11R6/lib");
-      argv2[3] = seqf_string("--fd");
+      argv2[1] = "--library-path";
+      argv2[2] = PLASH_LD_LIBRARY_PATH;
+      argv2[3] = "--fd";
       snprintf(buf, buf_size, "%i", fd_number);
-      argv2[4] = seqf_string(buf);
+      argv2[4] = buf;
       for(i = 0; i < argc; i++) argv2[i + extra_args] = argv[i];
 
-      obj = resolve_file(r, proc->root, proc->cwd, cmd_filename,
-			 SYMLINK_LIMIT, 0 /* nofollow */, &err);
-      if(obj) {
-	int fd = obj->vtable->open(obj, O_RDONLY, &err);
-	filesys_obj_free(obj);
-	if(fd >= 0) {
-	  seqt_t got = seqt_empty;
-	  int i;
-	  for(i = 0; i < argc + extra_args; i++) {
-	    got = cat3(r, got,
-		       mk_int(r, argv2[i].size),
-		       mk_leaf(r, argv2[i]));
-	  }
-	  *reply = cat5(r, mk_string(r, "RExe"),
-			mk_int(r, cmd_filename2.size),
-			mk_leaf(r, cmd_filename2),
-			mk_int(r, argc + extra_args),
-			got);
-	  *reply_fds = mk_fds1(r, fd);
-	  return;
+      {
+	seqt_t got = seqt_empty;
+	int i;
+	for(i = 0; i < argc + extra_args; i++) {
+	  got = cat3(r, got,
+		     mk_int(r, strlen(argv2[i])),
+		     mk_string(r, argv2[i]));
 	}
+	*reply = cat5(r, mk_string(r, "RExe"),
+		      mk_int(r, cmd_filename2.size),
+		      mk_leaf(r, cmd_filename2),
+		      mk_int(r, argc + extra_args),
+		      got);
+	*reply_fds = mk_fds1(r, fd);
+	return;
       }
+    exec_fail:
       *reply = cat2(r, mk_string(r, "Fail"),
 		    mk_int(r, err));
       return;
@@ -910,20 +1002,20 @@ void process_handle_msg(region_t r, struct server_state *state,
 	*reply = mk_string(r, "ROpn");
 	*reply_fds = mk_fds1(r, fd);
 
-	if(MOD_SUMMARY) {
-	  fprintf(server_log, "open: flags=0o%o, mode=0o%o, ", flags, mode);
-	  fprint_d(server_log, pathname);
-	  fprintf(server_log, ": ok\n");
+	if(DO_LOG_SUMMARY(state)) {
+	  fprintf(state->log, "open: flags=0o%o, mode=0o%o, ", flags, mode);
+	  fprint_d(state->log, pathname);
+	  fprintf(state->log, ": ok\n");
 	}
       }
       else {
 	*reply = cat2(r, mk_string(r, "Fail"),
 		      mk_int(r, err));
 
-	if(MOD_SUMMARY) {
-	  fprintf(server_log, "open: flags=0o%o, mode=0o%o, ", flags, mode);
-	  fprint_d(server_log, pathname);
-	  fprintf(server_log, ": fail errno=%i\n", err);
+	if(DO_LOG_SUMMARY(state)) {
+	  fprintf(state->log, "open: flags=0o%o, mode=0o%o, ", flags, mode);
+	  fprint_d(state->log, pathname);
+	  fprintf(state->log, ": fail errno=%i\n", err);
 	}
       }
       return;
@@ -971,20 +1063,20 @@ void process_handle_msg(region_t r, struct server_state *state,
 			   mk_int(r, stat.st_mtime),
 			   mk_int(r, stat.st_ctime)));
 
-	if(MOD_SUMMARY) {
-	  fprintf(server_log, "%s: ", nofollow ? "lstat" : "stat");
-	  fprint_d(server_log, pathname);
-	  fprintf(server_log, ": ok\n");
+	if(DO_LOG_SUMMARY(state)) {
+	  fprintf(state->log, "%s: ", nofollow ? "lstat" : "stat");
+	  fprint_d(state->log, pathname);
+	  fprintf(state->log, ": ok\n");
 	}
       }
       else {
 	*reply = cat2(r, mk_string(r, "Fail"),
 		      mk_int(r, err));
 
-	if(MOD_SUMMARY) {
-	  fprintf(server_log, "%s: ", nofollow ? "lstat" : "stat");
-	  fprint_d(server_log, pathname);
-	  fprintf(server_log, ": fail errno=%i\n", err);
+	if(DO_LOG_SUMMARY(state)) {
+	  fprintf(state->log, "%s: ", nofollow ? "lstat" : "stat");
+	  fprint_d(state->log, pathname);
+	  fprintf(state->log, ": fail errno=%i\n", err);
 	}
       }
       return;
@@ -1132,10 +1224,10 @@ void process_handle_msg(region_t r, struct server_state *state,
 	filesys_obj_free(obj);
 	*reply = mk_string(r, "RAcc");
 
-	if(MOD_SUMMARY) {
-	  fprintf(server_log, "access: ");
-	  fprint_d(server_log, pathname);
-	  fprintf(server_log, ": ok\n");
+	if(DO_LOG_SUMMARY(state)) {
+	  fprintf(state->log, "access: ");
+	  fprint_d(state->log, pathname);
+	  fprintf(state->log, ": ok\n");
 	}
       }
       else if(rc == RESOLVED_DIR) {
@@ -1143,20 +1235,20 @@ void process_handle_msg(region_t r, struct server_state *state,
 	dir_stack_free(ds);
 	*reply = mk_string(r, "RAcc");
 
-	if(MOD_SUMMARY) {
-	  fprintf(server_log, "access: ");
-	  fprint_d(server_log, pathname);
-	  fprintf(server_log, ": ok\n");
+	if(DO_LOG_SUMMARY(state)) {
+	  fprintf(state->log, "access: ");
+	  fprint_d(state->log, pathname);
+	  fprintf(state->log, ": ok\n");
 	}
       }
       else {
 	*reply = cat2(r, mk_string(r, "Fail"),
 		      mk_int(r, err));
 
-	if(MOD_SUMMARY) {
-	  fprintf(server_log, "access: ");
-	  fprint_d(server_log, pathname);
-	  fprintf(server_log, ": fail errno=%i\n", err);
+	if(DO_LOG_SUMMARY(state)) {
+	  fprintf(state->log, "access: ");
+	  fprint_d(state->log, pathname);
+	  fprintf(state->log, ": fail errno=%i\n", err);
 	}
       }
       return;
@@ -1268,48 +1360,67 @@ void process_handle_msg(region_t r, struct server_state *state,
     }
   }
 
-  fprintf(server_log, "Unknown message!\n");
+  if(DO_LOG_SUMMARY(state)) fprintf(state->log, "Unknown message!\n");
   /* Send a Fail reply. */
   *reply = cat2(r, mk_string(r, "Fail"),
 		mk_int(r, ENOSYS));
 }
 
 
-void start_server(struct process *initial_proc)
+void init_server_state(struct server_state *state)
 {
-  struct server_state state;
-  state.list.id = 0;
-  state.list.prev = &state.list;
-  state.list.next = &state.list;
-  state.next_proc_id = 1;
+  state->list.id = 0;
+  state->list.prev = &state->list;
+  state->list.next = &state->list;
+  state->next_proc_id = 1;
 
-  /* Insert the initial process into the list */
-  {
-    struct process_list *node_new = amalloc(sizeof(struct process_list));
-    node_new->id = state.next_proc_id++;
-    node_new->comm = comm_init(initial_proc->sock_fd);
-    node_new->proc = initial_proc;
-    node_new->prev = state.list.prev;
-    node_new->next = &state.list;
-    state.list.prev->next = node_new;
-    state.list.prev = node_new;
-  }
-  init_fd_set(&state);
+  state->log = 0;
+  state->log_summary = 0;
+  state->log_messages = 0;
+}
 
-  while(state.list.next->id) { /* while the process list is non-empty */
+/* Insert a process into the server's list of processes. */
+void add_process(struct server_state *state, struct process *initial_proc)
+{
+  struct process_list *node_new = amalloc(sizeof(struct process_list));
+  node_new->id = state->next_proc_id++;
+  node_new->comm = comm_init(initial_proc->sock_fd);
+  node_new->proc = initial_proc;
+  node_new->prev = state->list.prev;
+  node_new->next = &state->list;
+  state->list.prev->next = node_new;
+  state->list.prev = node_new;
+}
+
+void remove_process(struct process_list *node)
+{
+  if(close(node->comm->sock) > 0) perror("close");
+  comm_free(node->comm);
+  process_free(node->proc);
+  node->prev->next = node->next;
+  node->next->prev = node->prev;
+  free(node);
+}
+
+void run_server(struct server_state *state)
+{
+  init_fd_set(state);
+
+  while(state->list.next->id) { /* while the process list is non-empty */
     int result;
+    fd_set read_fds = state->set;
     /* struct timeval timeout; */
     /* timeout.tv_sec = 0;
        timeout.tv_usec = 0; */
     
     if(MOD_DEBUG) fprintf(server_log, MOD_MSG "calling select()\n");
-    result = select(state.max_fd, &state.set, 0, 0, 0 /* &timeout */);
+    result = select(state->max_fd, &read_fds, 0, 0, 0 /* &timeout */);
     if(result < 0) { perror("select"); }
 
     {
       struct process_list *node;
-      for(node = state.list.next; node->id && result > 0; node = node->next) {
-	if(FD_ISSET(node->comm->sock, &state.set)) {
+      for(node = state->list.next; node->id && result > 0; node = node->next) {
+	if(FD_ISSET(node->comm->sock, &read_fds)) {
 	  int r;
 	  seqf_t msg;
 	  fds_t fds;
@@ -1318,17 +1429,12 @@ void start_server(struct process *initial_proc)
 	  r = comm_read(node->comm);
 	  if(r < 0 || r == COMM_END) {
 	    struct process_list *node_next = node->next;
-	    if(MOD_LOG) fprintf(server_log, "\nprocess %i error/end\n", node->id);
+	    if(DO_LOG_MESSAGES(state)) fprintf(state->log, "\nprocess %i error/end\n", node->id);
 
 	    /* Close socket and remove process from list */
-	    close(node->comm->sock);
-	    comm_free(node->comm);
-	    process_free(node->proc);
-	    node->prev->next = node->next;
-	    node->next->prev = node->prev;
-	    free(node);
+	    remove_process(node);
 	    node = node_next;
-	    init_fd_set(&state);
+	    init_fd_set(state);
 	  }
 	  else while(1) {
 	    r = comm_try_get(node->comm, &msg, &fds);
@@ -1336,15 +1442,15 @@ void start_server(struct process *initial_proc)
 	      region_t r = region_make();
 	      seqt_t reply = seqt_empty;
 	      fds_t reply_fds = fds_empty;
-	      if(MOD_LOG) {
-		fprintf(server_log, "\nmessage from process %i\n", node->id);
-		fprint_data(server_log, msg);
+	      if(DO_LOG_MESSAGES(state)) {
+		fprintf(state->log, "\nmessage from process %i\n", node->id);
+		fprint_data(state->log, msg);
 	      }
 	      process_check(node->proc);
-	      process_handle_msg(r, &state, node->proc, msg, fds, &reply, &reply_fds);
-	      if(MOD_LOG) {
-		fprintf(server_log, "reply with %i FDs and this data:\n", reply_fds.count);
-		fprint_data(server_log, flatten(r, reply));
+	      process_handle_msg(r, state, node->proc, msg, fds, &reply, &reply_fds);
+	      if(DO_LOG_MESSAGES(state)) {
+		fprintf(state->log, "reply with %i FDs and this data:\n", reply_fds.count);
+		fprint_data(state->log, flatten(r, reply));
 	      }
 	      comm_send(r, node->proc->sock_fd, reply, reply_fds);
 	      close_fds(fds);

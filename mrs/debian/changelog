@@ -1,3 +1,20 @@
+plash (1.2) unstable; urgency=low
+
+  * Added support for `#!' scripts (to both the shell and the server).
+  * Add the ability to run programs conventionally with the `!!' prefix.
+  * Add pipes.
+  * Fix bug in server that caused it to ignore processes when there are
+    multiple processes.
+  * Added options window that can be used to turn debugging output on.
+    Can be opened using the "opts" command.
+  * Build libpthread.so so that it doesn't contain filesystem syscalls.
+    The relevant functions are now forwarded to libc.so.
+  * Remove glibc's io/open64.os from the link.  This includes a syscall,
+    but didn't in an earlier glibc.  This is a rather embarrassing bug
+    because it shows I didn't do much testing -- even cat uses open64().
+
+ -- Mark Seaborn <mseaborn@jhu.edu>  Fri, 17 Dec 2004 04:15:08 +0000
+
 plash (1.1) unstable; urgency=low
 
   * Added job control.

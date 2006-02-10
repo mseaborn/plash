@@ -28,4 +28,5 @@
   echo "#define JAIL_DIR \"$JAIL_DIR\""
   echo "#define BIN_INSTALL \"$BIN_INSTALL\""
   echo "#define LIB_INSTALL \"$LIB_INSTALL\""
+  echo "#define PLASH_LD_LIBRARY_PATH \"$PLASH_LD_LIBRARY_PATH\""
 ) >mrs/config.h

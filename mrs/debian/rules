@@ -38,23 +38,12 @@ binary-arch:	checkroot
 	cp -a README debian/tmp/usr/share/doc/$(package)/
 	# Could use "cp -a A B" instead of "strip A -o B"
 	strip ../mrs/shell -o debian/tmp/usr/bin/plash
+	strip ../mrs/shell-nogtk -o debian/tmp/usr/bin/plash-nogtk
 	strip ../mrs/run-as-nobody -o debian/tmp/usr/lib/plash/run-as-nobody
 	strip ../mrs/run-as-nobody+chroot -o debian/tmp/usr/lib/plash/run-as-nobody+chroot
 	strip ../mrs/ld.so -o $(chroot_jail)/special/ld-linux.so.2
-	strip ../mrs/libc.so -o $(libdir)/libc.so.6
-	strip ../crypt/libcrypt.so -o $(libdir)/libcrypt.so.1
-	strip ../dlfcn/libdl.so -o $(libdir)/libdl.so.2
-	strip ../nis/libnsl.so -o $(libdir)/libnsl.so.1
-	strip ../nis/libnss_compat.so -o $(libdir)/libnss_compat.so.2
-	strip ../nis/libnss_nisplus.so -o $(libdir)/libnss_nisplus.so.2
-	strip ../nis/libnss_nis.so -o $(libdir)/libnss_nis.so.2
-	strip ../nss/libnss_files.so -o $(libdir)/libnss_files.so.2
-	strip ../resolv/libresolv.so -o $(libdir)/libresolv.so.2
-	strip ../resolv/libnss_dns.so -o $(libdir)/libnss_dns.so.2
-	strip ../rt/librt.so -o $(libdir)/librt.so.1
-	strip ../login/libutil.so -o $(libdir)/libutil.so.1
-	strip ../linuxthreads/libpthread.so -o $(libdir)/libpthread.so.0
-	dpkg-shlibdeps shell
+	cp -av inst_stripped/lib/* $(libdir)/
+	dpkg-shlibdeps shell shell-nogtk
 	dpkg-gencontrol -isp
 	chown -R root.root debian/tmp
 	chmod -R g-ws debian/tmp

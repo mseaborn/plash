@@ -17,6 +17,9 @@
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
    USA.  */
 
+/* Needed to get O_LARGEFILE */
+#define _LARGEFILE64_SOURCE
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
@@ -85,6 +88,31 @@ int new_open(const char *filename, int flags, ...)
  error:
   region_free(r);
   return -1;
+}
+
+/* EXPORT: new_open64 => WEAK:open64 WEAK:__open64 __libc_open64 __GI___open64 */
+int new_open64(const char *filename, int flags, ...)
+{
+  int mode = 0;
+  if(flags & O_CREAT) {
+    va_list arg;
+    va_start(arg, flags);
+    mode = va_arg(arg, int);
+    va_end(arg);
+  }
+  return new_open(filename, flags | O_LARGEFILE, mode);
+}
+
+/* EXPORT: new_creat => WEAK:creat __libc_creat __GI_creat __GI___libc_creat */
+int new_creat(const char *filename, int mode)
+{
+  return new_open(filename, O_WRONLY | O_CREAT | O_TRUNC, mode);
+}
+
+/* EXPORT: new_creat64 => creat64 */
+int new_creat64(const char *filename, int mode)
+{
+  return new_open64(filename, O_WRONLY | O_CREAT | O_TRUNC, mode);
 }
 
 /* EXPORT: new_getcwd => WEAK:getcwd __getcwd */
@@ -1210,4 +1238,4 @@ int new_statfs(const char *path, void *buf) // struct statfs *buf
 }
 
 
-#include "out-aliases_open.h"
+#include "out-aliases_libc-misc.h"

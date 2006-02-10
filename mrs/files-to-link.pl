@@ -130,7 +130,7 @@ foreach my $x (@files) {
 foreach my $f (keys(%$excl)) {
   if($excl->{$f} <= 1) { print STDERR "Did not exclude $f\n" }
   else {
-    print STDERR "Did exclude $f\n"
+    # print STDERR "Did exclude $f\n"
   }
 }
 

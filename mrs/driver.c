@@ -93,6 +93,8 @@ int main()
     perror("socketpair");
     return 1;
   }
+  set_close_on_exec_flag(socks[0], 1);
+  set_close_on_exec_flag(socks[1], 1);
 
   pid = fork();
   if(pid == 0) {

@@ -65,6 +65,7 @@ my $defs =
        ['arg_ambient', ['f arg_list']],
        ['arg_string', ['s char_cons']],
        ['arg_filename', ['f char_cons']],
+       ['arg_glob_filename', ['f char_cons']],
       ]
   },
   { Name => 'file_list',
@@ -72,11 +73,21 @@ my $defs =
   },
   { Name => 'command',
     Variants =>
-      [['command', ['c char_cons', 'a arg_list', 'bg_flag T int']],
+      [['command', ['pl pipeline', 'bg_flag T int']],
        ['chdir', ['f char_cons']],
        ['command_fg', ['job char_cons']],
        ['command_bg', ['job char_cons']],
       ]
+  },
+  { Name => 'pipeline',
+    Variants =>
+      [['pipeline_cons', ['inv invocation', 'pl pipeline']],
+       ['pipeline_inv', ['inv invocation']]
+      ]
+  },
+  { Name => 'invocation',
+    Variants =>
+      [['invocation', ['no_sec T int', 'c char_cons', 'a arg_list']]]
   },
 ];
 

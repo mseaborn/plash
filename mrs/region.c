@@ -36,6 +36,12 @@
 
 #define STATS 1
 
+struct finaliser_cons {
+  void (*finalise)(void *obj);
+  void *obj;
+  struct finaliser_cons *next;
+};
+
 /* This is the header for each malloc()'d page.  The pages form a
    linked list. */
 struct region_page {
@@ -51,6 +57,7 @@ struct region {
   struct region_page **last; /* Used to add new pages to the list */
   char *free; /* Pointer to next free byte */
   int avail; /* Bytes available in last page */
+  struct finaliser_cons *finalisers;
 };
 
 region_t region_make()
@@ -70,12 +77,18 @@ region_t region_make()
   r->last = &r->h.next;
   r->free = ((char *) r) + sizeof(struct region);
   r->avail = size;
+  r->finalisers = 0;
   return r;
 }
 
 void region_free(region_t r)
 {
-  struct region_page *b = &r->h; /* NB. This is equal to r */
+  struct region_page *b;
+
+  struct finaliser_cons *c;
+  for(c = r->finalisers; c; c = c->next) c->finalise(c->obj);
+  
+  b = &r->h; /* NB. This is equal to r */
   while(b) {
     struct region_page *next = b->next;
     free(b);
@@ -115,6 +128,15 @@ void *region_alloc(region_t r, size_t size)
     r->avail = s2 - s;
     return ((char *) b) + sizeof(struct region_page);
   }
+}
+
+void region_add_finaliser(region_t r, void (*f)(void *obj), void *obj)
+{
+  struct finaliser_cons *c = region_alloc(r, sizeof(struct finaliser_cons));
+  c->finalise = f;
+  c->obj = obj;
+  c->next = r->finalisers;
+  r->finalisers = c;
 }
 
 #ifdef STATS

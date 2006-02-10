@@ -23,8 +23,18 @@ command =
   / "cd" ws {{ mk_chdir(r, char_cons(r, '~', 0)) }}
   / "fg" ws n:number ws {{ mk_command_fg(r, n) }}
   / "bg" ws n:number ws {{ mk_command_bg(r, n) }}
-  / c:pathname a:arglist1 bg_flag:(ampersand {{ 1 }} / null {{ 0 }})
-	{{ mk_command(r, c, a, bg_flag) }};
+  / cmd:pipeline bg_flag:(ampersand {{ 1 }} / null {{ 0 }})
+	{{ mk_command(r, cmd, bg_flag) }};
+
+pipeline =
+    inv:invocation pipe_bar pl:pipeline {{ mk_pipeline_cons(r, inv, pl) }}
+  / inv:invocation {{ mk_pipeline_inv(r, inv) }};
+
+invocation =
+  no_sec:(bang_bang {{ 1 }} / null {{ 0 }})
+  cmd:pathname
+  args:arglist1
+    {{ mk_invocation(r, no_sec, cmd, args) }};
 
 arglist1 = a1:arglist2 arrow a2:arglist2
              {{ mk_arg_cat(r, mk_arg_read(r, a1), mk_arg_write(r, a2)) }}
@@ -45,11 +55,17 @@ arglist4 = c_open l:arglist1 c_close {{ l }}
 arg = s:option {{ mk_arg_string(r, s) }}
     / s:string_literal {{ mk_arg_string(r, s) }}
     / f:pathname {{ mk_arg_filename(r, f) }};
+#    / f:glob_pathname {{ mk_arg_glob_filename(r, f) }};
 
 # pathname = s:(!wschar c:char {{ (void*) c }})+ ws;
 pathname = !(![a-zA-Z0-9_/.~]) s:pathname_aux ws {{ s }};
-pathname_aux = c:(!(wschar / '&') c:char {{ (void*) c }})
+pathname_aux = c:(!(wschar / [&|*]) c:char {{ (void*) c }})
                rest:(pathname_aux / null {{ 0 }})
+               {{ char_cons(r, (int) c, rest) }};
+
+glob_pathname = !(![a-zA-Z0-9_/.~*]) s:glob_pathname_aux ws {{ s }};
+glob_pathname_aux = c:(!(wschar / [&|]) c:char {{ (void*) c }})
+               rest:(glob_pathname_aux / null {{ 0 }})
                {{ char_cons(r, (int) c, rest) }};
 
 
@@ -78,7 +94,9 @@ number = c:[0-9] rest:(number / null {{ 0 }}) {{ char_cons(r, (int) c, rest) }};
 c_open = '{' ws;
 c_close = '}' ws;
 arrow = "=>" ws;
-plus = "+" ws;
-ampersand = "&" ws;
+plus = '+' ws;
+ampersand = '&' ws;
+pipe_bar = '|' ws;
+bang_bang = "!!" ws;
 ws = (wschar / '#' (!'\n' .)* '\n')*;
 wschar = ' ' / '\t' / '\n';

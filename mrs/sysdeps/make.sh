@@ -31,3 +31,6 @@ gcc-3.3 not-cancel.c -c -std=gnu99 -O2 \
 	-D_LIBC_REENTRANT -include $srcdir/include/libc-symbols.h -DPIC -DSHARED \
 	-DHAVE_INITFINI -o not-cancel.os \
 	-MD -MP -MF not-cancel.os.dt
+
+gcc-3.3 linuxthreads-extras.c -c -O2 -Wall -fPIC -g \
+	-o linuxthreads-extras.os

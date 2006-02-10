@@ -20,6 +20,10 @@
 /* Needed for strsignal() */
 #define _GNU_SOURCE
 
+#ifdef USE_GTK
+#include <gtk/gtk.h>
+#endif
+
 #include <stdio.h>
 #include <errno.h>
 #include <unistd.h>
@@ -43,6 +47,13 @@
 
 int f_command(region_t r, const char *pos_in1, const char *end,
 	      const char **pos_out_p, void **ok_val_p);
+
+
+void finalise_close_fd(void *obj)
+{
+  int fd = (int) obj;
+  if(close(fd) < 0) { perror("close"); }
+}
 
 
 #define ST_RUNNING 0
@@ -72,7 +83,55 @@ struct shell_state {
   int next_job_id;
   struct job jobs;
   struct termios tmodes; /* Saved terminal state */
+
+  int log_summary;
+  int log_messages;
+  int log_into_xterm;
+  int print_fs_tree;
 };
+
+/* Used for starting processes */
+/* This is all allocated into a region, including FDs, which have
+   finalisers added to the region. */
+struct process_desc {
+  /* This function is run inside the forked process. */
+  void (*set_up_process)(struct process_desc *desc);
+  const char *cmd;
+  int argc; /* Not really needed */
+  const char **argv; /* Array needs to include null terminator */
+  fds_t fds;
+};
+struct process_desc_nosec {
+  struct process_desc d;
+  /* For processes started the conventional way, we need to set the cwd
+     to the shell's logical cwd. */
+  int cwd_fd;
+};
+void set_up_sec_process(struct process_desc *desc) {
+  /* char buf[10];
+     snprintf(buf, sizeof(buf), "%i", socks[1]); */
+  setenv("COMM_FD", "3", 1);
+  /* Necessary for security when using run-as-nobody, otherwise the
+     process can be left in a directory with read/write access which
+     might not be reachable from the root directory. */
+  /* Not necessary for run-as-nobody+chroot. */
+  if(chdir("/") < 0) { perror("plash: chdir"); exit(1); }
+}
+void set_up_nosec_process(struct process_desc *desc1) {
+  struct process_desc_nosec *desc = (void *) desc1;
+  if(fchdir(desc->cwd_fd) < 0) {
+    /* This should fail, because it might be dangerous if the command
+       is run in the wrong directory, eg. "rm -rv ." */
+    perror("plash: fchdir");
+    exit(1);
+  }
+}
+
+struct process_desc_list {
+  struct process_desc *proc;
+  struct process_desc_list *next;
+};
+
 
 #define USE_CHROOT 1
 #define MOD_DEBUG 0
@@ -134,37 +193,39 @@ struct flatten_params {
   struct node *tree;
   struct dir_stack *cwd;
 };
-void flatten_args(region_t r, struct flatten_params *p,
-		  int rw, int ambient, struct arg_list *args)
+struct flatten_params_nosec {
+  struct str_list *got;
+};
+
+/* Returns 0 if ok, non-zero for an error. */
+int flatten_args(region_t r, struct flatten_params *p,
+		 int rw, int ambient, struct arg_list *args)
 {
-  if(m_arg_empty(args)) return;
+  if(m_arg_empty(args)) return 0;
   {
     struct arg_list *a1, *a2;
     if(m_arg_cat(args, &a1, &a2)) {
-      flatten_args(r, p, rw, ambient, a1);
-      flatten_args(r, p, rw, ambient, a2);
-      return;
+      return
+	flatten_args(r, p, rw, ambient, a1) ||
+	flatten_args(r, p, rw, ambient, a2);
     }
   }
   {
     struct arg_list *a;
     if(m_arg_read(args, &a)) {
-      flatten_args(r, p, 0, ambient, a);
-      return;
+      return flatten_args(r, p, 0, ambient, a);
     }
   }
   {
     struct arg_list *a;
     if(m_arg_write(args, &a)) {
-      flatten_args(r, p, 1, ambient, a);
-      return;
+      return flatten_args(r, p, 1, ambient, a);
     }
   }
   {
     struct arg_list *a;
     if(m_arg_ambient(args, &a)) {
-      flatten_args(r, p, rw, 1, a);
-      return;
+      return flatten_args(r, p, rw, 1, a);
     }
   }
   {
@@ -185,11 +246,14 @@ void flatten_args(region_t r, struct flatten_params *p,
 	l->prev = p->got;
 	p->got = l;
       }
-      
-      /*printf("filename: ");
-      fprint_d(stdout, filename);
-      printf("\n");*/
-      return;
+      return 0;
+    }
+  }
+  {
+    struct char_cons *f;
+    if(m_arg_glob_filename(args, &f)) {
+      printf("plash: globbing not implemented\n");
+      return 1;
     }
   }
   {
@@ -205,14 +269,75 @@ void flatten_args(region_t r, struct flatten_params *p,
       else {
 	printf("warning: string argument \"%s\" in ambient arg list (ignored)\n", string.data);
       }
-      
-      /*printf("string: ");
-      fprint_d(stdout, string);
-      printf("\n");*/
-      return;
+      return 0;
     }
   }
-  printf("unknown!\n"); assert(0);
+  assert(0);
+  return 1;
+}
+
+int flatten_args_nosec(region_t r, struct flatten_params_nosec *p,
+		       struct arg_list *args)
+{
+  if(m_arg_empty(args)) return 0;
+  {
+    struct arg_list *a1, *a2;
+    if(m_arg_cat(args, &a1, &a2)) {
+      return
+	flatten_args_nosec(r, p, a1) ||
+	flatten_args_nosec(r, p, a2);
+    }
+  }
+  {
+    struct arg_list *a;
+    if(m_arg_read(args, &a)) {
+      return flatten_args_nosec(r, p, a);
+    }
+  }
+  {
+    struct arg_list *a;
+    if(m_arg_write(args, &a)) {
+      return flatten_args_nosec(r, p, a);
+    }
+  }
+  {
+    struct arg_list *a;
+    if(m_arg_ambient(args, &a)) {
+      printf("plash: ambient args list ignored\n");
+      return 0;
+    }
+  }
+  {
+    struct char_cons *f;
+    if(m_arg_filename(args, &f)) {
+      seqf_t filename = tilde_expansion(r, flatten_charlist(r, f));
+      struct str_list *l = region_alloc(r, sizeof(struct str_list));
+      l->str = (char*) filename.data;
+      l->prev = p->got;
+      p->got = l;
+      return 0;
+    }
+  }
+  {
+    struct char_cons *f;
+    if(m_arg_glob_filename(args, &f)) {
+      printf("plash: globbing not implemented\n");
+      return 1;
+    }
+  }
+  {
+    struct char_cons *s;
+    if(m_arg_string(args, &s)) {
+      seqf_t string = flatten_charlist(r, s);
+      struct str_list *l = region_alloc(r, sizeof(struct str_list));
+      l->str = (char*) string.data;
+      l->prev = p->got;
+      p->got = l;
+      return 0;
+    }
+  }
+  assert(0);
+  return 1;
 }
 
 extern char **environ;
@@ -231,85 +356,6 @@ void print_wait_status(int status)
   else printf("unknown");
 }
 
-#if 0
-#define INTERPRETER_LIMIT 1
-
-int do_exec(struct filesys_obj *root, const char *cmd, int argc, char **argv,
-	    int interpreter_limit, int *err)
-{
-  region_t r = region_make();
-  filesys_obj *obj =
-    resolve_file(r, root, 0 /* cwd */, seqf_string(cmd), SYMLINK_LIMIT,
-		 0 /* nofollow */, err);
-  region_free(r);
-  if(obj) {
-    int fd = obj->vtable->open(obj, O_RDONLY, 0, &err);
-    if(fd >= 0) {
-      char buf[1024];
-      int got = 0;
-      filesys_obj_free(obj);
-      
-      while(got < sizeof(buf)) {
-	int i;
-	int x = read(fd, buf + got, sizeof(buf) - got);
-	if(x < 0) { *err = errno; return -1; }
-	if(x == 0) break;
-	got += x;
-      }
-
-      /* No whitespace is allowed before the "#!" */
-      if(got >= 2 && buf[0] == '#' && buf[1] == '!') {
-	int icmd_start, icmd_end;
-	int i = 2;
-
-	if(interpreter_limit <= 0) { *err = ELOOP; return -1; }
-	
-	while(i < got && buf[i] == ' ') i++; /* Skip spaces */
-	if(i >= got) { *err = EINVAL; return -1; }
-	icmd_start = i;
-	while(i < got && buf[i] != ' ' && buf[i] != '\n') i++;
-	if(i >= got) { *err = EINVAL; return -1; }
-	icmd_end = i;
-	while(i < got && buf[i] == ' ') i++; /* Skip spaces */
-	if(i >= got) { *err = EINVAL; return -1; }
-	arg_start = i;
-	while(i < got && buf[i] != ' ' && buf[i] != '\n') i++;
-	if(i >= got) { *err = EINVAL; return -1; }
-	arg_end = i;
-
-	buf[icmd_end] = 0;
-	buf[arg_end] = 0;
-	
-	if(arg_end > arg_start) {
-	  int i;
-	  const char *cmd2;
-	  const char *argv2 = alloca((argc + 2) * sizeof(char *));
-	  cmd2 = buf + icmd_start;
-	  argv2[0] = buf + icmd_start;
-	  argv2[1] = cmd;
-	  argv2[2] = buf + arg_start;
-	  for(i = 1; i < argc; i++) argv2[i+2] = argv[i];
-	  return do_exec(root, cmd2, argc + 2, argv2, interpreter_limit-1, err);
-	}
-	else {
-	  int i;
-	  const char *cmd2;
-	  const char *argv2 = alloca((argc + 1) * sizeof(char *));
-	  cmd2 = buf + icmd_start;
-	  argv2[0] = buf + icmd_start;
-	  argv2[1] = cmd;
-	  for(i = 1; i < argc; i++) argv2[i+1] = argv[i];
-	  return do_exec(root, cmd2, argc + 1, argv2, interpreter_limit-1, err);
-	}
-      }
-      else {
-	/* Assume an ELF executable */
-      }
-    }
-  }
-}
-#endif
-
 void exec_elf_program_from_filename(const char *cmd, int argc, const char **argv)
 {
   int extra_args = 4;
@@ -327,7 +373,7 @@ void exec_elf_program_from_filename(const char *cmd, int argc, const char **argv
   cmd2 = BIN_INSTALL "/run-as-nobody";
   argv2[1] = BIN_INSTALL "/ld-linux.so.2";
   argv2[2] = "--library-path";
-  argv2[3] = LIB_INSTALL ":/lib:/usr/lib:/usr/X11R6/lib";
+  argv2[3] = PLASH_LD_LIBRARY_PATH;
   argv2[4] = cmd;
   for(i = 1; i < argc; i++) argv2[extra_args+i] = argv[i];
   argv2[extra_args + argc] = 0;
@@ -335,32 +381,34 @@ void exec_elf_program_from_filename(const char *cmd, int argc, const char **argv
   execve(cmd2, (char **) argv2, environ);
 }
 
-void exec_elf_program_from_fd(int fd, const char *cmd, int argc, const char **argv)
+void args_to_exec_elf_program_from_fd
+  (region_t r, int fd, int argc, const char **argv,
+   const char **cmd_out, int *argc_out, const char ***argv_out)
 {
   int extra_args = 6;
-  char buf[20];
-  const char *cmd2;
+  int buf_size = 20;
+  char *buf = region_alloc(r, buf_size);
   const char **argv2;
   int i;
 
-  argv2 = alloca((argc + extra_args + 1) * sizeof(char *));
+  argv2 = region_alloc(r, (argc + extra_args + 1) * sizeof(char *));
   argv2[0] = argv[0];
 #ifdef USE_CHROOT
-  cmd2 = BIN_INSTALL "/run-as-nobody+chroot";
+  *cmd_out = BIN_INSTALL "/run-as-nobody+chroot";
   argv2[1] = "/special/ld-linux.so.2";
 #else
-  cmd2 = BIN_INSTALL "/run-as-nobody";
+  *cmd_out = BIN_INSTALL "/run-as-nobody";
   argv2[1] = BIN_INSTALL "/ld-linux.so.2";
 #endif
   argv2[2] = "--library-path";
-  argv2[3] = LIB_INSTALL ":/lib:/usr/lib:/usr/X11R6/lib";
+  argv2[3] = PLASH_LD_LIBRARY_PATH;
   argv2[4] = "--fd";
-  snprintf(buf, sizeof(buf), "%i", fd);
+  snprintf(buf, buf_size, "%i", fd);
   argv2[5] = buf;
   for(i = 0; i < argc; i++) argv2[extra_args+i] = argv[i];
   argv2[extra_args + argc] = 0;
-
-  execve(cmd2, (char **) argv2, environ);
+  *argc_out = extra_args + argc;
+  *argv_out = argv2;
 }
 
 int job_state(struct job *job)
@@ -453,8 +501,8 @@ void wait_for_job(struct shell_state *state, struct job *job)
       else if(WIFSIGNALED(p->wait_status)) {
 	int sig = WTERMSIG(p->wait_status);
 	const char *desc = strsignal(sig);
-	printf("plash: job %i: process %i died with signal %i (%s)\n",
-	       job->id, i, sig, desc ? desc : "unknown signal");
+	printf("plash: job %i: process #%i (pid %i) died with signal %i (%s)\n",
+	       job->id, i, p->pid, sig, desc ? desc : "unknown signal");
       }
       i++;
     }
@@ -497,182 +545,207 @@ void report_jobs(struct shell_state *state)
    exec_fd is an FD for the executable, whose file doesn't have to be
    included in the process's namespace.  It is closed (in the parent
    process) before the function returns. */
-int spawn(struct filesys_obj *root, struct dir_stack *cwd,
+/*int spawn(struct filesys_obj *root, struct dir_stack *cwd,
 	  int exec_fd, const char *cmd, int argc, const char **argv,
-	  struct shell_state *state, int foreground)
+	  struct shell_state *state, int foreground)*/
+/* This frees region r in the server process. */
+int spawn_job(region_t sock_r,
+	      struct shell_state *state,
+	      struct server_state *server_state,
+	      struct process_desc_list *procs,
+	      int foreground)
 {
   int attach_gdb_to_server = 0;
   int attach_gdb_to_client = 0;
   int attach_strace_to_client = 0;
-  int strace_client = 0;
-  int pid_client, pid_server;
-  int socks[2];
-  int pgid;
-  struct job *job;
   
-  if(socketpair(AF_LOCAL, SOCK_STREAM, 0, socks) < 0) {
-    perror("socketpair");
-    return -1;
-  }
+  struct job *job = amalloc(sizeof(struct job));
+  job->id = state->next_job_id++;
+  job->processes = 0;
+  job->pgid = 0; /* The pgid will be the same as the pid of the first process. */
+  job->prev = &state->jobs;
+  job->next = state->jobs.next;
+  job->last_state = ST_RUNNING;
+  state->jobs.next->prev = job;
+  state->jobs.next = job;
 
-  pid_client = fork();
-  if(pid_client == 0) {
-    char buf[10];
-    close(socks[0]);
-    // set_cloexec_flag(socks[1], 0);
-    snprintf(buf, sizeof(buf), "%i", socks[1]);
-    setenv("COMM_FD", buf, 1);
+  /* Start the client processes. */
+  for(; procs; procs = procs->next) {
+    struct process_desc *proc = procs->proc;
+    
+    int pid_client = fork();
+    if(pid_client == 0) {
+      int i, max_fd;
 
-    if(state->interactive) {
-      /* Set this process's process group ID to pgid (= pid_client). */
-      if(setpgid(0, 0) < 0) { perror("setpgid"); }
-      if(foreground) {
-	if(tcsetpgrp(STDIN_FILENO, getpid()) < 0) { perror("tcsetpgrp"); }
+      /* Setting which process group owns the terminal needs to be done
+	 before setting up the client's FDs. */
+      if(state->interactive) {
+	int pgid = job->pgid;
+	if(!pgid) pgid = getpid();
+	/* Set this process's process group ID to pgid (= pid_client). */
+	if(setpgid(0, pgid) < 0) { perror("plash/client: setpgid"); }
+	if(foreground) {
+	  if(tcsetpgrp(STDIN_FILENO, pgid) < 0) { perror("plash/client: tcsetpgrp"); }
+	}
+
+	/* Set the handling for job control signals back to the default. */
+	signal(SIGINT, SIG_DFL);
+	signal(SIGQUIT, SIG_DFL);
+	signal(SIGTSTP, SIG_DFL);
+	signal(SIGTTIN, SIG_DFL);
+	signal(SIGTTOU, SIG_DFL);
+	signal(SIGCHLD, SIG_DFL);
       }
 
-      /* Set the handling for job control signals back to the default. */
-      signal(SIGINT, SIG_DFL);
-      signal(SIGQUIT, SIG_DFL);
-      signal(SIGTSTP, SIG_DFL);
-      signal(SIGTTIN, SIG_DFL);
-      signal(SIGTTOU, SIG_DFL);
-      signal(SIGCHLD, SIG_DFL);
+      proc->set_up_process(proc);
+
+      /* Some FDs in the process are close-on-exec. */
+      /* Some FDs are refcounted, and these are closed by close_our_fds().
+	 We don't mark them as close-on-exec, because doing so would
+	 involve lots of needless system calls. */
+      /* Unneeded FDs must be closed for security and correctness reasons. */
+
+      /* This comes first.  I assume that FDs that are passed to the
+	 new process are not among the refcounted FDs closed by this. */
+      close_our_fds();
+      /* Copy FDs into place. */
+      /* First the FDs are copied to a position where they won't interfere
+	 with the destination or source locations. */
+      max_fd = proc->fds.count;
+      for(i = 0; i < proc->fds.count; i++) {
+	if(max_fd < proc->fds.fds[i] + 1) max_fd = proc->fds.fds[i] + 1;
+      }
+      for(i = 0; i < proc->fds.count; i++) {
+	/* printf("dup2(%i, %i)\n", proc->fds.fds[i], max_fd + i); */
+	if(dup2(proc->fds.fds[i], max_fd + i) < 0) {
+	  perror("plash/client: dup2 (first)");
+	  exit(1);
+	}
+	if(set_close_on_exec_flag(max_fd + i, 1) < 0) perror("cloexec");
+      }
+      /* Now they are copied back to their real position. */
+      for(i = 0; i < proc->fds.count; i++) {
+	/* printf("dup2(%i, %i)\n", max_fd + i, i); */
+	if(dup2(max_fd + i, i) < 0) {
+	  perror("plash/client: dup2 (second)");
+	  exit(1);
+	}
+      }
+
+      if(attach_strace_to_client || attach_gdb_to_client) {
+	if(kill(getpid(), SIGSTOP) < 0) { perror("kill(SIGSTOP)"); }
+      }
+
+      execve(proc->cmd, (char **) proc->argv, environ);
+      fprintf(stderr, "shell: ");
+      perror("exec");
+      exit(1);
+    }
+    if(pid_client < 0) { perror("fork"); return -1; }
+
+    if(job->pgid == 0) job->pgid = pid_client;
+    
+    if(state->interactive) {
+      if(setpgid(pid_client, job->pgid) < 0) { perror("setpgid"); }
     }
 
-    /* Necessary for security when using run-as-nobody, otherwise the
-       process can be left in a directory with read/write access which
-       might not be reachable from the root directory. */
-    /* Not necessary for run-as-nobody+chroot. */
-    if(chdir("/") < 0) { perror("chdir"); exit(1); }
-
-    /* Close FDs for directories, etc.  Very important!  We don't use
-       the close-on-exec flag for this because we need to keep those
-       FDs open in the forked server process. */
-    close_our_fds();
-
-    if(attach_strace_to_client || attach_gdb_to_client) {
-      if(kill(getpid(), SIGSTOP) < 0) { perror("kill(SIGSTOP)"); }
-    }
-
-    exec_elf_program_from_fd(exec_fd, cmd, argc, argv);
-    fprintf(stderr, "shell: ");
-    perror("exec");
-    exit(1);
-  }
-  if(pid_client < 0) { perror("fork"); return -1; }
-
-  pgid = pid_client;
-
-  close(exec_fd);
-  close(socks[1]);
-
-  pid_server = fork();
-  if(pid_server == 0) {
-    struct process *p = amalloc(sizeof(struct process));
-    p->sock_fd = socks[0];
-    p->root = root;
-    /* Set the process's cwd. */
+    /* Add process ID to list of processes in job. */
     {
-      region_t r = region_make();
-      seqf_t cwd_path = flatten(r, string_of_cwd(r, cwd));
-      int err;
-      /* Failing is fine.  It just means that none of the arguments
-	 to the process were relative to the cwd, so the cwd wasn't
-	 included in the filesystem. */
-      /* We could set the cwd to the root directory.  But that means
-	 that if the user enters "ls", "find", "pwd", etc., rather
-	 than "ls .", "find ." or "pwd + .", these programs will
-	 operate on the root directory without warning.
-	 Instead, processes are allowed to have an undefined
-	 current directory, and will get an error if they try to
-	 access anything through it. */
-      p->cwd = resolve_dir(r, root, 0 /* cwd */, cwd_path, SYMLINK_LIMIT, &err);
-      region_free(r);
+      struct shell_process *p = amalloc(sizeof(struct shell_process));
+      p->pid = pid_client;
+      p->state = ST_RUNNING;
+      p->next = job->processes;
+      job->processes = p;
     }
+  }
 
-    if(state->interactive) {
-      /* Set this process's process group ID to pgid (= pid_client). */
-      if(setpgid(0, pgid) < 0) { perror("setpgid"); }
-      if(foreground) {
-	if(tcsetpgrp(STDIN_FILENO, pgid) < 0) { perror("tcsetpgrp"); }
+  /* Start the server process. */
+  /* Don't bother starting the server if it will have no processes to
+     handle.  This is just an optimisation to avoid forking, because
+     if there are no processes the server would immediately exit. */
+  if(server_state->list.next->id) {
+    int pid_server = fork();
+    if(pid_server == 0) {
+      if(state->interactive) {
+	/* Set this process's process group ID to pgid (= pid_client). */
+	if(setpgid(0, job->pgid) < 0) { perror("plash/server: setpgid"); }
+	if(foreground) {
+	  if(tcsetpgrp(STDIN_FILENO, job->pgid) < 0) { perror("plash/server: tcsetpgrp"); }
+	}
+
+	/* Set the handling for job control signals back to the default. */
+	signal(SIGINT, SIG_DFL);
+	signal(SIGQUIT, SIG_DFL);
+	signal(SIGTSTP, SIG_DFL);
+	signal(SIGTTIN, SIG_DFL);
+	signal(SIGTTOU, SIG_DFL);
+	signal(SIGCHLD, SIG_DFL);
       }
 
-      /* Set the handling for job control signals back to the default. */
-      signal(SIGINT, SIG_DFL);
-      signal(SIGQUIT, SIG_DFL);
-      signal(SIGTSTP, SIG_DFL);
-      signal(SIGTTIN, SIG_DFL);
-      signal(SIGTTOU, SIG_DFL);
-      signal(SIGCHLD, SIG_DFL);
+      if(attach_gdb_to_server) {
+	if(kill(getpid(), SIGSTOP) < 0) { perror("kill(SIGSTOP)"); }
+      }
+
+      /* This is used to close FDs that were opened to be passed to the
+	 other processes. */
+      region_free(sock_r);
+    
+      // server_log = fopen("/dev/null", "w");
+      // if(!server_log) server_log = fdopen(STDERR_FILENO, "w");
+      run_server(server_state);
+      exit(0);
+    }
+    if(pid_server < 0) { perror("fork"); return -1; }
+
+    /* Add server process ID to list. */
+    {
+      struct shell_process *p = amalloc(sizeof(struct shell_process));
+      p->pid = pid_server;
+      p->state = ST_RUNNING;
+      p->next = job->processes;
+      job->processes = p;
+    }
+    
+    if(state->interactive) {
+      if(setpgid(pid_server, job->pgid) < 0) { perror("plash: setpgid"); }
     }
 
     if(attach_gdb_to_server) {
-      if(kill(getpid(), SIGSTOP) < 0) { perror("kill(SIGSTOP)"); }
+      int pid_gdb = fork();
+      if(pid_gdb == 0) {
+	char buf[10];
+	snprintf(buf, sizeof(buf), "%i", pid_server);
+	execl("/usr/bin/gdb", "/usr/bin/gdb", "./mrs/shell", buf, 0);
+	perror("exec");
+	exit(1);
+      }
+      if(pid_gdb < 0) perror("fork");
     }
-    
-    server_log = fopen("/dev/null", "w");
-    if(!server_log) server_log = fdopen(1, "w");
-    start_server(p);
-    exit(0);
   }
-  if(pid_server < 0) { perror("fork"); return -1; }
+
+  region_free(sock_r);
+  /* Also free the server state, which includes lots of FDs. */
+  while(server_state->list.next->id) remove_process(server_state->list.next);
 
   /* Since the client is changed to run as nobody, setpgid below can
      fail on it.  It's a race condition.  If it fails here, the client
      has already called setpgid itself, so that's okay.  FIXME. */
   if(state->interactive) {
-    struct shell_process *p1;
-    struct shell_process *p2;
-
-    p1 = amalloc(sizeof(struct shell_process));
-    p1->pid = pid_client;
-    p1->state = ST_RUNNING;
-    p1->next = 0;
-
-    p2 = amalloc(sizeof(struct shell_process));
-    p2->pid = pid_server;
-    p2->state = ST_RUNNING;
-    p2->next = p1;
-
-    job = amalloc(sizeof(struct job));
-    job->id = state->next_job_id++;
-    job->processes = p2;
-    job->pgid = pgid;
-    job->prev = &state->jobs;
-    job->next = state->jobs.next;
-    job->last_state = ST_RUNNING;
-    state->jobs.next->prev = job;
-    state->jobs.next = job;
-    
-    if(setpgid(pid_client, pgid) < 0) { perror("setpgid"); }
-    if(setpgid(pid_server, pgid) < 0) { perror("setpgid"); }
     /* Save the terminal state (needed for background jobs). */
-    if(tcgetattr(STDIN_FILENO, &job->tmodes) < 0) { perror("tcgetattr"); }
+    if(tcgetattr(STDIN_FILENO, &job->tmodes) < 0) { perror("plash: tcgetattr"); }
     /* Give the terminal to the new job. */
     if(foreground) {
-      if(tcsetpgrp(STDIN_FILENO, pgid) < 0) { perror("tcsetpgrp"); }
+      if(tcsetpgrp(STDIN_FILENO, job->pgid) < 0) { perror("plash: tcsetpgrp"); }
     }
   }
-  
-  close(socks[0]);
 
-  if(attach_gdb_to_server) {
-    int pid_gdb = fork();
-    if(pid_gdb == 0) {
-      char buf[10];
-      snprintf(buf, sizeof(buf), "%i", pid_server);
-      execl("/usr/bin/gdb", "/usr/bin/gdb", "./mrs/shell", buf, 0);
-      perror("exec");
-      exit(1);
-    }
-    if(pid_gdb < 0) perror("fork");
-  }
+#if 0
   if(attach_gdb_to_client) {
     int pid_gdb = fork();
     if(pid_gdb == 0) {
       char buf[10];
       snprintf(buf, sizeof(buf), "%i", pid_client);
-      execl("/usr/bin/gdb", "/usr/bin/gdb", cmd, buf, 0);
+      execl("/usr/bin/gdb", "/usr/bin/gdb", proc->cmd, buf, 0);
       perror("exec");
       exit(1);
     }
@@ -693,57 +766,14 @@ int spawn(struct filesys_obj *root, struct dir_stack *cwd,
     }
     if(pid_strace < 0) perror("fork");
   }
+#endif
 
-  if(MOD_DEBUG) printf("client=%i, server=%i\n", pid_client, pid_server);
-
-  if(foreground) {
-    if(state->interactive) {
-      wait_for_job(state, job);
-    }
-    else {
-      int wait_for = 2;
-      int pid;
-      int status;
-      int i;
-      
-      for(i = 0; i < wait_for; i++) {
-	pid = waitpid(-1, &status, WUNTRACED);
-	if(pid < 0) { perror("waitpid"); }
-	if(WIFSTOPPED(status)) {
-	  printf("plash: a process was stopped\n");
-	}
-	if(WIFSIGNALED(status) && pid == pid_client) {
-	  int sig = WTERMSIG(status);
-	  const char *desc = strsignal(sig);
-	  printf("plash: process died with signal %i (%s)\n", sig,
-		 desc ? desc : "unknown signal");
-	}
-	if(WIFSIGNALED(status) && pid == pid_server) {
-	  int sig = WTERMSIG(status);
-	  const char *desc = strsignal(sig);
-	  printf("plash: server died with signal %i (%s)\n", sig,
-		 desc ? desc : "unknown signal");
-	}
-	if(WIFEXITED(status) && pid == pid_client) {
-	  int rc = WEXITSTATUS(status);
-	  if(rc) printf("plash: process exited with code %i\n", rc);
-	}
-	if(WIFEXITED(status) && pid == pid_server) {
-	  int rc = WEXITSTATUS(status);
-	  if(rc) printf("plash: server exited with code %i\n", rc);
-	}
-	if(MOD_DEBUG) {
-	  printf("pid %i finished: ", pid);
-	  print_wait_status(status);
-	  printf("\n");
-	}
-      }
-    }
-  }
+  if(foreground) wait_for_job(state, job);
   else {
-    if(state->interactive) {
+    if(state->interactive)
       printf("plash: job %i started\n", job->id);
-    }
+    else
+      remove_job(job);
   }
   return 0;
 }
@@ -771,6 +801,37 @@ int parse_path(seqf_t path, seqf_t *pathname, seqf_t *rest)
     return 1;
   }
   else return 0;
+}
+
+/* Look up executable name in PATH if it doesn't contain '/'. */
+/* Assumes filename argument has null terminator. */
+/* Returns -1 if executable was not found. */
+int resolve_executable(region_t r, seqf_t filename, seqf_t *result)
+{
+  if(strchr(filename.data, '/')) {
+    *result = filename;
+    return 0;
+  }
+  else {
+    /* Search PATH for the command */
+    seqf_t path;
+    const char *path1 = getenv("PATH");
+    if(!path1) return -1;
+    path = seqf_string(path1);
+    while(1) {
+      seqf_t dir, full_cmd;
+      if(!parse_path(path, &dir, &path)) return -1;
+      full_cmd =
+	flatten0(r, cat3(r, mk_leaf(r, dir),
+			 mk_string(r, "/"),
+			 mk_leaf(r, filename)));
+      /* FIXME: don't use access() here */
+      if(access(full_cmd.data, X_OK) == 0) {
+	*result = full_cmd;
+	return 0;
+      }
+    }
+  }
 }
 
 #if 0
@@ -814,6 +875,349 @@ struct filesys_obj *shell_test()
 #endif
 
 
+/* Constructs a filesystem for the process being created for the command
+   invocation.  Adds a process entry to the server state to handle this
+   filesystem. */
+struct process_desc *command_invocation
+  (region_t r, struct shell_state *state,
+   struct server_state *server_state, struct invocation *inv,
+   int fd_stdin, int fd_stdout)
+{
+  int no_sec;
+  struct char_cons *cmd_filename1;
+  struct arg_list *args;
+
+  seqf_t cmd_filename2, cmd_filename;
+
+  if(!m_invocation(inv, &no_sec, &cmd_filename1, &args)) {
+    assert(0);
+    return 0; /* Error */
+  }
+
+  cmd_filename2 = tilde_expansion(r, flatten_charlist(r, cmd_filename1));
+  if(resolve_executable(r, cmd_filename2, &cmd_filename) < 0) {
+    printf("plash: not found: %s\n", cmd_filename2.data);
+    return 0;
+  }
+
+  if(no_sec) {
+    struct flatten_params_nosec p;
+    struct str_list *l;
+    int arg_count;
+    const char **argv;
+    int i;
+    struct process_desc_nosec *proc;
+    
+    /* Process the arguments. */
+    p.got = 0;
+    if(flatten_args_nosec(r, &p, args)) return 0;
+
+    /* Copy the arguments from the list into an array. */
+    for(l = p.got, arg_count = 0; l; l = l->prev) arg_count++;
+    argv = region_alloc(r, (arg_count+2) * sizeof(char*));
+    argv[0] = cmd_filename.data;
+    for(l = p.got, i = arg_count; l; l = l->prev) argv[--i + 1] = l->str;
+    argv[arg_count+1] = 0;
+    
+    proc = region_alloc(r, sizeof(struct process_desc_nosec));
+    proc->d.set_up_process = set_up_nosec_process;
+    if(state->cwd->dir->vtable == &real_dir_vtable) {
+      struct real_dir *dir = (void *) state->cwd->dir;
+      if(dir->fd) {
+	proc->cwd_fd = dir->fd->fd;
+      }
+      else {
+	printf("plash: current directory does not have valid file descriptor\n");
+	return 0;
+      }
+    }
+    else {
+      printf("plash: current directory is not real\n");
+      return 0;
+    }
+    proc->d.cmd = cmd_filename.data;
+    proc->d.argc = arg_count + 1;
+    proc->d.argv = argv;
+    {
+      int count = 3;
+      int *fds = region_alloc(r, count * sizeof(int));
+      proc->d.fds.count = count;
+      proc->d.fds.fds = fds;
+      fds[0] = fd_stdin;
+      fds[1] = fd_stdout;
+      fds[2] = STDERR_FILENO;
+    }
+    return (struct process_desc *) proc;
+  }
+  else {
+    struct flatten_params p;
+    struct str_list *l;
+    int i;
+    int arg_count;
+    const char **argv;
+    int executable_fd;
+    int argc2;
+    const char **argv2;
+    int executable_fd2;
+    struct filesys_slot *root_slot;
+    struct filesys_obj *root;
+    struct dir_stack *cwd;
+    int err;
+
+    /* Process the arguments. */
+    p.got = 0;
+    p.root_dir = state->root;
+    p.tree = make_empty_node();
+    p.cwd = state->cwd;
+    if(flatten_args(r, &p, 0 /* rw */, 0 /* ambient */, args)) return 0;
+      
+    /* FIXME: check for errors */
+    resolve_populate(state->root, p.tree, p.cwd, seqf_string("/etc"), 0 /* create */, &err);
+    resolve_populate(state->root, p.tree, p.cwd, seqf_string("/bin/"), 0 /* create */, &err);
+    resolve_populate(state->root, p.tree, p.cwd, seqf_string("/lib"), 0 /* create */, &err);
+    resolve_populate(state->root, p.tree, p.cwd, seqf_string("/usr"), 0 /* create */, &err);
+    resolve_populate(state->root, p.tree, p.cwd, seqf_string("/dev/tty"), 0 /* create */, &err);
+    resolve_populate(state->root, p.tree, p.cwd, seqf_string("/dev/null"), 0 /* create */, &err);
+
+    /* Add the executable:  This is necessary for scripts (using the
+       `#!' syntax).  It doesn't hurt for other executables. */
+    resolve_populate(state->root, p.tree, p.cwd, cmd_filename, 0 /* create */, &err);
+
+    /* Open the executable file. */
+    {
+      region_t r = region_make();
+      int err;
+      struct filesys_obj *obj;
+      obj = resolve_file(r, state->root, state->cwd, cmd_filename,
+			 SYMLINK_LIMIT, 0 /* nofollow */, &err);
+      region_free(r);
+      if(!obj) { errno = err; perror("open/exec"); return 0; }
+      executable_fd = obj->vtable->open(obj, O_RDONLY, &err);
+      filesys_obj_free(obj);
+      if(executable_fd < 0) { errno = err; perror("open/exec"); return 0; }
+    }
+
+    if(state->print_fs_tree) print_tree(0, p.tree);
+
+    /* Create the root directory. */
+    root_slot = build_fs(p.tree);
+    root = root_slot->vtable->get(root_slot);
+    assert(root);
+    root->refcount++;
+    filesys_slot_free(root_slot);
+    
+    /* Set the process's cwd. */
+    {
+      region_t r = region_make();
+      seqf_t cwd_path = flatten(r, string_of_cwd(r, state->cwd));
+      int err;
+      /* Failing is fine.  It just means that none of the arguments
+	 to the process were relative to the cwd, so the cwd wasn't
+	 included in the filesystem. */
+      /* We could set the cwd to the root directory.  But that means
+	 that if the user enters "ls", "find", "pwd", etc., rather
+	 than "ls .", "find ." or "pwd + .", these programs will
+	 operate on the root directory without warning.
+	 Instead, processes are allowed to have an undefined
+	 current directory, and will get an error if they try to
+	 access anything through it. */
+      cwd = resolve_dir(r, root, 0 /* cwd */, cwd_path, SYMLINK_LIMIT, &err);
+      if(state->print_fs_tree) {
+	if(cwd) printf("plash: cwd set successfully\n");
+	else printf("plash: cwd left undefined for this process\n");
+      }
+      region_free(r);
+    }
+
+    /* Copy the arguments from the list into an array. */
+    for(l = p.got, arg_count = 0; l; l = l->prev) arg_count++;
+    argv = region_alloc(r, (arg_count+1) * sizeof(char*));
+    argv[0] = cmd_filename.data;
+    for(l = p.got, i = arg_count; l; l = l->prev) argv[--i + 1] = l->str;
+
+    /* Handle scripts using the `#!' syntax. */
+    if(exec_for_scripts(r, root, cwd,
+			cmd_filename.data, executable_fd, arg_count + 1, argv,
+			&executable_fd2, &argc2, &argv2, &err) < 0) {
+      errno = err;
+      perror("plash: bad interpreter");
+      return 0;
+    }
+    region_add_finaliser(r, finalise_close_fd, (void *) executable_fd2);
+
+    /* Construct the connection to the server. */
+    {
+      /* socks[0] goes to server, socks[1] goes to client. */
+      int socks[2];
+      struct process *server_proc;
+  
+      if(socketpair(AF_LOCAL, SOCK_STREAM, 0, socks) < 0) {
+	perror("socketpair");
+	return 0; /* Error */
+      }
+      set_close_on_exec_flag(socks[0], 1);
+      set_close_on_exec_flag(socks[1], 1);
+      region_add_finaliser(r, finalise_close_fd, (void *) socks[1]);
+
+      server_proc = amalloc(sizeof(struct process));;
+      server_proc->sock_fd = socks[0];
+      server_proc->root = root;
+      server_proc->cwd = cwd;
+      add_process(server_state, server_proc);
+    
+      {
+	struct process_desc *proc =
+	  region_alloc(r, sizeof(struct process_desc));
+	int count = 5;
+	int *fds = region_alloc(r, count * sizeof(int));
+	proc->fds.count = count;
+	proc->fds.fds = fds;
+	fds[0] = fd_stdin;
+	fds[1] = fd_stdout;
+	fds[2] = STDERR_FILENO;
+	fds[3] = socks[1];
+	fds[4] = executable_fd2;
+	args_to_exec_elf_program_from_fd
+	  (r, 4 /* executable_fd */, argc2, argv2,
+	   &proc->cmd, &proc->argc, &proc->argv);
+	proc->set_up_process = set_up_sec_process;
+	return proc;
+      }
+    }
+  }
+  /* FIXME: deallocate tree */
+}
+
+/* Returns 0 if there's an error. */
+struct process_desc_list *pipeline_invocation
+  (region_t r, struct shell_state *state,
+   struct server_state *server_state, struct pipeline *pipeline,
+   int fd_stdin, int fd_stdout)
+{
+  struct invocation *inv;
+  struct pipeline *rest;
+  
+  if(m_pipeline_inv(pipeline, &inv)) {
+    struct process_desc *proc =
+      command_invocation(r, state, server_state, inv, fd_stdin, fd_stdout);
+    struct process_desc_list *list =
+      region_alloc(r, sizeof(struct process_desc_list));
+    if(!proc) return 0; /* Error */
+    list->proc = proc;
+    list->next = 0;
+    return list;
+  }
+  if(m_pipeline_cons(pipeline, &inv, &rest)) {
+    struct process_desc *proc;
+    struct process_desc_list *list1, *list2;
+    int pipe_fd[2];
+    if(pipe(pipe_fd) < 0) { perror("pipe"); return 0; }
+    set_close_on_exec_flag(pipe_fd[0], 1);
+    set_close_on_exec_flag(pipe_fd[1], 1);
+
+    region_add_finaliser(r, finalise_close_fd, (void *) pipe_fd[0]);
+    region_add_finaliser(r, finalise_close_fd, (void *) pipe_fd[1]);
+
+    proc = command_invocation(r, state, server_state, inv, fd_stdin, pipe_fd[1]);
+    if(!proc) return 0; /* Error */
+    list1 = pipeline_invocation(r, state, server_state, rest, pipe_fd[0], fd_stdout);
+    if(!list1) return 0; /* Error */
+    list2 = region_alloc(r, sizeof(struct process_desc_list));
+    list2->proc = proc;
+    list2->next = list1;
+    return list2;
+  }
+  assert(0);
+  return 0;
+}
+
+
+#ifdef USE_GTK
+static int gtk_available = 0;
+
+struct window_info {
+  struct shell_state *state;
+  GtkWidget *window;
+  GtkWidget *o_log_summary;
+  GtkWidget *o_log_messages;
+  GtkWidget *o_log_into_xterm;
+  GtkWidget *o_print_fs_tree;
+};
+
+void window_ok(GtkWidget *widget, gpointer data)
+{
+  struct window_info *w = (void *) data;
+  w->state->log_summary = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(w->o_log_summary));
+  w->state->log_messages = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(w->o_log_messages));
+  w->state->log_into_xterm = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(w->o_log_into_xterm));
+  w->state->print_fs_tree = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(w->o_print_fs_tree));
+  gtk_widget_destroy(w->window);
+}
+
+gint window_delete_event(GtkWidget *widget, GdkEvent *event, gpointer data)
+{
+  return TRUE;
+}
+
+void window_destroy(GtkWidget *widget, gpointer data)
+{
+  gtk_main_quit();
+}
+
+void option_window(struct shell_state *state)
+{
+  struct window_info w;
+  GtkWidget *widget;
+  GtkWidget *vbox;
+  GtkWidget *button;
+
+  w.state = state;
+  
+  w.window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+  g_signal_connect(G_OBJECT(w.window), "delete_event",
+		   G_CALLBACK(window_delete_event), NULL);
+  g_signal_connect(G_OBJECT(w.window), "destroy",
+		   G_CALLBACK(window_destroy), NULL);
+
+  widget = gtk_check_button_new_with_label("Log calls, single line each");
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), state->log_summary);
+  gtk_widget_show(widget);
+  w.o_log_summary = widget;
+
+  widget = gtk_check_button_new_with_label("Log messages in/out");
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), state->log_messages);
+  gtk_widget_show(widget);
+  w.o_log_messages = widget;
+
+  widget = gtk_check_button_new_with_label("Send log data to new xterm");
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), state->log_into_xterm);
+  gtk_widget_show(widget);
+  w.o_log_into_xterm = widget;
+
+  widget = gtk_check_button_new_with_label("Print constructed filesystem tree");
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), state->print_fs_tree);
+  gtk_widget_show(widget);
+  w.o_print_fs_tree = widget;
+  
+  button = gtk_button_new_with_label("Okay");
+  gtk_widget_show(button);
+  g_signal_connect(G_OBJECT(button), "clicked", G_CALLBACK(window_ok), &w);
+  
+  vbox = gtk_vbox_new(0, 5);
+  gtk_box_pack_start(GTK_BOX(vbox), w.o_log_summary, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(vbox), w.o_log_messages, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(vbox), w.o_log_into_xterm, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(vbox), w.o_print_fs_tree, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(vbox), button, FALSE, FALSE, 0);
+
+  gtk_container_add(GTK_CONTAINER(w.window), vbox);
+  gtk_widget_show(vbox);
+  
+  gtk_widget_show(w.window);
+  gtk_main();
+}
+#endif
+
 void shell_command(struct shell_state *state, seqf_t line)
 {
   region_t r = region_make();
@@ -823,8 +1227,8 @@ void shell_command(struct shell_state *state, seqf_t line)
      pos_out == line.data + line.size) {
     struct char_cons *dir_filename1;
 
-    struct char_cons *cmd_filename1;
-    struct arg_list *args;
+    struct pipeline *pipeline;
+
     int bg_flag;
 
     struct char_cons *job_id_str;
@@ -846,92 +1250,74 @@ void shell_command(struct shell_state *state, seqf_t line)
 	perror("cd");
       }
     }
-    else if(m_command(val_out, &cmd_filename1, &args, &bg_flag)) {
-      struct flatten_params p;
-      struct str_list *l;
-      int count;
-      const char **argv;
-      int i;
-      struct filesys_slot *root_slot;
-      struct filesys_obj *root;
-      int exec_fd;
-      int err;
+    else if(m_command(val_out, &pipeline, &bg_flag)) {
+      region_t sock_r = region_make();
+      struct server_state server_state;
+      struct process_desc_list *procs;
 
-      seqf_t cmd_filename = tilde_expansion(r, flatten_charlist(r, cmd_filename1));
-
-      if(!strcmp(cmd_filename.data, "server-log-enable")) {
-	server_log_messages = 1;
-      }
-      else if(!strcmp(cmd_filename.data, "server-log-disable")) {
-	server_log_messages = 0;
+      struct invocation *inv;
+      int no_sec;
+      struct char_cons *cmd_filename1;
+      struct arg_list *args;
+      if(m_pipeline_inv(pipeline, &inv) &&
+	 m_invocation(inv, &no_sec, &cmd_filename1, &args) &&
+	 !no_sec &&
+	 !strcmp("opts", flatten_charlist(r, cmd_filename1).data)) {
+#ifdef USE_GTK
+	if(gtk_available) {
+	  printf("Opening options window... (close it to continue)\n");
+	  option_window(state);
+	}
+	else printf("Gtk did not initialise successfully; no options window available\n");
+#else
+	printf("Gtk support not compiled in, so no options window available\n");
+#endif
+	region_free(sock_r);
       }
       else {
-
-      /* Search PATH for the command */
-      if(!strchr(cmd_filename.data, '/')) {
-	const char *path1 = getenv("PATH");
-	if(path1) {
-	  seqf_t path = seqf_string(path1);
-	  while(1) {
-	    seqf_t dir;
-	    if(parse_path(path, &dir, &path)) {
-	      seqf_t full_cmd =
-		flatten0(r, cat3(r, mk_leaf(r, dir),
-				 mk_string(r, "/"),
-				 mk_leaf(r, cmd_filename)));
-	      if(access(full_cmd.data, X_OK) == 0) {
-		cmd_filename = full_cmd;
-		break;
-	      }
+	init_server_state(&server_state);
+	if(state->log_messages || state->log_summary) {
+	  if(state->log_into_xterm) {
+	    int pipe_fd[2];
+	    int pid;
+	    if(pipe(pipe_fd) < 0) {
+	      perror("pipe");
 	    }
-	    else break;
+	    set_close_on_exec_flag(pipe_fd[0], 1);
+	    set_close_on_exec_flag(pipe_fd[1], 1);
+	    pid = fork();
+	    if(pid == 0) {
+	      close_our_fds();
+	      dup2(pipe_fd[0], 3);
+	      execl("/usr/bin/X11/xterm",
+		    "xterm", "-e", "sh", "-c", "less <&3", 0);
+	      perror("exec: xterm");
+	      exit(1);
+	    }
+	    if(pid < 0) perror("fork");
+	    close(pipe_fd[0]);
+	    region_add_finaliser(r, finalise_close_fd, (void *) pipe_fd[1]);
+	    server_state.log = fdopen(pipe_fd[1], "w");
 	  }
+	  else {
+	    server_state.log = fdopen(STDERR_FILENO, "w");
+	  }
+	  assert(server_state.log);
+	  setvbuf(server_state.log, 0, _IONBF, 0);
 	}
-      }
-      
-      p.got = 0;
-      p.root_dir = state->root;
-      p.tree = make_empty_node();
-      p.cwd = state->cwd;
-      flatten_args(r, &p, 0 /* rw */, 0 /* ambient */, args);
-      
-      for(l = p.got, count = 0; l; l = l->prev) count++;
-      argv = region_alloc(r, (count+1) * sizeof(char*));
-      argv[0] = cmd_filename.data;
-      for(l = p.got, i = count; l; l = l->prev) argv[--i + 1] = l->str;
-      
-      /* FIXME: check for errors */
-      resolve_populate(state->root, p.tree, p.cwd, seqf_string("/etc"), 0 /* create */, &err);
-      resolve_populate(state->root, p.tree, p.cwd, seqf_string("/bin/"), 0 /* create */, &err);
-      resolve_populate(state->root, p.tree, p.cwd, seqf_string("/lib"), 0 /* create */, &err);
-      resolve_populate(state->root, p.tree, p.cwd, seqf_string("/usr"), 0 /* create */, &err);
-      resolve_populate(state->root, p.tree, p.cwd, seqf_string("/dev/tty"), 0 /* create */, &err);
-      resolve_populate(state->root, p.tree, p.cwd, seqf_string("/dev/null"), 0 /* create */, &err);
-      
-      {
-	region_t r = region_make();
-	int err;
-	struct filesys_obj *obj;
-	obj = resolve_file(r, state->root, state->cwd, cmd_filename,
-			   SYMLINK_LIMIT, 0 /* nofollow */, &err);
-	region_free(r);
-	if(!obj) { errno = err; perror("open/exec"); goto error; }
-	exec_fd = obj->vtable->open(obj, O_RDONLY, &err);
-	filesys_obj_free(obj);
-	if(exec_fd < 0) { errno = err; perror("open/exec"); goto error; }
-      }
-
-      if(0) print_tree(0, p.tree);
-      
-      root_slot = build_fs(p.tree);
-      root = root_slot->vtable->get(root_slot);
-      assert(root);
-      root->refcount++;
-      filesys_slot_free(root_slot);
-      spawn(root, state->cwd, exec_fd, cmd_filename.data, count+1, argv,
-	    state, !bg_flag);
-      filesys_obj_free(root);
-      /* FIXME: deallocate tree */
+	server_state.log_summary = state->log_summary;
+	server_state.log_messages = state->log_messages;
+	
+	procs = pipeline_invocation(sock_r, state, &server_state, pipeline,
+				    STDIN_FILENO, STDOUT_FILENO);
+	if(procs) {
+	  /* Region sock_r is freed inside the forked server process
+	     and before waiting for the child processes. */
+	  spawn_job(sock_r, state, &server_state, procs, !bg_flag);
+	}
+	else {
+	  region_free(sock_r);
+	}
       }
     }
     else if(m_command_fg(val_out, &job_id_str)) {
@@ -1000,8 +1386,29 @@ void shell_command(struct shell_state *state, seqf_t line)
     printf("plash: parse failed\n");
   }
   if(MOD_DEBUG) printf("allocated %i bytes\n", region_allocated(r));
- error:
   region_free(r);
+}
+
+/* Substitutions:
+   %d for current working directory.
+*/
+void set_window_title(struct shell_state *state, seqf_t fmt)
+{
+  const char *term = getenv("TERM");
+  if(term && !strcmp(term, "xterm")) {
+    int i = 0;
+    printf("\033]0;");
+    while(i < fmt.size) {
+      if(fmt.data[i] == '%' && i+1 < fmt.size && fmt.data[i+1] == 'd') {
+	region_t r = region_make();
+	seqf_t cwd = flatten(r, string_of_cwd(r, state->cwd));
+	fprint_d(stdout, cwd);
+	i += 2;
+      }
+      else { putchar(fmt.data[i]); i++; }
+    }
+    printf("\007");
+  }
 }
 
 int main(int argc, char *argv[])
@@ -1014,6 +1421,16 @@ int main(int argc, char *argv[])
   state.jobs.id = 0;
   state.jobs.next = &state.jobs;
   state.jobs.prev = &state.jobs;
+
+  state.log_summary = 0;
+  state.log_messages = 0;
+  state.log_into_xterm = 0;
+  state.print_fs_tree = 0;
+
+#ifdef USE_GTK
+  if(gtk_init_check(&argc, &argv)) gtk_available = 1;
+#endif
+  
   /* Set up the current directory */
   /* If this fails, the cwd is left undefined: you can't access anything
      through it.  This seems safer than just setting the cwd to the root
@@ -1060,11 +1477,13 @@ int main(int argc, char *argv[])
       signal(SIGTTIN, SIG_IGN);
       signal(SIGTTOU, SIG_IGN);
       /* signal(SIGCHLD, SIG_IGN); */
-      
+
       /* Put ourselves in our own process group. */
       shell_pgid = getpid();
-      if(setpgid(shell_pgid, 0) < 0) {
-	perror("plash: couldn't put the shell in its own process group");
+      if(setpgid(shell_pgid, shell_pgid) < 0) {
+	/* This gives an error when the program is started in its own
+	   terminal window.  Don't know why. */
+	/* perror("plash: couldn't put the shell in its own process group"); */
       }
       
       /* Grab control of the terminal. */
@@ -1090,6 +1509,7 @@ int main(int argc, char *argv[])
 	  if(fchdir(dir->fd->fd) < 0) perror("fchdir");
 	}
       }
+      set_window_title(&state, seqf_string("%d - plash"));
       line1 = readline("plash$ ");
       
       while(wait_for_processes(&state, 1 /* check */) > 0) /* nothing */;
@@ -1119,9 +1539,10 @@ int main(int argc, char *argv[])
 	   "Usage: shell [-c CMD]\n"
 	   "\n"
 	   "Special commands in the shell:\n"
-	   "  cd <directory pathname>\n"
-	   "  fg <job number>\n"
-	   "  bg <job number>\n");
+	   "  cd <directory pathname>  Change directory\n"
+	   "  fg <job number>          Put job in foreground\n"
+	   "  bg <job number>          Put job in background\n"
+	   "  opts                     Displays an options window\n");
   }
   return 0;
 }

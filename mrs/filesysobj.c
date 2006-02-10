@@ -45,6 +45,8 @@
 #define MOD_LOG 1
 #define MOD_MSG "filesysobj: "
 
+static FILE *server_log = 0; /* FIXME */
+
 
 int set_close_on_exec_flag(int fd, int value)
 {
@@ -206,6 +208,7 @@ struct filesys_obj *real_dir_traverse(struct filesys_obj *obj, const char *leaf)
       /* Dir changed to a symlink underneath us; could retry -- FIXME */
       return 0;
     }
+    set_close_on_exec_flag(fd, 1);
     new_obj = amalloc(sizeof(struct real_dir));
     new_obj->hdr.refcount = 1;
     new_obj->hdr.vtable = &real_dir_vtable;
@@ -349,6 +352,7 @@ int real_dir_create_file(struct filesys_obj *obj, const char *leaf,
     *err = errno;
     return -1;
   }
+  set_close_on_exec_flag(fd, 1);
 
   /* The file might have changed underneath us.  We must make sure that
      it didn't change to a directory.  We must never pass the process a
@@ -388,6 +392,7 @@ int real_file_open(struct filesys_obj *obj, int flags, int *err)
     *err = errno;
     return -1;
   }
+  set_close_on_exec_flag(fd, 1);
   
   /* If O_NOFOLLOW doesn't work, we can fstat here. */
 

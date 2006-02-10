@@ -42,7 +42,7 @@ struct obj_list {
 
 struct fab_dir {
   struct filesys_obj hdr;
-  struct obj_list *entries;
+  struct obj_list *entries; /* Owned by the fab_dir */
   int inode;
 };
 
@@ -66,7 +66,7 @@ struct slot_list {
 
 struct s_fab_dir {
   struct filesys_obj hdr;
-  struct slot_list *entries;
+  struct slot_list *entries; /* Owned by the s_fab_dir */
   int inode;
 };
 

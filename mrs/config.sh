@@ -25,6 +25,12 @@ JAIL_INSTALL=$JAIL_DIR/special
 BIN_INSTALL=/usr/lib/plash
 LIB_INSTALL=/usr/lib/plash/lib
 
+# This needs to include any directories that were in
+# /etc/ld.so.conf, which is usually used to build /etc/ld.so.cache,
+# because the new dynamic linker isn't going to look at the cache.
+PLASH_LD_LIBRARY_PATH=$LIB_INSTALL:/lib:/usr/lib:/usr/X11R6/lib:/usr/kerberos/lib:/usr/lib/qt-3.0.3/lib:/usr/lib/sane:/usr/lib/wine
+
+
 # JAIL_DIR=/usr/local/chroot-jail
 # BIN_INSTALL=/usr/local/plash
 # LIB_INSTALL=/usr/local/plash/lib

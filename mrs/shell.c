@@ -43,23 +43,24 @@
 #include "config.h"
 #include "shell-variants.h"
 #include "shell.h"
+#include "shell-fds.h"
+#include "shell-wait.h"
 #include "build-fs.h"
 #include "shell-globbing.h"
 #include "cap-protocol.h"
 #include "cap-utils.h"
 #include "fs-operations.h"
+#include "log-proxy.h"
+#include "reconnectable-obj.h"
+#include "serialise.h"
 
 
 int f_command(const char **err_pos, region_t r,
 	      const char *pos_in1, const char *end,
 	      const char **pos_out_p, void **ok_val_p);
-
-
-void finalise_close_fd(void *obj)
-{
-  int fd = (int) obj;
-  if(close(fd) < 0) { perror("plash: close"); }
-}
+int f_command_list(const char **err_pos, region_t r,
+		   const char *pos_in1, const char *end,
+		   const char **pos_out_p, void **ok_val_p);
 
 
 const char *shell_pathname = 0;
@@ -69,7 +70,7 @@ const char *shell_pathname = 0;
 #define ST_STOPPED 1
 #define ST_FINISHED 2
 struct shell_process {
-  int pid;
+  int pid; /* Can be 0 for processes created through object invocations */
   int state;
   int wait_status; /* Filled out when stopped or finished */
   struct shell_process *next;
@@ -84,14 +85,31 @@ struct job {
   struct job *prev, *next;
 };
 
+struct env_list {
+  char *name; /* malloc'd, owned */
+  cap_t obj;
+  struct env_list *next;
+};
+
 struct shell_state {
   struct filesys_obj *root;
   struct dir_stack *cwd;
+  struct env_list *env;
+
+  /* Make a connection to the central server */
   cap_t conn_maker;
+  /* Make connections to the current process.  The object stays local
+     to the server processes that are forked off, and it is used to make
+     connections to these. */
+  cap_t conn_maker_local;
+  /* Not used: */
   cap_t union_dir_maker;
   cap_t fab_dir_maker;
 
+  const char *prompt;
+
   int interactive;
+  int fork_server_per_job;
   int next_job_id;
   struct job jobs;
   struct termios tmodes; /* Saved terminal state */
@@ -124,9 +142,14 @@ struct process_desc {
   fds_t fds;
 };
 
-struct process_desc_list {
-  struct process_desc *proc;
-  struct process_desc_list *next;
+struct process_spawn_list {
+  /* This function spawns a process, either by fork-and-exec, or by an
+     object invocation.  `p' will get modified later when the process
+     exits or stops.  `p->pid' is also optionally filled out. */
+  void (*spawn_f)(void *spawn_h, struct process_desc_fork *f,
+		  struct shell_process *p);
+  void *spawn_h;
+  struct process_spawn_list *next;
 };
 
 /* A server description is a list of connections to open, giving objects
@@ -147,7 +170,49 @@ struct server_desc {
 };
 
 
+/* This deletes data structures associated with the shell.  It is used
+   when forking a server process which no longer needs the shell's data.
+   Currently, all it deletes is the references in the environment, so
+   that these are not imported by server processes (via the
+   reconnectable_obj mechanism). */
+void shell_finalise(struct shell_state *state)
+{
+  struct env_list *env;
+  for(env = state->env; env; env = env->next) filesys_obj_free(env->obj);
+}
+
+
 cap_t eval_expr(struct shell_state *state, struct shell_expr *expr);
+
+/* Returns 0 if no binding is found. */
+/* Does not return an owning reference. */
+cap_t env_lookup(struct env_list *env, const char *name)
+{
+  while(env) {
+    if(!strcmp(env->name, name)) return env->obj;
+    env = env->next;
+  }
+  return 0;
+}
+
+/* Will copy `name' if necessary.  `obj' is an owned reference. */
+void env_bind(struct env_list **env_slot, const char *name, cap_t obj)
+{
+  struct env_list *env = *env_slot;
+  while(env) {
+    if(!strcmp(env->name, name)) {
+      filesys_obj_free(env->obj);
+      env->obj = obj;
+      return;
+    }
+    env = env->next;
+  }
+  env = amalloc(sizeof(struct env_list));
+  env->name = strdup(name);
+  env->obj = obj;
+  env->next = *env_slot;
+  *env_slot = env;
+}
 
 
 #define USE_CHROOT 1
@@ -200,44 +265,15 @@ seqf_t flatten_charlist(region_t r, struct char_cons *list)
   return result;
 }
 
-/* FD array.  An entry of -1 means that the FD is not open. */
-/* This is allocated in a region.  Resizing doesn't reallocate the old
-   array. */
-/* Like struct seq_fds, but intended to be writable. */
-struct fd_array {
-  int *fds;
-  int count;
-};
-
-void array_set_fd(region_t r, struct fd_array *array, int j, int x) {
-  /* Enlarge file descriptor array if necessary. */
-  if(j >= array->count) {
-    int i;
-    int new_size = j + 1 + 10;
-    int *fds_new = region_alloc(r, new_size * sizeof(int));
-    memcpy(fds_new, array->fds, array->count * sizeof(int));
-    for(i = array->count; i < new_size; i++) fds_new[i] = -1;
-    array->fds = fds_new;
-    array->count = new_size;
-  }
-  array->fds[j] = x;
-}
-int array_get_free_index(struct fd_array *array) {
-  int i;
-  for(i = 0; i < array->count; i++) {
-    if(array->fds[i] < 0) return i;
-  }
-  return array->count;
-}
-
 struct flatten_params {
   struct shell_state *state;
   struct str_list **got_end;
   struct filesys_obj *root_dir;
-  struct dir_stack *cwd;
+  struct dir_stack *cwd; /* This may be null */
   /* This is zero if we're not constructing a filesystem.
      Used for the `!!' syntax. */
   struct node *tree;
+  int fds_allowed;
   struct fd_array fds;
 };
 
@@ -381,6 +417,12 @@ int flatten_args(region_t r, struct flatten_params *p,
     if(m_arg_redirection(args, &fd, &type, &dest)) {
       struct char_cons *dest_fd, *dest_file;
       int fd_no, fd_dest;
+      
+      if(!p->fds_allowed) {
+	printf("fd redirection not allowed in this context\n");
+	return 1; /* Error */
+      }
+      
       if(fd) {
 	seqf_t string = flatten_charlist(r, fd);
 	fd_no = atoi(string.data);
@@ -469,20 +511,6 @@ int flatten_args(region_t r, struct flatten_params *p,
 
 extern char **environ;
 
-void print_wait_status(int status)
-{
-  if(WIFEXITED(status)) {
-    printf("normal exit: %i", WEXITSTATUS(status));
-  }
-  else if(WIFSIGNALED(status)) {
-    printf("uncaught signal: %i", WTERMSIG(status));
-  }
-  else if(WIFSTOPPED(status)) {
-    printf("stopped with signal: %i", WSTOPSIG(status));
-  }
-  else printf("unknown");
-}
-
 #if 0
 void exec_elf_program_from_filename(const char *cmd, int argc, const char **argv)
 {
@@ -561,27 +589,24 @@ int job_state(struct job *job)
   else return ST_STOPPED;
 }
 
-int wait_for_processes(struct shell_state *state, int check)
+void shell_handle_process_status(void *x, int status)
 {
-  struct job *job;
-  int status;
-  int pid = waitpid(-1, &status, WUNTRACED | (check ? WNOHANG : 0));
-  /* printf("pid %i: ", pid); print_wait_status(status); printf("\n"); */
-  if(pid < 0) return -1;
-  if(pid == 0) return 0;
-    
-  for(job = state->jobs.next; job->id; job = job->next) {
-    struct shell_process *p;
-    for(p = job->processes; p; p = p->next) {
-      if(p->pid == pid) {
-	p->state = WIFSTOPPED(status) ? ST_STOPPED : ST_FINISHED;
-	p->wait_status = status;
-	return 1;
-      }
-    }
+  struct shell_process *p = x;
+  p->state = WIFSTOPPED(status) ? ST_STOPPED : ST_FINISHED;
+  p->wait_status = status;
+}
+
+/* Get info for all child processes that have exited or stopped, but
+   don't block. */
+void poll_for_processes()
+{
+  while(1) {
+    int status;
+    int pid = waitpid(-1, &status, WUNTRACED | WNOHANG);
+    if(pid < 0 && errno != ECHILD) perror("plash: waitpid");
+    if(pid > 0) w_handle_process_status(pid, status);
+    else break;
   }
-  printf("plash: unknown process %i exited or stopped\n", pid);
-  return 1;
 }
 
 void remove_job(struct job *job)
@@ -597,18 +622,50 @@ void remove_job(struct job *job)
   free(job);
 }
 
+void report_job_errors(struct job *job)
+{
+  struct shell_process *p;
+  int i = 1;
+  for(p = job->processes; p; p = p->next) {
+    if(WIFEXITED(p->wait_status)) {
+      int rc = WEXITSTATUS(p->wait_status);
+      if(rc) {
+	printf("plash: job %i: process #%i (pid %i) exited with status %i\n",
+	       job->id, i, p->pid, rc);
+      }
+    }
+    else if(WIFSIGNALED(p->wait_status)) {
+      int sig = WTERMSIG(p->wait_status);
+      const char *desc = strsignal(sig);
+      printf("plash: job %i: process #%i (pid %i) died with signal %i (%s)\n",
+	     job->id, i, p->pid, sig, desc ? desc : "unknown signal");
+    }
+    i++;
+  }
+}
+
 /* Used when starting a job in the foreground, or when returning a job
    to the foreground. */
 void wait_for_job(struct shell_state *state, struct job *job)
 {
   while(job->last_state == ST_RUNNING) {
-    if(wait_for_processes(state, 0 /* check */) < 0) { perror("plash: wait"); break; }
+    int status, pid;
+
+    pid = waitpid(-1, &status, WUNTRACED | WNOHANG);
+    if(pid < 0 && errno != ECHILD) perror("plash: waitpid");
+    if(pid > 0) w_handle_process_status(pid, status);
+    else {
+      /* This assumes SIGCHLD has been enabled by w_setup().  If not, this
+	 will probably hang. */
+      cap_run_server_step();
+    }
+    
     job->last_state = job_state(job);
   }
   /* We now know that we can continue, because the job isn't running.
      But there might be more information we can get from waitpid() that
      indicates whether it is stopped or finished. */
-  while(wait_for_processes(state, 1 /* check */) > 0) /* nothing */;
+  poll_for_processes();
   job->last_state = job_state(job);
 
   /* Grab control of the terminal. */
@@ -625,25 +682,7 @@ void wait_for_job(struct shell_state *state, struct job *job)
   }
   else if(job->last_state == ST_FINISHED) {
     /* Don't print any message when a foreground job finishes normally. */
-    // printf("plash: job %i finished\n", job->id);
-    struct shell_process *p;
-    int i = 1;
-    for(p = job->processes; p; p = p->next) {
-      if(WIFEXITED(p->wait_status)) {
-	int rc = WEXITSTATUS(p->wait_status);
-	if(rc) {
-	  printf("plash: job %i: process #%i (pid %i) exited with status %i\n",
-		 job->id, i, p->pid, rc);
-	}
-      }
-      else if(WIFSIGNALED(p->wait_status)) {
-	int sig = WTERMSIG(p->wait_status);
-	const char *desc = strsignal(sig);
-	printf("plash: job %i: process #%i (pid %i) died with signal %i (%s)\n",
-	       job->id, i, p->pid, sig, desc ? desc : "unknown signal");
-      }
-      i++;
-    }
+    report_job_errors(job);
     remove_job(job);
   }
   else {
@@ -664,6 +703,7 @@ void report_jobs(struct shell_state *state)
       else if(state == ST_FINISHED) {
 	struct job *next = job->next;
 	printf("plash: job %i finished\n", job->id);
+	report_job_errors(job);
 	remove_job(job);
 	job = next;
 	goto next;
@@ -729,7 +769,6 @@ int spawn_process(struct process_desc *proc, struct process_desc_fork *f)
 
   int pid = fork();
   if(pid == 0) {
-    int i, max_fd;
     cap_close_all_connections();
 
     /* Setting which process group owns the terminal needs to be done
@@ -747,33 +786,8 @@ int spawn_process(struct process_desc *proc, struct process_desc_fork *f)
     /* This comes first.  I assume that FDs that are passed to the
        new process are not among the refcounted FDs closed by this. */
     close_our_fds();
-    /* Copy FDs into place. */
-    /* First the FDs are copied to a position where they won't interfere
-       with the destination or source locations. */
-    max_fd = proc->fds.count;
-    for(i = 0; i < proc->fds.count; i++) {
-      if(max_fd < proc->fds.fds[i] + 1) max_fd = proc->fds.fds[i] + 1;
-    }
-    for(i = 0; i < proc->fds.count; i++) {
-      if(proc->fds.fds[i] >= 0) {
-	/* printf("dup2(%i, %i)\n", proc->fds.fds[i], max_fd + i); */
-	if(dup2(proc->fds.fds[i], max_fd + i) < 0) {
-	  perror("plash/client: dup2 (first)");
-	  exit(1);
-	}
-	if(set_close_on_exec_flag(max_fd + i, 1) < 0) perror("plash: cloexec");
-      }
-    }
-    /* Now they are copied back to their real position. */
-    for(i = 0; i < proc->fds.count; i++) {
-      if(proc->fds.fds[i] >= 0) {
-	/* printf("dup2(%i, %i)\n", max_fd + i, i); */
-	if(dup2(max_fd + i, i) < 0) {
-	  perror("plash/client: dup2 (second)");
-	  exit(1);
-	}
-      }
-    }
+
+    if(install_fds(proc->fds) < 0) exit(1); /* Error already printed */
 
     if(attach_strace_to_client || attach_gdb_to_client) {
       if(kill(getpid(), SIGSTOP) < 0) { perror("kill(SIGSTOP)"); }
@@ -788,21 +802,136 @@ int spawn_process(struct process_desc *proc, struct process_desc_fork *f)
   return pid;
 }
 
+DECLARE_VTABLE(d_conn_maker_vtable);
+struct d_conn_maker {
+  struct filesys_obj hdr;
+  region_t r;
+  struct server_desc *conns;
+};
+
+void d_conn_maker_free(struct filesys_obj *obj1)
+{
+  struct d_conn_maker *obj = (void *) obj1;
+  if(obj->conns) fprintf(stderr, "plash: some connections never handled\n");
+  region_free(obj->r);
+}
+
+int d_make_conn(struct filesys_obj *obj1, region_t r, cap_seq_t export,
+		int import_count, cap_t **import)
+{
+  struct d_conn_maker *obj = (void *) obj1;
+  int socks[2];
+  if(import_count > 0) return -1;
+  if(socketpair(AF_LOCAL, SOCK_STREAM, 0, socks) < 0) {
+    perror("plash: socketpair");
+    return -1; /* Error */
+  }
+  set_close_on_exec_flag(socks[0], 1);
+  set_close_on_exec_flag(socks[1], 1);
+  {
+    int i;
+    struct server_desc *desc = region_alloc(obj->r, sizeof(struct server_desc));
+    desc->sock_fd = socks[0];
+    for(i = 0; i < export.size; i++) inc_ref(export.caps[i]);
+    desc->export = cap_seq_dup(obj->r, export);
+    desc->import_count = 0;
+    desc->import = 0;
+    desc->next = obj->conns;
+    obj->conns = desc;
+  }
+  return socks[1];
+}
+
+int d_make_conn2(struct filesys_obj *obj1, region_t r, int sock_fd,
+		 cap_seq_t export, int import_count, cap_t **import)
+{
+  struct d_conn_maker *obj = (void *) obj1;
+  if(import_count > 0) return -1;
+  set_close_on_exec_flag(sock_fd, 1);
+  {
+    int i;
+    struct server_desc *desc = region_alloc(obj->r, sizeof(struct server_desc));
+    desc->sock_fd = sock_fd;
+    for(i = 0; i < export.size; i++) inc_ref(export.caps[i]);
+    desc->export = cap_seq_dup(obj->r, export);
+    desc->import_count = 0;
+    desc->import = 0;
+    desc->next = obj->conns;
+    obj->conns = desc;
+  }
+  return 0;
+}
+
 /* Returns pid, or 0 if no process needed to be started, or -1 if an
    error occurred. */
-int fork_server_process(region_t sock_r, struct server_desc *server_desc,
-			struct process_desc_fork *f)
+int fork_server_process(region_t sock_r, struct shell_state *shell_state,
+			struct server_desc *server_desc,
+			struct process_desc_fork *f,
+			cap_t conn_maker)
 {
   int attach_gdb_to_server = 0;
-  
+
+  region_t r;
+  int count;
+  struct reconnectable_obj *n, **r_objs;
+  cap_t *caps;
+  int i;
+  cap_t *imports;
+  int sock_fd;
+
   int pid;
+  
   /* Don't bother starting the server if it will have no processes to
      handle.  This is just an optimisation to avoid forking, because
      if there are no processes the server would immediately exit. */
   if(!server_desc) return 0;
+
+  /* Handle reconnectable objects. */
+  r = region_make();
+  count = 0;
+  n = reconnectable_list.next;
+  while(!n->head) { count++; n = n->next; }
+  if(count > 0) {
+    /* We need to take a copy of the linked list, because it might change
+       after calling cap_close_all_connections(), which might free some
+       objects and remove them from the list. */
+    r_objs = region_alloc(r, count * sizeof(cap_t));
+    caps = region_alloc(r, count * sizeof(cap_t));
+    for(n = reconnectable_list.next, i = 0; !n->head; n = n->next, i++) {
+      n->hdr.refcount++;
+      r_objs[i] = n;
+      caps[i] = n->x;
+    }
+    sock_fd = conn_maker->vtable->make_conn
+		(conn_maker, r, cap_seq_make(caps, count),
+		 0 /* import_count */, &imports);
+    if(sock_fd < 0) {
+      printf("plash: can't create connection\n");
+      return -1;
+    }
+  }
+  else {
+    /* stops the compiler complaining */
+    r_objs = 0;
+    sock_fd = -1;
+  }
+  
   pid = fork();
   if(pid == 0) {
     cap_close_all_connections();
+
+    /* Reconnect the reconnectable objects. */
+    if(count > 0) {
+      imports = cap_make_connection(r, sock_fd, caps_empty, count,
+				    "to-single-server");
+      for(i = 0; i < count; i++) {
+	filesys_obj_free(r_objs[i]->x);
+	r_objs[i]->x = imports[i];
+	filesys_obj_free((cap_t) r_objs[i]);
+      }
+    }
+    region_free(r);
+    shell_finalise(shell_state);
     
     set_up_forked_process(f);
 
@@ -822,6 +951,7 @@ int fork_server_process(region_t sock_r, struct server_desc *server_desc,
 	cap_t *import =
 	  cap_make_connection(r, desc->sock_fd, desc->export,
 			      desc->import_count, "to-client");
+	caps_free(desc->export);
 
 	for(i = 0; i < desc->import_count; i++) {
 	  assert(!*desc->import[i]);
@@ -835,6 +965,15 @@ int fork_server_process(region_t sock_r, struct server_desc *server_desc,
   }
   if(pid < 0) { perror("plash: fork"); return -1; }
   parent_set_up_forked_process(f, pid);
+
+  /* Tidy up for reconnectable objects: */
+  if(count > 0) {
+    close(sock_fd);
+    for(i = 0; i < count; i++) {
+      filesys_obj_free((cap_t) r_objs[i]);
+    }
+  }
+  region_free(r);
 
   /* Also free the server state, which includes lots of FDs. */
   {
@@ -850,7 +989,6 @@ int fork_server_process(region_t sock_r, struct server_desc *server_desc,
       if(close(desc->sock_fd) < 0) perror("plash: close");
     }
   }
-  region_free(sock_r);
 
   /* The problem with this is that gdb hangs if you attach it to a
      stopped process.  It doesn't try to restart the process. */
@@ -884,12 +1022,21 @@ int fork_server_process(region_t sock_r, struct server_desc *server_desc,
   return pid;
 }
 
+void spawn_process_for_job(void *spawn_h, struct process_desc_fork *f,
+			   struct shell_process *p)
+{
+  struct process_desc *proc = spawn_h;
+  int pid = spawn_process(proc, f);
+  p->pid = pid;
+  w_add_process(pid, shell_handle_process_status, p);
+}
+
 /* This frees region r in the server process. */
-int spawn_job(region_t sock_r,
-	      struct shell_state *state,
-	      struct server_desc *server_desc,
-	      struct process_desc_list *procs,
-	      int foreground)
+struct job *spawn_job(region_t sock_r,
+		      struct shell_state *state,
+		      struct server_desc *server_desc,
+		      struct process_spawn_list *procs,
+		      int foreground)
 {
   struct process_desc_fork f;
   struct job *job = amalloc(sizeof(struct job));
@@ -915,30 +1062,12 @@ int spawn_job(region_t sock_r,
     f.reset_signals = 0;
   }
 
-  /* Start the client processes. */
-  for(; procs; procs = procs->next) {
-    struct process_desc *proc = procs->proc;
-    int pid_client = spawn_process(proc, &f);
-    if(pid_client < 0) return -1; /* Error already printed */
-
-    if(job->pgid == 0) {
-      job->pgid = pid_client;
-      f.pgid = pid_client;
-    }
-
-    /* Add process ID to list of processes in job. */
-    {
-      struct shell_process *p = amalloc(sizeof(struct shell_process));
-      p->pid = pid_client;
-      p->state = ST_RUNNING;
-      p->next = job->processes;
-      job->processes = p;
-    }
-  }
-
   /* Start the server process. */
+  /* This comes first so that it will allocate a pgid which can be used
+     by processes started through object invocations. */
   {
-    int pid_server = fork_server_process(sock_r, server_desc, &f);
+    int pid_server = fork_server_process(sock_r, state, server_desc, &f,
+					 state->conn_maker);
     /* Add server process ID to list. */
     if(pid_server > 0) {
       struct shell_process *p = amalloc(sizeof(struct shell_process));
@@ -946,8 +1075,31 @@ int spawn_job(region_t sock_r,
       p->state = ST_RUNNING;
       p->next = job->processes;
       job->processes = p;
+      w_add_process(pid_server, shell_handle_process_status, p);
+
+      if(job->pgid == 0) {
+	job->pgid = pid_server;
+	f.pgid = pid_server;
+      }
     }
   }
+
+  /* Start the client processes. */
+  for(; procs; procs = procs->next) {
+    struct shell_process *p = amalloc(sizeof(struct shell_process));
+    p->pid = 0; /* may get overwritten by spawn_f below */
+    p->state = ST_RUNNING;
+    p->next = job->processes;
+    job->processes = p;
+    procs->spawn_f(procs->spawn_h, &f, p);
+
+    if(job->pgid == 0 && p->pid > 0) {
+      job->pgid = p->pid;
+      f.pgid = p->pid;
+    }
+  }
+  
+  region_free(sock_r);
 
 #if 0
   if(attach_gdb_to_client) {
@@ -978,14 +1130,7 @@ int spawn_job(region_t sock_r,
   }
 #endif
 
-  if(foreground) wait_for_job(state, job);
-  else {
-    if(state->interactive)
-      printf("plash: job %i started\n", job->id);
-    else
-      remove_job(job);
-  }
-  return 0;
+  return job;
 }
 
 /* Parses PATH.  If it contains any elements, returns 1 and sets
@@ -1044,18 +1189,181 @@ int resolve_executable(region_t r, seqf_t filename, seqf_t *result)
   }
 }
 
-#if 0
-void command_invocation_object(cap_t exec_obj, struct arg_list *args,
-			       struct shell_state *state,
-			       int fd_stdin, int fd_stdout)
+struct job_cons_args {
+  struct server_shared *shared;
+  cap_t fs_op_maker;
+  // struct server_desc *conns;
+  /* Used to make connections between the forked client and the server.
+     The server may be forked off specially, or may be pre-existing.
+     This is invoked by the shell: */
+  cap_t conn_maker;
+  /* This is to be passed to the client, not invoked by the shell: */
+  cap_t conn_maker_for_client;
+
+  struct process_spawn_list *procs;
+};
+
+struct proc_return {
+  struct filesys_obj hdr;
+  struct shell_process *p;
+};
+DECLARE_VTABLE(proc_return_vtable);
+void proc_return_free(struct filesys_obj *obj1)
+{
+  /* This handles the case in which, say, exec-object dies without
+     reporting its child process's status. */
+  struct proc_return *obj = (void *) obj1;
+  if(obj->p->state != ST_FINISHED) {
+    obj->p->state = ST_FINISHED;
+    /* This is Linux-specific, because <sys/wait.h> doesn't offer a way
+       to construct wait statuses.  This should be an exit with return
+       code 1.  See <bits/waitstatus.h>. */
+    obj->p->wait_status = 0x100;
+  }
+}
+void proc_return_invoke(struct filesys_obj *obj1, struct cap_args args)
+{
+  struct proc_return *obj = (void *) obj1;
+  region_t r = region_make();
+  {
+    seqf_t msg = flatten_reuse(r, args.data);
+    int status;
+    int ok = 1;
+    m_str(&ok, &msg, "Okay");
+    m_int(&ok, &msg, &status);
+    m_end(&ok, &msg);
+    if(ok && args.caps.size == 0 && args.fds.count == 0) {
+      shell_handle_process_status(obj->p, status);
+      region_free(r);
+      return;
+    }
+  }
+  
+  caps_free(args.caps);
+  close_fds(args.fds);
+  region_free(r);
+}
+
+struct inv_process {
+  cap_t exec_obj;
+  cap_t root_dir;
+  struct str_list *args_got;
+  struct fd_array fds;
+};
+void spawn_inv_process(void *spawn_h, struct process_desc_fork *f,
+		       struct shell_process *p)
+{
+  struct inv_process *obj = spawn_h;
+
+  region_t r = region_make();
+  argmkbuf_t argbuf = argbuf_make(r);
+  bufref_t argv_arg, env_arg, root_arg, cwd_arg, fds_arg, spawn_args;
+  int got_cwd;
+  
+  cap_t return_cont;
+  {
+    struct proc_return *c = amalloc(sizeof(struct proc_return));
+    c->hdr.refcount = 1;
+    c->hdr.vtable = &proc_return_vtable;
+    c->p = p;
+    return_cont = (cap_t) c;
+  }
+
+  /* Copy the arguments from the list into an array. */
+  {
+    bufref_t *a;
+    int arg_count, i;
+    struct str_list *l;
+    
+    for(l = obj->args_got, arg_count = 0; l; l = l->next) arg_count++;
+    argv_arg = argmk_array(argbuf, arg_count+1, &a);
+    a[0] = argmk_str(argbuf, mk_string(r, "none")); /* FIXME: argv[0] should be omitted */
+    for(l = obj->args_got, i = 0; l; l = l->next, i++) {
+      a[i+1] = argmk_str(argbuf, mk_string(r, l->str));
+    }
+  }
+
+  {
+    bufref_t *a;
+    env_arg = argmk_array(argbuf, 0, &a);
+  }
+
+  root_arg = argmk_cap(argbuf, inc_ref(obj->root_dir));
+  got_cwd = 0;
+
+  {
+    bufref_t *a;
+    int i, j, fd_count = 0;
+    for(i = 0; i < obj->fds.count; i++) {
+      if(obj->fds.fds[i] >= 0) fd_count++;
+    }
+    fds_arg = argmk_array(argbuf, fd_count, &a);
+    for(i = 0, j = 0; j < fd_count; i++) {
+      assert(i < obj->fds.count);
+      if(obj->fds.fds[i] >= 0) {
+	int fd = dup(obj->fds.fds[i]);
+	if(fd < 0) {
+	  perror("dup");
+	  argbuf_free_refs(argbuf);
+	  return; /* Error */
+	}
+	a[j] = argmk_pair(argbuf, argmk_int(argbuf, i),
+			  argmk_fd(argbuf, fd));
+	j++;
+      }
+    }
+    assert(j == fd_count);
+  }
+
+  {
+    int i;
+    bufref_t *a;
+    spawn_args = argmk_array(argbuf, 4 + (got_cwd ? 1:0)
+			               + (f->pgid > 0 ? 1:0), &a);
+    a[0] = argmk_pair(argbuf,
+		      argmk_str(argbuf, mk_string(r, "Argv")),
+		      argv_arg);
+    a[1] = argmk_pair(argbuf,
+		      argmk_str(argbuf, mk_string(r, "Env.")),
+		      env_arg);
+    a[2] = argmk_pair(argbuf,
+		      argmk_str(argbuf, mk_string(r, "Fds.")),
+		      fds_arg);
+    a[3] = argmk_pair(argbuf,
+		      argmk_str(argbuf, mk_string(r, "Root")),
+		      root_arg);
+    i = 4;
+    if(got_cwd) {
+      a[i++] = argmk_pair(argbuf,
+			  argmk_str(argbuf, mk_string(r, "Cwd.")),
+			  cwd_arg);
+    }
+    if(f->pgid > 0) {
+      a[i++] = argmk_pair(argbuf,
+			  argmk_str(argbuf, mk_string(r, "Pgid")),
+			  argmk_int(argbuf, f->pgid));
+    }
+  }
+  cap_invoke(obj->exec_obj,
+	     cap_args_make(cat4(r, mk_string(r, "Call"),
+				mk_string(r, "Exeo"),
+				mk_int(r, spawn_args),
+				argbuf_data(argbuf)),
+			   cap_seq_append(r, mk_caps1(r, return_cont),
+					  argbuf_caps(argbuf)),
+			   argbuf_fds(argbuf)));
+  region_free(r);
+}
+
+int command_invocation_object(region_t r, struct shell_state *state,
+			      struct job_cons_args *job,
+			      cap_t exec_obj, struct arg_list *args,
+			      int fd_stdin, int fd_stdout)
 {
   struct flatten_params p;
-  struct str_list *args_got, *l;
-  int i;
-  int arg_count;
-  const char **argv;
-  struct filesys_slot *root_slot;
-  struct filesys_obj *root;
+  struct str_list *args_got;
+  struct filesys_obj *root_slot;
+  struct filesys_obj *root, *root_ref2;
 
   /* Process the arguments. */
   p.state = state;
@@ -1064,36 +1372,77 @@ void command_invocation_object(cap_t exec_obj, struct arg_list *args,
   p.root_dir = state->root;
   p.cwd = state->cwd;
   p.tree = make_empty_node();
+  p.fds_allowed = 1;
   p.fds.count = 3;
   p.fds.fds = region_alloc(r, p.fds.count * sizeof(int));
   p.fds.fds[0] = fd_stdin;
   p.fds.fds[1] = fd_stdout;
   p.fds.fds[2] = STDERR_FILENO;
-  if(flatten_args(r, &p, 0 /* rw */, 0 /* ambient */, args)) return 0;
+  if(flatten_args(r, &p, 0 /* rw */, 0 /* ambient */, args)) {
+    free_node(p.tree);
+    return -1;
+  }
 
   if(state->print_fs_tree) print_tree(0, p.tree);
 
   /* Create the root directory. */
   root_slot = build_fs(p.tree);
   free_node(p.tree);
-  root = root_slot->vtable->get(root_slot);
+  root = root_slot->vtable->slot_get(root_slot);
   assert(root);
   filesys_slot_free(root_slot);
 
-  /* Copy the arguments from the list into an array. */
-  for(l = args_got, arg_count = 0; l; l = l->next) arg_count++;
-  argv = region_alloc(r, (arg_count+1) * sizeof(char*));
-  argv[0] = cmd_filename.data;
-  for(l = args_got, i = 0; l; l = l->next, i++) argv[i+1] = l->str;
+  /* Make a connection between the forked server and the central server.
+     We need to get a reference to the root directory that does not go
+     via the shell process.
+     NB. This will result in multiple connections between the two
+     server per job if the job contains multiple processes; the
+     duplication is unnecessary.
+     NB. The reconnectable_obj mechanism already makes a connection
+     between the forked server and central server. */
+  {
+    cap_t *import, *import2;
+    int rc;
+    int sock_fd =
+      state->conn_maker->vtable->make_conn(state->conn_maker, r,
+				   caps_empty /* export */,
+				   1 /* import_count */, &import);
+    if(sock_fd < 0) {
+      filesys_obj_free(root);
+      return -1;
+    }
+    root_ref2 = import[0];
+    rc = job->conn_maker->vtable->make_conn2(job->conn_maker, r, sock_fd,
+				     mk_caps1(r, root), 0 /* import_count */,
+				     &import2);
+    filesys_obj_free(root);
+    if(rc < 0) {
+      filesys_obj_free(root_ref2);
+      return -1;
+    }
+  }
+
+  {
+    struct inv_process *proc;
+    struct process_spawn_list *proc_list;
+
+    proc = region_alloc(r, sizeof(struct inv_process));
+    proc->exec_obj = exec_obj;
+    proc->root_dir = root_ref2;
+    proc->args_got = args_got;
+    proc->fds = p.fds;
+
+    proc_list = region_alloc(r, sizeof(struct process_spawn_list));
+    proc_list->spawn_f = spawn_inv_process;
+    proc_list->spawn_h = proc;
+    proc_list->next = job->procs;
+    job->procs = proc_list;
+
+    region_add_finaliser(r, filesys_obj_free, root_ref2);
+  }
+  return 0;
 }
-#endif
 
-
-struct job_cons_args {
-  struct server_shared *shared;
-  cap_t fs_op_maker;
-  struct server_desc *conns;
-};
 
 struct process_desc_sec {
   struct process_desc d;
@@ -1128,7 +1477,7 @@ void set_up_sec_process(struct process_desc *desc1) {
 /* When starting a process in order for it to return an object as a result,
    `return_cont' can be filled out; otherwise it can be null.
    `return_cont' is passed as an owning reference. */
-struct process_desc *command_invocation_sec
+int command_invocation_sec
   (region_t r, struct shell_state *state, struct job_cons_args *job,
    seqf_t cmd_filename, struct arg_list *args,
    int fd_stdin, int fd_stdout,
@@ -1143,7 +1492,7 @@ struct process_desc *command_invocation_sec
   int argc2;
   const char **argv2;
   int executable_fd2;
-  struct filesys_slot *root_slot;
+  struct filesys_obj *root_slot;
   struct filesys_obj *root;
   struct dir_stack *cwd;
   int err;
@@ -1155,12 +1504,17 @@ struct process_desc *command_invocation_sec
   p.root_dir = state->root;
   p.cwd = state->cwd;
   p.tree = make_empty_node();
+  p.fds_allowed = 1;
   p.fds.count = 3;
   p.fds.fds = region_alloc(r, p.fds.count * sizeof(int));
   p.fds.fds[0] = fd_stdin;
   p.fds.fds[1] = fd_stdout;
   p.fds.fds[2] = STDERR_FILENO;
-  if(flatten_args(r, &p, 0 /* rw */, 0 /* ambient */, args)) return 0;
+  if(flatten_args(r, &p, 0 /* rw */, 0 /* ambient */, args)) {
+    free_node(p.tree);
+    if(return_cont) filesys_obj_free(return_cont);
+    return -1;
+  }
 
   /* FIXME: check for errors */
   resolve_populate(state->root, p.tree, p.cwd, seqf_string("/etc"), 0 /* create */, &err);
@@ -1182,10 +1536,10 @@ struct process_desc *command_invocation_sec
     obj = resolve_file(r, state->root, state->cwd, cmd_filename,
 		       SYMLINK_LIMIT, 0 /* nofollow */, &err);
     region_free(r);
-    if(!obj) { errno = err; perror("plash: open/exec"); return 0; }
+    if(!obj) { errno = err; perror("plash: open/exec"); return -1; }
     executable_fd = obj->vtable->open(obj, O_RDONLY, &err);
     filesys_obj_free(obj);
-    if(executable_fd < 0) { errno = err; perror("plash: open/exec"); return 0; }
+    if(executable_fd < 0) { errno = err; perror("plash: open/exec"); return -1; }
   }
 
   if(state->print_fs_tree) print_tree(0, p.tree);
@@ -1193,12 +1547,12 @@ struct process_desc *command_invocation_sec
   /* Create the root directory. */
   root_slot = build_fs(p.tree);
   free_node(p.tree);
-  root = root_slot->vtable->get(root_slot);
+  root = root_slot->vtable->slot_get(root_slot);
   assert(root);
-  filesys_slot_free(root_slot);
+  filesys_obj_free(root_slot);
 
   /* Set the process's cwd. */
-  {
+  if(state->cwd) {
     region_t r = region_make();
     seqf_t cwd_path = flatten(r, string_of_cwd(r, state->cwd));
     int err;
@@ -1219,6 +1573,7 @@ struct process_desc *command_invocation_sec
     }
     region_free(r);
   }
+  else cwd = 0;
 
   /* Copy the arguments from the list into an array. */
   for(l = args_got, arg_count = 0; l; l = l->next) arg_count++;
@@ -1232,79 +1587,80 @@ struct process_desc *command_invocation_sec
 		      &executable_fd2, &argc2, &argv2, &err) < 0) {
     errno = err;
     perror("plash: bad interpreter");
-    return 0;
+    return -1;
   }
   region_add_finaliser(r, finalise_close_fd, (void *) executable_fd2);
 
   /* Construct the connection to the server. */
   {
     const char *caps_names;
-    /* socks[0] goes to server, socks[1] goes to client. */
-    int socks[2];
-  
-    if(socketpair(AF_LOCAL, SOCK_STREAM, 0, socks) < 0) {
-      perror("plash: socketpair");
-      return 0; /* Error */
+    int sock_fd; /* client's connection to server */
+    int cap_count = 5 + (return_cont ? 1:0);
+    cap_t *imports; /* not used */
+    cap_t *caps = region_alloc(r, cap_count * sizeof(cap_t));
+    job->shared->refcount++;
+    caps[0] = make_fs_op_server(job->shared, root, cwd);
+    caps[1] = inc_ref(job->conn_maker_for_client);
+    caps[2] = inc_ref(job->fs_op_maker);
+    caps[3] = inc_ref(state->union_dir_maker);
+    caps[4] = inc_ref(state->fab_dir_maker);
+    if(return_cont) {
+      // caps[5] = 0; /* Filled out by next desc */
+      caps[5] = return_cont;
+      caps_names = "fs_op;conn_maker;fs_op_maker;union_dir_maker;fab_dir_maker;return_cont";
     }
-    set_close_on_exec_flag(socks[0], 1);
-    set_close_on_exec_flag(socks[1], 1);
-    region_add_finaliser(r, finalise_close_fd, (void *) socks[1]);
-
-    {
-      struct server_desc *desc = region_alloc(r, sizeof(struct server_desc));
-      int cap_count = 5 + (return_cont ? 1:0);
-      cap_t *caps = region_alloc(r, cap_count * sizeof(cap_t));
-      job->shared->refcount++;
-      caps[0] = make_fs_op_server(job->shared, root, cwd);
-      caps[1] = inc_ref(state->conn_maker);
-      caps[2] = inc_ref(job->fs_op_maker);
-      caps[3] = inc_ref(state->union_dir_maker);
-      caps[4] = inc_ref(state->fab_dir_maker);
-      if(return_cont) {
-	caps[5] = 0; /* Filled out by next desc */
-	caps_names = "fs_op;conn_maker;fs_op_maker;union_dir_maker;fab_dir_maker;return_cont";
-      }
-      else {
-	caps_names = "fs_op;conn_maker;fs_op_maker;union_dir_maker;fab_dir_maker";
-      }
-      desc->sock_fd = socks[0];
-      desc->export.caps = caps;
-      desc->export.size = cap_count;
-      desc->import_count = 0;
-      desc->import = 0;
-      desc->next = job->conns;
-      job->conns = desc;
-
-      /* Connect the client to the shell via the forked server. */
-      if(return_cont) {
-	int socks2[2];
-	struct server_desc *desc2;
-	if(socketpair(AF_LOCAL, SOCK_STREAM, 0, socks2) < 0) {
-	  perror("plash: socketpair");
-	  return 0; /* Error */
-	}
-	set_close_on_exec_flag(socks2[0], 1);
-	set_close_on_exec_flag(socks2[1], 1);
-	desc2 = region_alloc(r, sizeof(struct server_desc));
-	desc2->sock_fd = socks2[0];
-	desc2->export = caps_empty;
-	desc2->import_count = 1;
-	desc2->import = region_alloc(r, sizeof(cap_t*));
-	desc2->import[0] = &caps[5];
-	desc2->next = job->conns;
-	job->conns = desc2;
-
-	cap_make_connection(r, socks2[1], mk_caps1(r, return_cont), 0,
-			    "to-forked-server");
+    else {
+      caps_names = "fs_op;conn_maker;fs_op_maker;union_dir_maker;fab_dir_maker";
+    }
+    if(0) {
+      int i;
+      for(i = 0; i < cap_count; i++) {
+	/* Don't proxy return_cont. */
+	if(i != 5) caps[i] = make_log_proxy(caps[i]);
       }
     }
+    sock_fd = job->conn_maker->vtable->make_conn(job->conn_maker, r,
+				cap_seq_make(caps, cap_count),
+				0 /* import_count */, &imports);
+    caps_free(cap_seq_make(caps, cap_count));
+    if(sock_fd < 0) {
+      fprintf(stderr, "plash: can't make connection\n");
+      return -1;
+    }
+    region_add_finaliser(r, finalise_close_fd, (void *) sock_fd);
+
+#if 0
+    /* Connect the client to the shell via the forked server. */
+    if(return_cont) {
+      int socks2[2];
+      struct server_desc *desc2;
+      if(socketpair(AF_LOCAL, SOCK_STREAM, 0, socks2) < 0) {
+	perror("plash: socketpair");
+	return -1; /* Error */
+      }
+      set_close_on_exec_flag(socks2[0], 1);
+      set_close_on_exec_flag(socks2[1], 1);
+      desc2 = region_alloc(r, sizeof(struct server_desc));
+      desc2->sock_fd = socks2[0];
+      desc2->export = caps_empty;
+      desc2->import_count = 1;
+      desc2->import = region_alloc(r, sizeof(cap_t*));
+      desc2->import[0] = &caps[5];
+      desc2->next = job->conns;
+      job->conns = desc2;
+
+      cap_make_connection(r, socks2[1], mk_caps1(r, return_cont), 0,
+			  "to-forked-server");
+    }
+#endif
     
     {
       int proc_sock_fd, proc_exec_fd;
       struct process_desc_sec *proc;
+      struct process_spawn_list *proc_list;
 	
       proc_sock_fd = array_get_free_index(&p.fds);
-      array_set_fd(r, &p.fds, proc_sock_fd, socks[1]);
+      array_set_fd(r, &p.fds, proc_sock_fd, sock_fd);
       proc_exec_fd = array_get_free_index(&p.fds);
       array_set_fd(r, &p.fds, proc_exec_fd, executable_fd2);
 	
@@ -1317,7 +1673,13 @@ struct process_desc *command_invocation_sec
 	(r, proc_exec_fd /* executable_fd */, argc2, argv2,
 	 &proc->d.cmd, &proc->d.argc, &proc->d.argv);
       proc->d.set_up_process = set_up_sec_process;
-      return (struct process_desc *) proc;
+
+      proc_list = region_alloc(r, sizeof(struct process_spawn_list));
+      proc_list->spawn_f = spawn_process_for_job;
+      proc_list->spawn_h = (struct process_desc *) proc;
+      proc_list->next = job->procs;
+      job->procs = proc_list;
+      return 0;
     }
   }
 }
@@ -1338,8 +1700,8 @@ void set_up_nosec_process(struct process_desc *desc1) {
   }
 }
 
-struct process_desc *command_invocation_nosec
-  (region_t r, struct shell_state *state,
+int command_invocation_nosec
+  (region_t r, struct shell_state *state, struct job_cons_args *job,
    seqf_t cmd_filename, struct arg_list *args,
    int fd_stdin, int fd_stdout)
 {
@@ -1349,6 +1711,7 @@ struct process_desc *command_invocation_nosec
   const char **argv;
   int i;
   struct process_desc_nosec *proc;
+  struct process_spawn_list *proc_list;
 
   /* Process the arguments. */
   p.state = state;
@@ -1357,12 +1720,13 @@ struct process_desc *command_invocation_nosec
   p.root_dir = state->root;
   p.cwd = state->cwd;
   p.tree = 0;
+  p.fds_allowed = 1;
   p.fds.count = 3;
   p.fds.fds = region_alloc(r, p.fds.count * sizeof(int));
   p.fds.fds[0] = fd_stdin;
   p.fds.fds[1] = fd_stdout;
   p.fds.fds[2] = STDERR_FILENO;
-  if(flatten_args(r, &p, 0 /* rw */, 0 /* ambient */, args)) return 0;
+  if(flatten_args(r, &p, 0 /* rw */, 0 /* ambient */, args)) return -1;
 
   /* Copy the arguments from the list into an array. */
   for(l = args_got, arg_count = 0; l; l = l->next) arg_count++;
@@ -1373,29 +1737,35 @@ struct process_desc *command_invocation_nosec
 
   proc = region_alloc(r, sizeof(struct process_desc_nosec));
   proc->d.set_up_process = set_up_nosec_process;
-  if(state->cwd->dir->vtable == &real_dir_vtable) {
+  if(state->cwd && state->cwd->dir->vtable == &real_dir_vtable) {
     struct real_dir *dir = (void *) state->cwd->dir;
     if(dir->fd) {
       proc->cwd_fd = dir->fd->fd;
     }
     else {
       printf("plash: current directory does not have valid file descriptor\n");
-      return 0;
+      return -1;
     }
   }
   else {
     printf("plash: current directory is not real\n");
-    return 0;
+    return -1;
   }
   proc->d.cmd = cmd_filename.data;
   proc->d.argc = arg_count + 1;
   proc->d.argv = argv;
   proc->d.fds.fds = p.fds.fds;
   proc->d.fds.count = p.fds.count;
-  return (struct process_desc *) proc;
+
+  proc_list = region_alloc(r, sizeof(struct process_spawn_list));
+  proc_list->spawn_f = spawn_process_for_job;
+  proc_list->spawn_h = (struct process_desc *) proc;
+  proc_list->next = job->procs;
+  job->procs = proc_list;
+  return 0;
 }
 
-struct process_desc *command_invocation
+int command_invocation
   (region_t r, struct shell_state *state,
    struct job_cons_args *job, struct invocation *inv,
    int fd_stdin, int fd_stdout)
@@ -1404,31 +1774,46 @@ struct process_desc *command_invocation
   struct char_cons *cmd_filename1;
   struct arg_list *args;
 
-  seqf_t cmd_filename2, cmd_filename;
+  if(m_invocation(inv, &no_sec, &cmd_filename1, &args)) {
+    seqf_t cmd_filename2, cmd_filename3, cmd_filename;
+    cap_t exec_obj;
 
-  if(!m_invocation(inv, &no_sec, &cmd_filename1, &args)) {
-    assert(0);
-    return 0; /* Error */
-  }
+    cmd_filename2 = flatten_charlist(r, cmd_filename1);
+    exec_obj = env_lookup(state->env, cmd_filename2.data);
+    if(exec_obj) {
+      if(no_sec) {
+	printf("plash: error: can't invoke a variable using `!!'\n");
+	return -1;
+      }
+      else {
+	return command_invocation_object(r, state, job, exec_obj, args,
+					 fd_stdin, fd_stdout);
+      }
+    }
 
-  cmd_filename2 = tilde_expansion(r, flatten_charlist(r, cmd_filename1));
-  if(resolve_executable(r, cmd_filename2, &cmd_filename) < 0) {
-    printf("plash: not found: %s\n", cmd_filename2.data);
-    return 0;
-  }
+    cmd_filename3 = tilde_expansion(r, cmd_filename2);
+    if(resolve_executable(r, cmd_filename3, &cmd_filename) < 0) {
+      printf("plash: not found: %s\n", cmd_filename3.data);
+      return -1;
+    }
 
-  if(no_sec) {
-    return command_invocation_nosec(r, state, cmd_filename, args,
-				    fd_stdin, fd_stdout);
+    if(no_sec) {
+      return command_invocation_nosec(r, state, job, cmd_filename, args,
+				      fd_stdin, fd_stdout);
+    }
+    else {
+      return command_invocation_sec(r, state, job, cmd_filename, args,
+				    fd_stdin, fd_stdout, 0 /* return_cont */);
+    }
   }
   else {
-    return command_invocation_sec(r, state, job, cmd_filename, args,
-				  fd_stdin, fd_stdout, 0 /* return_cont */);
+    assert(0);
+    return -1; /* Error */
   }
 }
 
-/* Returns 0 if there's an error. */
-struct process_desc_list *pipeline_invocation
+/* Returns -1 if there's an error. */
+int pipeline_invocation
   (region_t r, struct shell_state *state,
    struct job_cons_args *job,
    struct pipeline *pipeline,
@@ -1438,18 +1823,9 @@ struct process_desc_list *pipeline_invocation
   struct pipeline *rest;
   
   if(m_pipeline_inv(pipeline, &inv)) {
-    struct process_desc *proc =
-      command_invocation(r, state, job, inv, fd_stdin, fd_stdout);
-    struct process_desc_list *list =
-      region_alloc(r, sizeof(struct process_desc_list));
-    if(!proc) return 0; /* Error */
-    list->proc = proc;
-    list->next = 0;
-    return list;
+    return command_invocation(r, state, job, inv, fd_stdin, fd_stdout);
   }
   if(m_pipeline_cons(pipeline, &inv, &rest)) {
-    struct process_desc *proc;
-    struct process_desc_list *list1, *list2;
     int pipe_fd[2];
     if(pipe(pipe_fd) < 0) { perror("plash: pipe"); return 0; }
     set_close_on_exec_flag(pipe_fd[0], 1);
@@ -1458,17 +1834,14 @@ struct process_desc_list *pipeline_invocation
     region_add_finaliser(r, finalise_close_fd, (void *) pipe_fd[0]);
     region_add_finaliser(r, finalise_close_fd, (void *) pipe_fd[1]);
 
-    proc = command_invocation(r, state, job, inv, fd_stdin, pipe_fd[1]);
-    if(!proc) return 0; /* Error */
-    list1 = pipeline_invocation(r, state, job, rest, pipe_fd[0], fd_stdout);
-    if(!list1) return 0; /* Error */
-    list2 = region_alloc(r, sizeof(struct process_desc_list));
-    list2->proc = proc;
-    list2->next = list1;
-    return list2;
+    if(command_invocation(r, state, job, inv, fd_stdin, pipe_fd[1]) < 0)
+      return -1; /* Error */
+    if(pipeline_invocation(r, state, job, rest, pipe_fd[0], fd_stdout) < 0)
+      return -1; /* Error */
+    return 0;
   }
   assert(0);
-  return 0;
+  return -1;
 }
 
 
@@ -1607,11 +1980,22 @@ void signal_handler(int sig)
 
 cap_t eval_expr(struct shell_state *state, struct shell_expr *expr)
 {
+  struct char_cons *var;
+  
   struct char_cons *pathname1;
 
   struct char_cons *cmd_filename1;
   struct arg_list *args;
 
+  if(m_expr_var(expr, &var)) {
+    region_t r = region_make();
+    seqf_t var2 = flatten_charlist(r, var);
+    cap_t x = env_lookup(state->env, var2.data);
+    if(x) inc_ref(x);
+    else printf("plash: error: unbound variable, `%s'\n", var2.data);
+    region_free(r);
+    return x;
+  }
   if(m_expr_filename(expr, &pathname1)) {
     region_t r = region_make();
     seqf_t pathname = tilde_expansion(r, flatten_charlist(r, pathname1));
@@ -1629,52 +2013,89 @@ cap_t eval_expr(struct shell_state *state, struct shell_expr *expr)
     region_free(r);
     return x;
   }
+  if(m_expr_mkfs(expr, &args)) {
+    region_t r = region_make();
+    struct flatten_params p;
+    struct filesys_obj *root_slot, *root;
+    
+    p.state = state;
+    p.got_end = 0; /* should not be used because ambient=1 */
+    p.root_dir = state->root;
+    p.cwd = 0;
+    p.tree = make_empty_node();
+    p.fds_allowed = 0;
+    p.fds.fds = 0;
+    p.fds.count = 0;
+    if(flatten_args(r, &p, 0 /* rw */, 1 /* ambient */, args)) {
+      /* Error already printed */
+      free_node(p.tree);
+      region_free(r);
+      return 0;
+    }
+
+    root_slot = build_fs(p.tree);
+    free_node(p.tree);
+    root = root_slot->vtable->slot_get(root_slot);
+    if(!root) printf("plash: error constructing directory\n");
+    filesys_obj_free(root_slot);
+    
+    region_free(r);
+    return root;
+  }
   if(m_cap_cmd(expr, &cmd_filename1, &args)) {
+    int rc;
     region_t r = region_make();
     region_t sock_r = region_make();
     seqf_t cmd_filename2, cmd_filename;
-    struct job_cons_args job;
-    struct process_desc *proc;
+    struct job_cons_args job_cons;
+    struct d_conn_maker *d_conn = 0;
     struct cap_args result;
     struct return_state ret_state;
     ret_state.r = r;
     ret_state.returned = 0;
     ret_state.result = &result;
-  
+
     cmd_filename2 = tilde_expansion(r, flatten_charlist(r, cmd_filename1));
     if(resolve_executable(r, cmd_filename2, &cmd_filename) < 0) {
       printf("plash: not found: %s\n", cmd_filename2.data);
       return 0;
     }
 
-    job.shared = make_server_shared(state);
+    job_cons.shared = make_server_shared(state);
 	
-    job.shared->refcount++;
-    job.fs_op_maker = fs_op_maker_make(job.shared);
+    job_cons.shared->refcount++;
+    job_cons.fs_op_maker = fs_op_maker_make(job_cons.shared);
 
-    job.conns = 0;
-
-    proc = command_invocation_sec(sock_r, state, &job, cmd_filename, args,
-				  STDIN_FILENO, STDOUT_FILENO,
-				  make_return_cont(&ret_state));
-    server_shared_free(job.shared);
-    filesys_obj_free(job.fs_op_maker);
-
-    /* Ignores returned pids -- FIXME. */
-    {
-      int pid_client;
-      struct process_desc_fork f;
-      f.pgid = -1; // 0
-      f.foreground = 0; // 1;
-      f.reset_signals = 1;
-      
-      pid_client = spawn_process(proc, &f);
-      // f.pgid = pid_client;
-      
-      /* Start the server process. */
-      /* Frees sock_r in forked process and in this one. */
-      fork_server_process(sock_r, job.conns, &f);
+    if(state->fork_server_per_job) {
+      d_conn = amalloc(sizeof(struct d_conn_maker));
+      d_conn->hdr.refcount = 1;
+      d_conn->hdr.vtable = &d_conn_maker_vtable;
+      d_conn->r = region_make();
+      d_conn->conns = 0;
+      job_cons.conn_maker = (cap_t) d_conn;
+      job_cons.conn_maker_for_client = inc_ref(state->conn_maker_local);
     }
+    else {
+      job_cons.conn_maker = inc_ref(state->conn_maker);
+      job_cons.conn_maker_for_client = inc_ref(state->conn_maker);
+    }
+    job_cons.procs = 0;
+
+    rc = command_invocation_sec(sock_r, state, &job_cons, cmd_filename, args,
+				STDIN_FILENO, STDOUT_FILENO,
+				make_reconnectable(make_return_cont(&ret_state)));
+    server_shared_free(job_cons.shared);
+    filesys_obj_free(job_cons.fs_op_maker);
+    if(rc >= 0) {
+      spawn_job(sock_r, state, d_conn ? d_conn->conns : 0, job_cons.procs,
+		1 /* foreground */);
+      if(d_conn) d_conn->conns = 0;
+    }
+    else {
+      region_free(sock_r);
+    }
+    filesys_obj_free(job_cons.conn_maker);
+    filesys_obj_free(job_cons.conn_maker_for_client);
 
     {
       struct sigaction act;
@@ -1695,8 +2116,6 @@ cap_t eval_expr(struct shell_state *state, struct shell_expr *expr)
       perror("plash: tcsetattr");
     }
 
-    printf("returned\n");
-    fprint_data(stdout, flatten_reuse(r, result.data));
     {
       cap_t c;
       if(expect_cap1(result, &c) < 0) {
@@ -1704,7 +2123,7 @@ cap_t eval_expr(struct shell_state *state, struct shell_expr *expr)
 	return 0;
       }
       region_free(r);
-      return c;
+      return make_reconnectable(c);
     }
   }
   printf("plash: expr not handled\n");
@@ -1723,7 +2142,7 @@ void shell_command(region_t r, struct shell_state *state, struct command *comman
 	resolve_dir(r, state->root, state->cwd, dir_filename,
 		    SYMLINK_LIMIT, &err);
       if(d) {
-	dir_stack_free(state->cwd);
+	if(state->cwd) dir_stack_free(state->cwd);
 	state->cwd = d;
       }
       else {
@@ -1757,29 +2176,59 @@ void shell_command(region_t r, struct shell_state *state, struct command *comman
 #endif
       }
       else {
+	int rc;
 	region_t sock_r = region_make();
-	struct process_desc_list *procs;
-	struct job_cons_args job;
+	struct job_cons_args job_cons;
+	struct d_conn_maker *d_conn = 0;
 
-	job.shared = make_server_shared(state);
+	job_cons.shared = make_server_shared(state);
 	
-	job.shared->refcount++;
-	job.fs_op_maker = fs_op_maker_make(job.shared);
+	job_cons.shared->refcount++;
+	job_cons.fs_op_maker = fs_op_maker_make(job_cons.shared);
 
-	job.conns = 0;
+	if(state->fork_server_per_job) {
+	  d_conn = amalloc(sizeof(struct d_conn_maker));
+	  d_conn->hdr.refcount = 1;
+	  d_conn->hdr.vtable = &d_conn_maker_vtable;
+	  d_conn->r = region_make();
+	  d_conn->conns = 0;
+	  job_cons.conn_maker = (cap_t) d_conn;
+	  job_cons.conn_maker_for_client = inc_ref(state->conn_maker_local);
+	}
+	else {
+	  job_cons.conn_maker = inc_ref(state->conn_maker);
+	  job_cons.conn_maker_for_client = inc_ref(state->conn_maker);
+	}
+	job_cons.procs = 0;
 
-	procs = pipeline_invocation(sock_r, state, &job, pipeline,
-				    STDIN_FILENO, STDOUT_FILENO);
-	server_shared_free(job.shared);
-	filesys_obj_free(job.fs_op_maker);
-	if(procs) {
+	rc = pipeline_invocation(sock_r, state, &job_cons, pipeline,
+				 STDIN_FILENO, STDOUT_FILENO);
+	server_shared_free(job_cons.shared);
+	filesys_obj_free(job_cons.fs_op_maker);
+	if(rc >= 0) {
+	  struct job *job;
 	  /* Region sock_r is freed inside the forked server process
 	     and before waiting for the child processes. */
-	  spawn_job(sock_r, state, job.conns, procs, !bg_flag);
+	  job = spawn_job(sock_r, state,
+			  d_conn ? d_conn->conns : 0,
+			  job_cons.procs, !bg_flag);
+	  if(d_conn) d_conn->conns = 0;
+	  
+	  if(bg_flag) {
+	    if(state->interactive) {
+	      printf("plash: job %i started\n", job->id);
+	    }
+	    /* Used to do remove_job(job) in non-interactive mode, but
+	       that is no longer safe now that the wait handler has
+	       references to struct shell_processes. */
+	  }
+	  else wait_for_job(state, job);
 	}
 	else {
 	  region_free(sock_r);
 	}
+	filesys_obj_free(job_cons.conn_maker);
+	filesys_obj_free(job_cons.conn_maker_for_client);
       }
       return;
     }
@@ -1852,8 +2301,84 @@ void shell_command(region_t r, struct shell_state *state, struct command *comman
     struct char_cons *var;
     struct shell_expr *expr;
     if(m_def_binding(command, &var, &expr)) {
+      seqf_t var2 = flatten_charlist(r, var);
       cap_t c = eval_expr(state, expr);
-      if(c) filesys_obj_free(c);
+      if(c) {
+	env_bind(&state->env, var2.data, c);
+	printf("plash: variable `%s' has been bound\n", var2.data);
+      }
+      else {
+	printf("plash: did not bind variable `%s'\n", var2.data);
+      }
+      return;
+    }
+  }
+  {
+    struct char_cons *filename;
+    if(m_command_source(command, &filename)) {
+      seqf_t filename2 = flatten_charlist(r, filename);
+      int fd;
+      struct stat st;
+      int size;
+      char *data;
+      int i;
+      
+      int err;
+      cap_t obj = resolve_file(r, state->root, state->cwd, filename2,
+			       SYMLINK_LIMIT, 0 /* nofollow */, &err);
+      if(!obj) {
+	printf("plash: error: can't resolve `%s': %s\n",
+	       filename2.data, strerror(err));
+	return;
+      }
+      fd = obj->vtable->open(obj, O_RDONLY, &err);
+      filesys_obj_free(obj);
+      if(fd < 0) {
+	printf("plash: error: can't open `%s': %s\n",
+	       filename2.data, strerror(err));
+	return;
+      }
+      if(fstat(fd, &st) < 0) { err = errno; goto source_error; }
+      size = st.st_size;
+      data = region_alloc(r, size);
+      i = 0;
+      while(i < size) {
+	int got = read(fd, data + i, size - i);
+	if(got < 0) { err = errno; goto source_error; }
+	if(got == 0) { err = EIO; goto source_error; }
+	i += got;
+      }
+      close(fd);
+      {
+	const char *pos_out;
+	void *val_out;
+	const char *err_pos = data;
+	if(f_command_list(&err_pos, r,
+			  data, data + size,
+			  &pos_out, &val_out)) {
+	  if(pos_out == data + size) {
+	    struct command_list *l = val_out;
+	    while(l) {
+	      struct command *cmd;
+	      if(!m_commands_cons(l, &cmd, &l)) assert(0);
+	      shell_command(r, state, cmd);
+	    }
+	  }
+	  else {
+	    printf("plash: file parse failed (reached index %i, consumed only %i chars)\n",
+		   err_pos - data, pos_out - data);
+	  }
+	}
+	else {
+	  printf("plash: file parse failed (reached index %i)\n",
+		 err_pos - data);
+	}
+      }
+      return;
+    source_error:
+      printf("plash: error reading `%s': %s\n",
+	     filename2.data, strerror(err));
+      close(fd);
       return;
     }
   }
@@ -1896,9 +2421,15 @@ void set_window_title(struct shell_state *state, seqf_t fmt)
     printf("\033]0;");
     while(i < fmt.size) {
       if(fmt.data[i] == '%' && i+1 < fmt.size && fmt.data[i+1] == 'd') {
-	region_t r = region_make();
-	seqf_t cwd = flatten(r, string_of_cwd(r, state->cwd));
-	fprint_d(stdout, cwd);
+	if(state->cwd) {
+	  region_t r = region_make();
+	  seqf_t cwd = flatten(r, string_of_cwd(r, state->cwd));
+	  fprint_d(stdout, cwd);
+	  region_free(r);
+	}
+	else {
+	  fprintf(stdout, "undefined-cwd");
+	}
 	i += 2;
       }
       else { putchar(fmt.data[i]); i++; }
@@ -1907,30 +2438,214 @@ void set_window_title(struct shell_state *state, seqf_t fmt)
   }
 }
 
+void interactive_setup(struct shell_state *state)
+{
+  state->interactive = isatty(STDIN_FILENO);
+  if(state->interactive) {
+    int shell_pgid;
+      
+    /* Loop until we are in the foreground. */
+    while(1) {
+      int shell_pgid = getpgrp();
+      if(tcgetpgrp(STDIN_FILENO) == shell_pgid) break;
+      if(kill(-shell_pgid, SIGTTIN) < 0) { perror("kill(SIGTTIN)"); }
+    }
+      
+    /* Ignore interactive and job-control signals. */
+    signal(SIGINT, SIG_IGN);
+    signal(SIGQUIT, SIG_IGN);
+    signal(SIGTSTP, SIG_IGN);
+    signal(SIGTTIN, SIG_IGN);
+    signal(SIGTTOU, SIG_IGN);
+    /* signal(SIGCHLD, SIG_IGN); */
+
+    /* Put ourselves in our own process group. */
+    shell_pgid = getpid();
+    if(setpgid(shell_pgid, shell_pgid) < 0) {
+      /* This gives an error when the program is started in its own
+	 terminal window.  Don't know why. */
+      /* perror("plash: couldn't put the shell in its own process group"); */
+    }
+      
+    /* Grab control of the terminal. */
+    if(tcsetpgrp(STDIN_FILENO, shell_pgid) < 0) { perror("tcsetpgrp"); }
+
+    /* Save terminal state. */
+    if(tcgetattr(STDIN_FILENO, &state->tmodes) < 0) { perror("tcgetattr"); }
+  }
+}
+
+void handle_gc_uid_locks_exit(void *x, int status)
+{
+  /* Doesn't need handling */
+  /* printf("plash: gc-uid-locks done\n"); */
+}
+
+void handle_server_exit(void *x, int status)
+{
+  printf("plash: server process: ");
+  print_wait_status(stdout, status);
+  printf("\n");
+}
+
 int main(int argc, char *argv[])
 {
-  int err;
+  int single_server = 0;
   struct shell_state state;
-  state.root = initial_dir("/", &err);
-  if(!state.root) {
-    fprintf(stderr, "plash: can't open root directory\n");
-    return 1;
+
+  w_setup();
+
+  state.env = 0;
+
+  {
+    int pid = fork();
+    if(pid == 0) {
+      /* Put it into its own process group, just in case user presses Ctrl-C. */
+      setpgid(0, 0);
+      execl(BIN_INSTALL "/gc-uid-locks", "gc-uid-locks", "--gc", 0);
+      perror("plash/gc-uid-locks: exec");
+      exit(1);
+    }
+    if(pid < 0) perror("plash/gc-uid-locks: fork");
+    else w_add_process(pid, handle_gc_uid_locks_exit, 0);
   }
+  
+  state.conn_maker_local = conn_maker_make();
+
+  if(single_server) {
+    region_t r = region_make();
+    int export_count = 4;
+    int socks[2];
+    int pid;
+    cap_t *import;
+
+    if(socketpair(AF_LOCAL, SOCK_STREAM, 0, socks) < 0) {
+      perror("plash: socketpair");
+      return 1; /* Error */
+    }
+    set_close_on_exec_flag(socks[0], 1);
+    set_close_on_exec_flag(socks[1], 1);
+
+    pid = fork();
+    if(pid == 0) {
+      int err;
+      cap_t *caps;
+      
+      /* Put this process into its own process group, so that if the
+	 user presses Ctrl-C while the shell is waiting for input and
+	 is in the current process group, the server isn't killed. */
+      setpgid(0, 0);
+      
+      caps = region_alloc(r, export_count * sizeof(cap_t));
+      caps[0] = initial_dir("/", &err);
+      if(!caps[0]) {
+	fprintf(stderr, "plash: can't open root directory: %s\n",
+		strerror(err));
+	exit(1);
+      }
+      caps[1] = conn_maker_make();
+      caps[2] = union_dir_maker_make();
+      caps[3] = fab_dir_maker_make();
+      {
+	int i;
+	for(i = 0; i < export_count; i++) {
+	  caps[i] = make_log_proxy(caps[i]);
+	}
+      }
+      close(socks[1]);
+      cap_make_connection(r, socks[0], cap_seq_make(caps, export_count),
+			  0, "to-shell");
+      caps_free(cap_seq_make(caps, export_count));
+      region_free(r);
+      cap_run_server();
+      exit(0);
+    }
+    if(pid < 0) {
+      perror("plash: fork");
+      return 1;
+    }
+    w_add_process(pid, handle_server_exit, 0);
+    close(socks[0]);
+    import = cap_make_connection(r, socks[1], caps_empty, export_count,
+				 "to-server");
+    state.root = import[0];
+    state.conn_maker = import[1];
+    state.union_dir_maker = import[2];
+    state.fab_dir_maker = import[3];
+    region_free(r);
+  }
+  else {
+    int err;
+    state.root = initial_dir("/", &err);
+    if(!state.root) {
+      fprintf(stderr, "plash: can't open root directory: %s\n", strerror(err));
+      return 1;
+    }
+    state.conn_maker = inc_ref(state.conn_maker_local);
+    state.union_dir_maker = union_dir_maker_make();
+    state.fab_dir_maker = fab_dir_maker_make();
+  }
+
+  /* Start server used for mediating only. */
+  {
+    region_t r = region_make();
+    int export_count = 1;
+    int socks[2];
+    int pid;
+    cap_t *import;
+
+    if(socketpair(AF_LOCAL, SOCK_STREAM, 0, socks) < 0) {
+      perror("plash: socketpair");
+      return 1; /* Error */
+    }
+    set_close_on_exec_flag(socks[0], 1);
+    set_close_on_exec_flag(socks[1], 1);
+
+    pid = fork();
+    if(pid == 0) {
+      cap_t *caps;
+      
+      /* Put this process into its own process group, so that if the
+	 user presses Ctrl-C while the shell is waiting for input and
+	 is in the current process group, the server isn't killed. */
+      setpgid(0, 0);
+
+      caps = region_alloc(r, export_count * sizeof(cap_t));
+      caps[0] = conn_maker_make();
+      close(socks[1]);
+      cap_make_connection(r, socks[0], cap_seq_make(caps, export_count),
+			  0, "single-server-to-shell");
+      caps_free(cap_seq_make(caps, export_count));
+      region_free(r);
+      cap_run_server();
+      exit(0);
+    }
+    if(pid < 0) {
+      perror("plash: fork");
+      return 1;
+    }
+    w_add_process(pid, handle_server_exit, 0);
+    close(socks[0]);
+    import = cap_make_connection(r, socks[1], caps_empty, export_count,
+				 "shell-to-single-server");
+    state.conn_maker = import[0];
+    region_free(r);
+  }
+
   state.cwd = 0;
   state.interactive = 0;
+  state.fork_server_per_job = !single_server;
   state.next_job_id = 1;
   state.jobs.id = 0;
   state.jobs.next = &state.jobs;
   state.jobs.prev = &state.jobs;
 
+  state.prompt = "plash$ ";
+
   state.log_summary = 0;
   state.log_messages = 0;
   state.log_into_xterm = 0;
   state.print_fs_tree = 0;
-
-  state.conn_maker = conn_maker_make();
-  state.union_dir_maker = union_dir_maker_make();
-  state.fab_dir_maker = fab_dir_maker_make();
 
   assert(argc >= 1);
   shell_pathname = argv[0];
@@ -1958,48 +2673,23 @@ int main(int argc, char *argv[])
 	state.cwd = new_cwd;
       }
       else {
-	errno = err;
-	perror("can't set current working directory");
+	fprintf(stderr, "plash: can't set current working directory: %s\n",
+		strerror(err));
       }
       region_free(r);
       free(cwd_name);
     }
   }
 
-  if(argc <= 1) {
-    state.interactive = isatty(STDIN_FILENO);
-    if(state.interactive) {
-      int shell_pgid;
-      
-      /* Loop until we are in the foreground. */
-      while(1) {
-	int shell_pgid = getpgrp();
-	if(tcgetpgrp(STDIN_FILENO) == shell_pgid) break;
-	if(kill(-shell_pgid, SIGTTIN) < 0) { perror("kill(SIGTTIN)"); }
-      }
-      
-      /* Ignore interactive and job-control signals. */
-      signal(SIGINT, SIG_IGN);
-      signal(SIGQUIT, SIG_IGN);
-      signal(SIGTSTP, SIG_IGN);
-      signal(SIGTTIN, SIG_IGN);
-      signal(SIGTTOU, SIG_IGN);
-      /* signal(SIGCHLD, SIG_IGN); */
-
-      /* Put ourselves in our own process group. */
-      shell_pgid = getpid();
-      if(setpgid(shell_pgid, shell_pgid) < 0) {
-	/* This gives an error when the program is started in its own
-	   terminal window.  Don't know why. */
-	/* perror("plash: couldn't put the shell in its own process group"); */
-      }
-      
-      /* Grab control of the terminal. */
-      if(tcsetpgrp(STDIN_FILENO, shell_pgid) < 0) { perror("tcsetpgrp"); }
-
-      /* Save terminal state. */
-      if(tcgetattr(STDIN_FILENO, &state.tmodes) < 0) { perror("tcgetattr"); }
-    }
+  argc--;
+  argv++;
+  if(argc >= 2 && !strcmp(argv[0], "-p")) {
+    state.prompt = argv[1];
+    argc -= 2;
+    argv += 2;
+  }
+  if(argc == 0) {
+    interactive_setup(&state);
     
     /* Interactive mode */
     using_history();
@@ -2011,20 +2701,20 @@ int main(int argc, char *argv[])
 	 filename completion.  Set the kernel-provided cwd to our cwd.
 	 Ultimately, the proper way to do this would be to change readline
 	 to use our virtualised filesystem. */
-      if(state.cwd->dir->vtable == &real_dir_vtable) {
+      if(state.cwd && state.cwd->dir->vtable == &real_dir_vtable) {
 	struct real_dir *dir = (void *) state.cwd->dir;
 	if(dir->fd) {
 	  if(fchdir(dir->fd->fd) < 0) perror("fchdir");
 	}
       }
       set_window_title(&state, seqf_string("%d - plash"));
-      line1 = readline("plash$ ");
-      
-      while(wait_for_processes(&state, 1 /* check */) > 0) /* nothing */;
+      line1 = readline(state.prompt);
+
+      poll_for_processes();
       report_jobs(&state);
       
       if(!line1) {
-	if(MOD_DEBUG) printf("readline() returned null\n");
+	fprintf(stderr, "plash: end of user input\n");
 	break;
       }
       if(*line1) {
@@ -2032,7 +2722,7 @@ int main(int argc, char *argv[])
 
 	parse_and_run_shell_command(&state, seqf_string(line1));
 	
-	while(wait_for_processes(&state, 1 /* check */) > 0) /* nothing */;
+	poll_for_processes();
 	report_jobs(&state);
       }
       /* As far as I can tell, add_history() doesn't take a copy of the line you give it. */
@@ -2040,14 +2730,14 @@ int main(int argc, char *argv[])
     }
     printf("\n");
   }
-  else if(argc == 3 && !strcmp(argv[1], "-c")) {
-    parse_and_run_shell_command(&state, seqf_string(argv[2]));
+  else if(argc == 2 && !strcmp(argv[0], "-c")) {
+    parse_and_run_shell_command(&state, seqf_string(argv[1]));
   }
   else {
     printf("Plash version " PLASH_VERSION "\n"
 	   "Copyright 2004 Mark Seaborn\n"
 	   "\n"
-	   "Usage: shell [-c CMD]\n"
+	   "Usage: shell [-c CMD] [-p PROMPT]\n"
 	   "\n"
 	   "Special commands in the shell:\n"
 	   "  cd <directory pathname>  Change directory\n"
@@ -2057,3 +2747,5 @@ int main(int argc, char *argv[])
   }
   return 0;
 }
+
+#include "out-vtable-shell.h"

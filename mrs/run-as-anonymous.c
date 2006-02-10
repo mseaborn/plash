@@ -41,9 +41,11 @@
    root happens to own using symlinks.
 */
 
+#include <alloca.h>
 #include <errno.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <grp.h>
 #include <sys/time.h>
 #include <fcntl.h>
 #include <assert.h>
@@ -112,10 +114,10 @@ int main(int argc, char *argv[], char *envp[])
   else {
     char **argv2;
     int i;
-    int cwd_fd;
     int uid;
 
 #if 0
+    int cwd_fd;
     cwd_fd = open(".", O_RDONLY);
     if(cwd_fd < 0) { perror(NAME ": open: can't save current directory"); return 1; }
 #endif

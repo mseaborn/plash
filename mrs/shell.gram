@@ -18,14 +18,20 @@
 # USA.
 
 
+# This is used by the `source' command
+command_list =
+    c:command semicolon rest:command_list {{ mk_commands_cons(r, c, rest) }}
+  / null {{ 0 }};
+
 command =
     "cd" ws dir:pathname {{ mk_chdir(r, dir) }}
   / "cd" ws {{ mk_chdir(r, char_cons(r, '~', 0)) }}
   / "fg" ws n:number ws {{ mk_command_fg(r, n) }}
   / "bg" ws n:number ws {{ mk_command_bg(r, n) }}
-  / "def" ![a-zA-Z0-9_] ws var:var_name equals e:expr1
+  / kw_def var:var_name equals e:expr1
 	{{ mk_def_binding(r, var, e) }}
-  / cmd:pipeline bg_flag:(ampersand {{ (void *) 1 }} / null {{ 0 }})
+  / kw_source file:pathname {{ mk_command_source(r, file) }}
+  / !kw_def cmd:pipeline bg_flag:(ampersand {{ (void *) 1 }} / null {{ 0 }})
 	{{ mk_command(r, cmd, (int) bg_flag) }};
 
 pipeline =
@@ -73,7 +79,7 @@ redirection =
 
 # pathname = s:(!wschar c:char {{ (void*) c }})+ ws;
 pathname = !(![a-zA-Z0-9_/.~]) s:pathname_aux ws {{ s }};
-pathname_aux = c:(!(wschar / [&|*={}()]) c:char {{ (void*) c }})
+pathname_aux = c:(!(wschar / [&|*={}();]) c:char {{ (void*) c }})
                rest:(pathname_aux / null {{ 0 }})
                {{ char_cons(r, (int) c, rest) }};
 
@@ -93,11 +99,11 @@ glob_pathname_aux2 = '/'+ x:glob_pathname_aux3 {{ x }}
 glob_pathname_aux3 = glob_pathname_aux1 / null
 			{{ mk_glob_path_end(r, 1 /* slash */) }};
 glob_leafname =
-	c:(!(wschar / [&|/*={}()]) c:char {{ (void*) c }}
+	c:(!(wschar / [&|/*={}();]) c:char {{ (void*) c }}
 	   / '*' {{ (void*) GLOB_STAR }})
 	rest:(glob_leafname / null {{ 0 }})
 	{{ char_cons(r, (int) c, rest) }};
-user_name = !(wschar / [&|*/={}()]) c:char rest:(user_name / null {{ 0 }})
+user_name = !(wschar / [&|*/={}();]) c:char rest:(user_name / null {{ 0 }})
 		{{ char_cons(r, (int) c, rest) }};
 
 
@@ -108,7 +114,8 @@ str_lit1 = !'"' c:char rest:str_lit1 {{ char_cons(r, (int) c, rest) }} / null {{
 str_lit2 = !'\'' c:char rest:str_lit2 {{ char_cons(r, (int) c, rest) }} / null {{ 0 }};
 
 option = '-' s:opt_str ws {{ char_cons(r, '-', s) }};
-opt_str = !wschar c:char rest:opt_str {{ char_cons(r, (int) c, rest) }} / null {{ 0 }};
+opt_str = !(wschar / [&|*/={}();]) c:char rest:opt_str
+             {{ char_cons(r, (int) c, rest) }} / null {{ 0 }};
 
 char = '\\' '\\' {{ (void*) '\\' }}
      / '\\' '\'' {{ (void*) '\'' }}
@@ -116,25 +123,31 @@ char = '\\' '\\' {{ (void*) '\\' }}
      / '\\' ' ' {{ (void*) ' ' }}
      / '\\' 'n' {{ (void*) '\n' }}
      / '\\' 't' {{ (void*) '\t' }}
-     / '\\' c:[&|*+={}()] {{ (void*) c }}
+     / '\\' c:[&|*+={}();] {{ (void*) c }}
      / !('\\' .) c:. {{ (void*) c }};
 
 number = c:[0-9] rest:(number / null {{ 0 }}) {{ char_cons(r, (int) c, rest) }};
 
 var_name = c:[a-zA-Z_] rest:var_name_aux {{ char_cons(r, (int) c, rest) }};
 var_name_aux =
-    ws {{ 0 }}
-  / c:[a-zA-Z0-9_] rest:var_name_aux {{ char_cons(r, (int) c, rest) }};
+    c:[a-zA-Z0-9_] rest:var_name_aux {{ char_cons(r, (int) c, rest) }}
+  / ws {{ 0 }};
 
-expr1 = "capcmd" ![a-zA-Z0-9_] ws cmd:pathname args:arglist1
-          {{ mk_cap_cmd(r, cmd, args) }}
-      / "F" ![a-zA-Z0-9_] ws f:pathname {{ mk_expr_filename(r, f) }}
+expr1 = kw_capcmd cmd:pathname args:arglist1 {{ mk_cap_cmd(r, cmd, args) }}
+      / kw_f f:pathname {{ mk_expr_filename(r, f) }}
+      / kw_mkfs args:arglist1 {{ mk_expr_mkfs(r, args) }}
       / expr2;
 expr2 = v:var_name {{ mk_expr_var(r, v) }}
       / b_open e:expr1 b_close {{ e }};
 
 
 # Lexical
+
+kw_def = "def" ![a-zA-Z0-9_] ws;
+kw_capcmd = "capcmd" ![a-zA-Z0-9_] ws;
+kw_f = "F" ![a-zA-Z0-9_] ws;
+kw_mkfs = "mkfs" ![a-zA-Z0-9_] ws;
+kw_source = "source" ![a-zA-Z0-9_] ws;
 
 c_open = '{' ws;
 c_close = '}' ws;
@@ -146,5 +159,8 @@ ampersand = '&' ws;
 pipe_bar = '|' ws;
 bang_bang = "!!" ws;
 equals = '=' ws;
-ws = (wschar / '#' (!'\n' .)* '\n')*;
+semicolon = ';' ws;
+
+# Comments match to the next newline, or to the end of the file
+ws = (wschar / '#' (!'\n' .)* ('\n' / null))*;
 wschar = ' ' / '\t' / '\n';

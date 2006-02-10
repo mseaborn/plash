@@ -28,6 +28,11 @@
 #include "config.h"
 
 
+/* Don't usually print anything, because we don't want to disclose info
+   to non-root users. */
+int verbose = 0;
+
+
 char *get_entry(char *buf, int got, const char *label)
 {
   int i = 0;
@@ -73,14 +78,14 @@ int int_of_hex_digit(char c)
 }
 
 
-int main(int argc, char *argv[])
+void gc_uid_locks()
 {
   int *uids = 0, uids_got = 0, uids_size = 0;
   struct dirent *ent;
   DIR *dir;
 
   dir = opendir("/proc");
-  if(!dir) { perror("opendir /proc"); return 1; }
+  if(!dir) { perror("opendir /proc"); return; }
   while(1) {
     ent = readdir(dir);
     if(!ent) break;
@@ -98,11 +103,11 @@ int main(int argc, char *argv[])
 
       fd = open(name, O_RDONLY);
       free(name);
-      if(fd < 0) { perror("open"); return 1; }
+      if(fd < 0) { perror("open"); return; }
       {
 	char buf[1024];
 	int got = read(fd, buf, sizeof(buf));
-	if(got < 0) { perror("read"); return 1; }
+	if(got < 0) { perror("read"); return; }
 
 	if(0) {
 	  char *name = get_entry(buf, got, "Name:");
@@ -113,7 +118,7 @@ int main(int argc, char *argv[])
 	  if(uids_line) {
 	    int pid1, pid2, pid3, pid4;
 	    if(sscanf(uids_line, "%i %i %i %i", &pid1, &pid2, &pid3, &pid4) != 4) {
-	      printf("format unrecognised: %s\n", uids_line);
+	      if(verbose) printf("format unrecognised: %s\n", uids_line);
 	    }
 	    else {
 	      if(uids_size - uids_got < 4) {
@@ -151,29 +156,29 @@ int main(int argc, char *argv[])
   }
 
   /* Look at all the uids in the lock dir. */
-  if(chdir(UID_LOCK_DIR) < 0) { perror("chdir " UID_LOCK_DIR); return 1; }
+  if(chdir(UID_LOCK_DIR) < 0) { perror("chdir " UID_LOCK_DIR); return; }
   dir = opendir(".");
-  if(!dir) { perror("opendir " UID_LOCK_DIR); return 1; }
+  if(!dir) { perror("opendir " UID_LOCK_DIR); return; }
   while(1) {
     int i, j, x;
     ent = readdir(dir);
     if(!ent) break;
 
     if(strlen(ent->d_name) != 8) {
-      printf("ignoring %s\n", ent->d_name);
+      if(verbose) printf("ignoring %s\n", ent->d_name);
       continue;
     }
     x = 0;
     for(i = 0; i < 8; i++) {
       int d = int_of_hex_digit(ent->d_name[i]);
       if(d < 0) {
-	printf("ignoring %s\n", ent->d_name);
+	if(verbose) printf("ignoring %s\n", ent->d_name);
 	continue;
       }
       x |= d << ((7-i)*4);
     }
     if(!include_uid(x)) {
-      printf("outside range: %i\n", x);
+      if(verbose) printf("outside range: %i\n", x);
       continue;
     }
 
@@ -186,13 +191,23 @@ int main(int argc, char *argv[])
       else if(x > uids[mid]) i = mid+1;
       else goto found;
     }
-    printf("not found %i\n", x);
-    if(unlink(ent->d_name) < 0) { perror("unlink"); return 1; }
+    if(verbose) printf("not found %i\n", x);
+    if(unlink(ent->d_name) < 0) { perror("unlink"); return; }
     continue;
   found:
-    printf("found %i\n", x);
+    if(verbose) printf("found %i\n", x);
   }
   closedir(dir);
+}
 
+int main(int argc, char *argv[])
+{
+  if(argc == 2 && !strcmp(argv[1], "--gc")) {
+    gc_uid_locks();
+    return 0;
+  }
+  /* Print this when no arguments are given just to be informative. */
+  printf("Usage: gc-uid-locks --gc\n");
+  printf("This setuid program removes lock files for UIDs that are not in use.\n");
   return 0;
 }

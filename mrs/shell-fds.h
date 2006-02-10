@@ -17,36 +17,27 @@
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
    USA.  */
 
-#ifndef comms_h
-#define comms_h
+#ifndef shell_fds_h
+#define shell_fds_h
+
 
 #include "region.h"
 
 
-struct comm {
-  int sock;
-  
-  char *buf;
-  int buf_size; /* Allocated size of buf */
-  int pos; /* Position of message being received; number of consumed bytes in buf */
-  int got; /* Number of bytes received after pos */
+void finalise_close_fd(void *obj);
 
-  int *fds_buf;
-  int fds_buf_size;
-  int fds_pos;
-  int fds_got;
+/* FD array.  An entry of -1 means that the FD is not open. */
+/* This is allocated in a region.  Resizing doesn't reallocate the old
+   array. */
+/* Like struct seq_fds, but intended to be writable. */
+struct fd_array {
+  int *fds;
+  int count;
 };
 
-#define COMM_END 0
-#define COMM_AVAIL 1
-#define COMM_UNAVAIL 2
-
-struct comm *comm_init(int sock);
-void comm_free(struct comm *comm);
-int comm_read(struct comm *comm, int *err);
-int comm_try_get(struct comm *comm, seqf_t *result_data, fds_t *result_fds);
-int comm_get(struct comm *comm, seqf_t *result_data, fds_t *result_fds);
-int comm_send(region_t r, int sock, seqt_t msg, fds_t fds);
+void array_set_fd(region_t r, struct fd_array *array, int j, int x);
+int array_get_free_index(struct fd_array *array);
+int install_fds(fds_t array);
 
 
 #endif

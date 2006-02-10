@@ -1,3 +1,32 @@
+plash (1.7) unstable; urgency=low
+
+  * Added `Pgid' parameter to exec object invocation.
+  * Changed cap_run_server() so that it exits when there are no exports,
+    not when the connection list is empty.  If imports remain, gives a
+    warning.
+  * Added vtable_name to filesys_obj vtable for debugging purposes.
+  * Added environment to the shell state and implemented variable
+    expressions and finished `def' bindings.
+  * Added `mkfs' expression.
+  * Added d_conn to shell.c and change the code to use it.  This is a more
+    general way of starting a server, but the generalisation turned out
+    not to be necessary.
+  * shell.c runs gc-uid-locks on startup.
+  * shell.c now creates a single server process on startup.
+  * Add reconnectable-obj.[ch]
+  * Merged filesys_slot objects into filesys_obj.  The purpose of this
+    was to allow slots to be passed between processes in order to
+    construct filesystems on another server, but this turned out not to
+    be immediately necessary.
+  * Add methods:  make_conn
+  * Add log-proxy.[ch]
+  * Add make-vtables.pl
+  * Add make-marshall.pl
+  * filesys_obj_free() now changes the vtable to one whose functions
+    do assert(0) before freeing the object, to catch uses of freed objects.
+
+ -- Mark Seaborn <mseaborn@onetel.com>  Sun, 01 May 2005 16:45:28 -0400
+
 plash (1.6) unstable; urgency=low
 
   * Added the "pathname=expr" syntax to the shell.  Added "F pathname"

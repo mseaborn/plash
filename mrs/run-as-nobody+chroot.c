@@ -17,8 +17,10 @@
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
    USA.  */
 
+#include <alloca.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <grp.h>
 #include <pwd.h>
 
 #include "config.h"

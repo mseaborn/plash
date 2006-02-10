@@ -73,6 +73,7 @@
 #define MOD_LOG_ERRORS 1
 #define MOD_MSG "cap-protocol: "
 #define LOG stderr
+#define PRINT_PID (fprintf(LOG, "[%i] ", getpid()))
 
 #ifndef IN_LIBC
 #define MOD_DUMP_ON_VIOLATION
@@ -101,6 +102,7 @@ struct connection {
   struct connection_list l;
 
   const char *name; /* Used for debugging; not freed */
+  int conn_id; /* Used for identifying the connection in debugging info */
 
   /* If the connection is closed (eg. because it was dropped by the other
      end), comm is set to null and the FD is closed.  The export table is
@@ -126,6 +128,8 @@ struct connection {
 struct c_server_state {
   struct connection_list list;
   int total_ready_to_read;
+  /* This is the sum of the export_counts of the connections: */
+  int total_export_count;
 
   /* Arguments to select(): */
   int max_fd;
@@ -137,6 +141,7 @@ static struct c_server_state server_state =
 	      .prev = (struct connection *) &server_state.list,
 	      .next = (struct connection *) &server_state.list },
     .total_ready_to_read = 0,
+    .total_export_count = 0,
     .max_fd = 0
   };
 
@@ -183,6 +188,8 @@ static void shut_down_connection(struct connection *conn)
   conn->l.next->l.prev = conn->l.prev;
   init_fd_set(&server_state);
 
+  server_state.total_export_count -= conn->export_count;
+
   if(conn->import_count > 0) {
     /* Mark connection as shut down (but we don't deallocate it yet). */
     conn->comm = 0;
@@ -215,11 +222,15 @@ static void violation(struct connection *conn, seqf_t msg)
 {
   if(STRICT_PROTOCOL) {
 #ifdef DO_LOG
-    if(MOD_LOG_ERRORS) fprintf(LOG, MOD_MSG "%s: protocol violation in strict mode: shutting down connection\n", conn->name);
+    if(MOD_LOG_ERRORS) {
+      PRINT_PID;
+      fprintf(LOG, MOD_MSG "[fd %i] %s: protocol violation in strict mode: shutting down connection\n", conn->sock_fd, conn->name);
+    }
 #endif
     shut_down_connection(conn);
   }
 #ifdef MOD_DUMP_ON_VIOLATION
+  PRINT_PID;
   fprintf(LOG, MOD_MSG "offending message:\n");
   fprint_data(LOG, msg);
 #endif
@@ -258,13 +269,19 @@ static int decr_import_count(struct connection *conn)
   if(conn->import_count == 0 && conn->export_count == 0) {
     if(conn->comm) {
 #ifdef DO_LOG
-      if(MOD_DEBUG) fprintf(LOG, MOD_MSG "free: last reference: dropping connection \"%s\"\n", conn->name);
+      if(MOD_DEBUG) {
+	PRINT_PID;
+	fprintf(LOG, MOD_MSG "[fd %i] %s: free last reference: dropping connection\n", conn->sock_fd, conn->name);
+      }
 #endif
       shut_down_connection(conn);
     }
     else {
 #ifdef DO_LOG
-      if(MOD_DEBUG) fprintf(LOG, MOD_MSG "free: freeing last reference to dropped connection \"%s\"\n", conn->name);
+      if(MOD_DEBUG) {
+	PRINT_PID;
+	fprintf(LOG, MOD_MSG "free: freeing last reference to dropped connection \"%s\"\n", conn->name);
+      }
 #endif
       free(conn);
     }
@@ -282,7 +299,10 @@ void remote_obj_free(struct filesys_obj *obj1)
   if(conn->comm) {
     region_t r = region_make();
 #ifdef DO_LOG
-    if(MOD_DEBUG) fprintf(LOG, MOD_MSG "free: dropping reference 0x%x (for \"%s\")\n", obj->id, obj->conn->name);
+    if(MOD_DEBUG) {
+      PRINT_PID;
+      fprintf(LOG, MOD_MSG "[fd %i] %s: free: dropping reference 0x%x\n", obj->conn->sock_fd, obj->conn->name, obj->id);
+    }
 #endif
     comm_send(r, conn->sock_fd,
 	      cat2(r, mk_string(r, "Drop"),
@@ -291,6 +311,47 @@ void remote_obj_free(struct filesys_obj *obj1)
     region_free(r);
   }
 }
+
+/* For debugging: */
+#ifdef DO_LOG
+static void print_msg(FILE *fp, seqf_t data_orig)
+{
+  {
+    seqf_t data = data_orig;
+    int ok = 1;
+    int method;
+    m_str(&ok, &data, "Call");
+    m_int(&ok, &data, &method);
+    if(ok) {
+      char *x = alloca(sizeof(int) + 1);
+      memcpy(x, data_orig.data + 4, sizeof(int));
+      x[sizeof(int)] = 0;
+      fprintf(fp, "Call %s", x);
+      return;
+    }
+  }
+  {
+    seqf_t data = data_orig;
+    int ok = 1;
+    int method;
+    m_int(&ok, &data, &method);
+    if(ok) {
+      char *x = alloca(sizeof(int) + 1);
+      memcpy(x, data_orig.data, sizeof(int));
+      x[sizeof(int)] = 0;
+      fprintf(fp, "%s", x);
+      return;
+    }
+  }
+  fprintf(fp, "???");
+}
+static void print_msgt(FILE *fp, seqt_t data)
+{
+  region_t r = region_make();
+  print_msg(fp, flatten_reuse(r, data));
+  region_free(r);
+}
+#endif
 
 /* Takes the capability and FD arguments as owning references. */
 void remote_obj_invoke(struct filesys_obj *obj, struct cap_args args)
@@ -303,7 +364,17 @@ void remote_obj_invoke(struct filesys_obj *obj, struct cap_args args)
   if(!conn) {
     /* Single-use capability has already been used. */
 #ifdef DO_LOG
-    if(MOD_DEBUG) fprintf(LOG, MOD_MSG "%s: send tried on used single-use cap\n", conn->name);
+    if(MOD_DEBUG) {
+      PRINT_PID;
+      if(dest->single_use) {
+	fprintf(LOG, MOD_MSG "send tried on used single-use cap (or on closed connection), id 0x%x (connection unknown): ", dest->id);
+      }
+      else {
+	fprintf(LOG, MOD_MSG "send tried on closed connection, id 0x%x (connection unknown): ", dest->id);
+      }
+      print_msgt(LOG, args.data);
+      fprintf(LOG, "\n");
+    }
 #endif
     close_fds(args.fds);
     caps_free(args.caps);
@@ -314,7 +385,12 @@ void remote_obj_invoke(struct filesys_obj *obj, struct cap_args args)
      not be incremented, so the return continuation would get freed. */
   if(!conn->comm) {
 #ifdef DO_LOG
-    if(MOD_DEBUG) fprintf(LOG, MOD_MSG "%s: send tried on closed connection\n", conn->name);
+    if(MOD_DEBUG) {
+      PRINT_PID;
+      fprintf(LOG, MOD_MSG "[fd -] %s: send tried on closed connection, id 0x%x: ", conn->name, dest->id);
+      print_msgt(LOG, args.data);
+      fprintf(LOG, "\n");
+    }
 #endif
     decr_import_count(conn); /* this simply allows the `struct connection' to be freed */
     dest->conn = 0;
@@ -325,7 +401,12 @@ void remote_obj_invoke(struct filesys_obj *obj, struct cap_args args)
   r = region_make();
 
 #ifdef DO_LOG
-  if(MOD_DEBUG) fprintf(LOG, MOD_MSG "%s: send on fd %i, id 0x%x\n", conn->name, conn->sock_fd, dest->id);
+  if(MOD_DEBUG) {
+    PRINT_PID;
+    fprintf(LOG, MOD_MSG "[fd %i] %s: send on id 0x%x: ", conn->sock_fd, conn->name, dest->id);
+    print_msgt(LOG, args.data);
+    fprintf(LOG, "\n");
+  }
 #endif
 
   caps = region_alloc(r, args.caps.size * sizeof(int));
@@ -345,6 +426,7 @@ void remote_obj_invoke(struct filesys_obj *obj, struct cap_args args)
       id = conn->export_next;
       conn->export_next = conn->export[id].x.next;
       conn->export_count++;
+      server_state.total_export_count++;
       conn->export[id].used = 1;
       conn->export[id].single_use = c->vtable->single_use;
       conn->export[id].x.cap = c;
@@ -384,7 +466,10 @@ static cap_t lookup_id(struct connection *conn, int full_id)
 	return c;
       }
 #ifdef DO_LOG
-      if(MOD_LOG_ERRORS) fprintf(LOG, MOD_MSG "%s: bad index in argument id: 0x%x\n", conn->name, full_id);
+      if(MOD_LOG_ERRORS) {
+	PRINT_PID;
+	fprintf(LOG, MOD_MSG "[fd %i] %s: bad index in argument id: 0x%x\n", conn->sock_fd, conn->name, full_id);
+      }
 #endif
       return 0; /* Error */
     case CAPP_NAMESPACE_SENDER:
@@ -402,7 +487,10 @@ static cap_t lookup_id(struct connection *conn, int full_id)
       }
     default:
 #ifdef DO_LOG
-      if(MOD_LOG_ERRORS) fprintf(LOG, MOD_MSG "%s: bad namespace in argument id: 0x%x\n", conn->name, full_id);
+      if(MOD_LOG_ERRORS) {
+	PRINT_PID;
+	fprintf(LOG, MOD_MSG "[fd %i] %s: bad namespace in argument id: 0x%x\n", conn->sock_fd, conn->name, full_id);
+      }
 #endif
       return 0;
   }
@@ -417,6 +505,7 @@ static void remove_exported_id(struct connection *conn, int id)
   conn->export_next = id;
   assert(conn->export_count > 0);
   conn->export_count--;
+  server_state.total_export_count--;
   /* Shutting down will free the export table, but not the object that
      was just removed from the export table, which becomes owned by
      the caller. */
@@ -424,7 +513,10 @@ static void remove_exported_id(struct connection *conn, int id)
     /* This could happen if there's a mismatch between what
        the two ends think they've imported and exported. */
 #ifdef DO_LOG
-    if(MOD_LOG_ERRORS) fprintf(LOG, MOD_MSG "%s: why didn't the other end drop the connection?\n", conn->name);
+    if(MOD_LOG_ERRORS) {
+      PRINT_PID;
+      fprintf(LOG, MOD_MSG "[fd %i] %s: why didn't the other end drop the connection?\n", conn->sock_fd, conn->name);
+    }
 #endif
     shut_down_connection(conn);
   }
@@ -446,7 +538,17 @@ static void handle_msg(struct connection *conn, seqf_t data_orig, fds_t fds)
       int *caps = (void *) caps_data.data;
       int id = dest_id >> CAPP_ID_SHIFT;
 #ifdef DO_LOG
-    if(MOD_DEBUG) fprintf(LOG, MOD_MSG "%s: got invoke 0x%x\n", conn->name, dest_id);
+      if(MOD_DEBUG) {
+	int i;
+	PRINT_PID;
+	fprintf(LOG, MOD_MSG "[fd %i] %s: got invoke 0x%x: ", conn->sock_fd, conn->name, dest_id);
+	print_msg(LOG, data);
+	fprintf(LOG, " with %i fds", fds.count);
+	for(i = 0; i < fds.count; i++) {
+	  fprintf(LOG, " %i", fds.fds[i]);
+	}
+	fprintf(LOG, "\n");
+      }
 #endif
       switch(dest_id & CAPP_NAMESPACE_MASK) {
         case CAPP_NAMESPACE_RECEIVER:
@@ -454,6 +556,8 @@ static void handle_msg(struct connection *conn, seqf_t data_orig, fds_t fds)
 	    region_t r = region_make();
             cap_t dest = conn->export[id].x.cap;
 	    int single_use = conn->export[id].single_use;
+	    seqf_t data_copy;
+	    fds_t fds_copy;
 
             cap_t *cap_args = region_alloc(r, no_caps * sizeof(cap_t));
 	    int i;
@@ -470,6 +574,16 @@ static void handle_msg(struct connection *conn, seqf_t data_orig, fds_t fds)
               cap_args[i] = c;
             }
 
+	    /* Need to copy the data and FD references because the
+	       storage may be reused by comms.c. */
+	    {
+	      int *f = region_alloc(r, fds.count * sizeof(int));
+	      memcpy(f, fds.fds, fds.count * sizeof(int));
+	      fds_copy.fds = f;
+	      fds_copy.count = fds.count;
+	      data_copy = region_dup_seqf(r, data);
+	    }
+
 	    /* If the capability is single use, we need to remove it from
 	       the export table before invoking it, because invoking it
 	       can execute arbitrary code which may cause handle_msg to
@@ -483,24 +597,31 @@ static void handle_msg(struct connection *conn, seqf_t data_orig, fds_t fds)
 	       valid throughout its invocation. */
 	    if(single_use) { remove_exported_id(conn, id); }
 	    else { dest->refcount++; }
+	    filesys_obj_check(dest);
             dest->vtable->cap_invoke(dest,
 				     cap_args_make
-				       (mk_leaf(r, data),
+				       (mk_leaf(r, data_copy),
 					cap_seq_make(cap_args, no_caps),
-					fds));
+					fds_copy));
             region_free(r);
 	    filesys_obj_free(dest);
           }
           else {
 #ifdef DO_LOG
-            if(MOD_LOG_ERRORS) fprintf(LOG, MOD_MSG "%s: bad index in destination id: 0x%x\n", conn->name, dest_id);
+            if(MOD_LOG_ERRORS) {
+	      PRINT_PID;
+	      fprintf(LOG, MOD_MSG "[fd %i] %s: bad index in destination id: 0x%x\n", conn->sock_fd, conn->name, dest_id);
+	    }
 #endif
 	    violation(conn, data_orig);
           }
           return;
         default:
 #ifdef DO_LOG
-          if(MOD_LOG_ERRORS) fprintf(LOG, MOD_MSG "%s: bad namespace in destination id: 0x%x\n", conn->name, dest_id);
+          if(MOD_LOG_ERRORS) {
+	    PRINT_PID;
+	    fprintf(LOG, MOD_MSG "[fd %i] %s: bad namespace in destination id: 0x%x\n", conn->sock_fd, conn->name, dest_id);
+	  }
 #endif
 	  violation(conn, data_orig);
           return;
@@ -517,7 +638,10 @@ static void handle_msg(struct connection *conn, seqf_t data_orig, fds_t fds)
     if(ok && fds.count == 0) {
       int id = dest_id >> CAPP_ID_SHIFT;
 #ifdef DO_LOG
-    if(MOD_DEBUG) fprintf(LOG, MOD_MSG "%s: got drop 0x%x\n", conn->name, dest_id);
+      if(MOD_DEBUG) {
+	PRINT_PID;
+	fprintf(LOG, MOD_MSG "[fd %i] %s: got drop 0x%x\n", conn->sock_fd, conn->name, dest_id);
+      }
 #endif
       switch(dest_id & CAPP_NAMESPACE_MASK) {
         case CAPP_NAMESPACE_RECEIVER:
@@ -530,14 +654,20 @@ static void handle_msg(struct connection *conn, seqf_t data_orig, fds_t fds)
 	  }
 	  else {
 #ifdef DO_LOG
-	    if(MOD_LOG_ERRORS) fprintf(LOG, MOD_MSG "%s: bad index in dropped id: 0x%x\n", conn->name, dest_id);
+	    if(MOD_LOG_ERRORS) {
+	      PRINT_PID;
+	      fprintf(LOG, MOD_MSG "[fd %i] %s: bad index in dropped id: 0x%x\n", conn->sock_fd, conn->name, dest_id);
+	    }
 #endif
 	    violation(conn, data_orig);
 	  }
 	  return;
         default:
 #ifdef DO_LOG
-          if(MOD_LOG_ERRORS) fprintf(LOG, MOD_MSG "%s: bad namespace in dropped id: 0x%x\n", conn->name, dest_id);
+          if(MOD_LOG_ERRORS) {
+	    PRINT_PID;
+	    fprintf(LOG, MOD_MSG "[fd %i] %s: bad namespace in dropped id: 0x%x\n", conn->sock_fd, conn->name, dest_id);
+	  }
 #endif
 	  violation(conn, data_orig);
 	  return;
@@ -545,16 +675,21 @@ static void handle_msg(struct connection *conn, seqf_t data_orig, fds_t fds)
     }
   }
 #ifdef DO_LOG
-  if(MOD_LOG_ERRORS) fprintf(LOG, MOD_MSG "%s: unknown message\n", conn->name);
+  if(MOD_LOG_ERRORS) {
+    PRINT_PID;
+    fprintf(LOG, MOD_MSG "[fd %i] %s: unknown message\n", conn->sock_fd, conn->name);
+  }
 #endif
   violation(conn, data_orig);
   close_fds(fds);
 }
 
+static int next_conn_id = 0;
+
 /* Creates a new connection given a socket file descriptor.
    Exports the given objects on the connection, and returns an array
    containing object references for `import_count' imported objects. */
-/* `export' contains owned references.  Returns owned references. */
+/* `export' contains non-owned references.  Returns owned references. */
 cap_t *cap_make_connection(region_t r, int sock_fd,
 			   cap_seq_t export, int import_count,
 			   const char *name)
@@ -567,10 +702,14 @@ cap_t *cap_make_connection(region_t r, int sock_fd,
   conn = amalloc(sizeof(struct connection));
 
 #ifdef DO_LOG
-  if(MOD_DEBUG) fprintf(LOG, MOD_MSG "%s: creating connection from socket %i: import %i, export %i\n", name, sock_fd, import_count, export.size);
+  if(MOD_DEBUG) {
+    PRINT_PID;
+    fprintf(LOG, MOD_MSG "%s: creating connection from socket %i: import %i, export %i\n", name, sock_fd, import_count, export.size);
+  }
 #endif
 
   conn->name = name;
+  conn->conn_id = next_conn_id++;
 
   conn->comm = comm_init(sock_fd);
   conn->sock_fd = sock_fd;
@@ -587,9 +726,10 @@ cap_t *cap_make_connection(region_t r, int sock_fd,
   conn->export_next = export.size;
   conn->export = amalloc(export.size * sizeof(struct export_entry));
   for(i = 0; i < export.size; i++) {
+    filesys_obj_check(export.caps[i]);
     conn->export[i].used = 1;
     conn->export[i].single_use = 0;
-    conn->export[i].x.cap = export.caps[i];
+    conn->export[i].x.cap = inc_ref(export.caps[i]);
   }
 
   /* Insert into list of connections. */
@@ -599,6 +739,8 @@ cap_t *cap_make_connection(region_t r, int sock_fd,
   server_state.list.prev->l.next = conn;
   server_state.list.prev = conn;
   init_fd_set(&server_state);
+
+  server_state.total_export_count += export.size;
 
   /* Create imported object references. */
   conn->import_count = 0; /* This will be incremented by lookup_id(). */
@@ -630,22 +772,35 @@ void cap_close_all_connections()
 /* Read from a connection's socket and process messages. */
 static void listen_on_connection(struct connection *conn)
 {
-  int r;
-  seqf_t msg;
-  fds_t fds;
+  int r, err;
 
   server_state.total_ready_to_read -= conn->ready_to_read;
   conn->ready_to_read = 0;
 
-  r = comm_read(conn->comm);
-  if(r < 0 && errno == EINTR) { /* nothing */ }
+  r = comm_read(conn->comm, &err);
+  if(r < 0 && err == EINTR) { /* nothing */ }
+  else if(r < 0 && err == EAGAIN) {
+#ifdef DO_LOG
+    if(MOD_LOG_ERRORS) {
+      PRINT_PID;
+      fprintf(LOG, MOD_MSG "[fd %i] %s: got EAGAIN on recv: why?\n", conn->sock_fd, conn->name);
+    }
+#endif
+  }
   else if(r < 0 || r == COMM_END) {
 #ifdef DO_LOG
-    if(MOD_DEBUG) {
-      if(r < 0)
-	fprintf(LOG, MOD_MSG "%s: connection error, errno %i (%s)\n",
-		conn->name, errno, strerror(errno));
-      else fprintf(LOG, MOD_MSG "%s: connection end\n", conn->name);
+    if(r < 0) {
+      if(MOD_LOG_ERRORS) {
+	PRINT_PID;
+	fprintf(LOG, MOD_MSG "[fd %i] %s: connection error, errno %i (%s)\n",
+		conn->sock_fd, conn->name, err, strerror(err));
+      }
+    }
+    else {
+      if(MOD_DEBUG) {
+	PRINT_PID;
+	fprintf(LOG, MOD_MSG "[fd %i] %s: connection end\n", conn->sock_fd, conn->name);
+      }
     }
 #endif
 
@@ -653,6 +808,8 @@ static void listen_on_connection(struct connection *conn)
     shut_down_connection(conn);
   }
   else {
+    seqf_t msg;
+    fds_t fds;
     conn->import_count++;
     while(conn->comm) {
       r = comm_try_get(conn->comm, &msg, &fds);
@@ -675,6 +832,12 @@ int cap_run_server_step()
   struct c_server_state *state = &server_state;
   if(state->list.next->l.head) return 0;
 
+  /*
+  PRINT_PID;
+  fprintf(LOG, MOD_MSG "connections:\n");
+  cap_print_connections_info(stderr);
+  */
+
 #ifdef IN_RTLD
   /* In ld.so, select() is not available. */
   listen_on_connection(state->list.next);
@@ -684,7 +847,10 @@ int cap_run_server_step()
      to use select(), and we save a system call. */
   if(state->list.next->l.next->l.head) {
 #ifdef DO_LOG
-    if(MOD_DEBUG) fprintf(LOG, MOD_MSG "run_server_step: only one connection (\"%s\")\n", state->list.next->name);
+    if(MOD_DEBUG) {
+      PRINT_PID;
+      fprintf(LOG, MOD_MSG "[fd %i] %s: run_server_step: only one connection\n", state->list.next->sock_fd, state->list.next->name);
+    }
 #endif
     listen_on_connection(state->list.next);
     return 1;
@@ -696,7 +862,10 @@ int cap_run_server_step()
       fd_set read_fds = state->set;
 
 #ifdef DO_LOG
-      if(MOD_DEBUG) fprintf(LOG, MOD_MSG "run_server_step: calling select()\n");
+      if(MOD_DEBUG) {
+	PRINT_PID;
+	fprintf(LOG, MOD_MSG "run_server_step: calling select()\n");
+      }
 #endif
       result = select(state->max_fd, &read_fds, 0, 0, 0 /* &timeout */);
       if(result < 0 && errno == EINTR) return 1;
@@ -738,11 +907,79 @@ int cap_run_server_step()
 
 void cap_run_server()
 {
-  /* While the process list is non-empty... */
-  while(cap_run_server_step()) { /* empty */ }
+  // /* While the process list is non-empty... */
+  // while(cap_run_server_step()) { /* empty */ }
+
+  while(1) {
+    /* If no objects are exported, the server finishes.  Any imports can
+       be dropped, since it is assumed they will not be used any more.
+       However, if imports remain, this could indicate a reference leak
+       (unless they are held by global variables), so a warning is given. */
+    if(server_state.total_export_count <= 0) {
+#ifdef DO_LOG
+      /* If the connection list is non-empty, imports remain. */
+      if(!server_state.list.next->l.head && MOD_LOG_ERRORS) {
+	PRINT_PID;
+	fprintf(LOG, MOD_MSG "warning: no exports, so finished, but imports remain -- possible reference leak\n");
+      }
+#endif
+      break;
+    }
+
+    if(!cap_run_server_step()) break;
+  }
 }
 
+/* For debugging: */
+#ifndef IN_RTLD
+void cap_print_cap(FILE *fp, cap_t obj)
+{
+  fprintf(fp, "%p=", obj);
+  if(obj->vtable == &remote_obj_vtable) {
+    struct remote_obj *r = (void *) obj;
+    if(r->conn) {
+      fprintf(fp, "remote_obj(conn=%i/`%s', id=%i%s)",
+	      r->conn->conn_id, r->conn->name, r->id,
+	      r->single_use ? ", single_use" : "");
+    }
+    else {
+      fprintf(fp, "remote_obj(conn=invalid, id=%i%s)",
+	      r->id,
+	      r->single_use ? ", single_use" : "");
+    }
+  }
+  else {
+    fprintf(fp, "%s", obj->vtable->vtable_name);
+  }
+}
 
+void cap_print_connections_info(FILE *fp)
+{
+  struct connection *conn;
+  int i = 0;
+  if(server_state.list.next->l.head) fprintf(fp, "no connections\n");
+  for(conn = server_state.list.next; !conn->l.head; conn = conn->l.next) {
+    int j;
+    
+    fprintf(fp, "  connection #%i, %i/`%s', counts: import=%i, export=%i\n",
+	    i, conn->conn_id, conn->name,
+	    conn->import_count, conn->export_count);
+    i++;
+
+    for(j = 0; j < conn->export_size; j++) {
+      if(conn->export[j].used) {
+	fprintf(fp, "    export %i%s: ", j,
+		conn->export[j].single_use ? " (single-use)" : "");
+	cap_print_cap(fp, conn->export[j].x.cap);
+	fprintf(fp, "\n");
+      }
+    }
+  }
+}
+#endif
+
+
+#if 0
 struct filesys_obj_vtable remote_obj_vtable = {
   /* .free = */ remote_obj_free,
 
@@ -750,22 +987,25 @@ struct filesys_obj_vtable remote_obj_vtable = {
   /* .cap_call = */ generic_obj_call,
   /* .single_use = */ 0,
   
-  /* .type = */ marshall_type,
-  /* .stat = */ marshall_stat,
-  /* .utimes = */ dummy_utimes,
-  /* .chmod = */ dummy_chmod,
-  /* .open = */ dummy_open,
-  /* .connect = */ dummy_socket_connect,
-  /* .traverse = */ dummy_traverse,
-  /* .list = */ dummy_list,
-  /* .create_file = */ dummy_create_file,
-  /* .mkdir = */ dummy_mkdir,
-  /* .symlink = */ dummy_symlink,
-  /* .rename = */ dummy_rename_or_link,
-  /* .link = */ dummy_rename_or_link,
-  /* .unlink = */ dummy_unlink,
-  /* .rmdir = */ dummy_rmdir,
-  /* .socket_bind = */ dummy_socket_bind,
-  /* .readlink = */ dummy_readlink,
+  /* .type = */ marshal_type,
+  /* .stat = */ marshal_stat,
+  /* .utimes = */ marshal_utimes,
+  /* .chmod = */ marshal_chmod,
+  /* .open = */ marshal_open,
+  /* .connect = */ marshal_socket_connect,
+  /* .traverse = */ marshal_traverse,
+  /* .list = */ marshal_list,
+  /* .create_file = */ marshal_create_file,
+  /* .mkdir = */ marshal_mkdir,
+  /* .symlink = */ marshal_symlink,
+  /* .rename = */ marshal_rename,
+  /* .link = */ marshal_link,
+  /* .unlink = */ marshal_unlink,
+  /* .rmdir = */ marshal_rmdir,
+  /* .socket_bind = */ marshal_socket_bind,
+  /* .readlink = */ marshal_readlink,
   1
 };
+#endif
+
+#include "out-vtable-cap-protocol.h"

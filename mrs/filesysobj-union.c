@@ -189,10 +189,11 @@ int union_dir_list(struct filesys_obj *obj, region_t r, seqt_t *result, int *err
 }
 
 
+#if 0
 struct filesys_obj_vtable union_dir_vtable = {
   /* .free = */ union_dir_free,
   /* .cap_invoke = */ local_obj_invoke,
-  /* .cap_call = */ marshall_cap_call,
+  /* .cap_call = */ marshal_cap_call,
   /* .single_use = */ 0,
   /* .type = */ objt_dir,
   /* .stat = */ union_dir_stat,
@@ -213,3 +214,6 @@ struct filesys_obj_vtable union_dir_vtable = {
   /* .readlink = */ dummy_readlink,
   1
 };
+#endif
+
+#include "out-vtable-filesysobj-union.h"

@@ -1,4 +1,10 @@
 
+Version 1.7:
+
+This version adds a major new feature, executable objects.  See
+NOTES.exec.
+
+
 Version 1.6:
 
 The shell now lets you start processes with existing files and

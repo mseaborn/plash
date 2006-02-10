@@ -100,7 +100,7 @@ void arg_print_aux(FILE *fp, int indent, argmbuf_t buf, bufref_t x)
   {
     int fd;
     if(!argm_fd(buf, x, &fd)) {
-      fprintf(fp, "FD");
+      fprintf(fp, "FD %i", fd);
       return;
     }
   }

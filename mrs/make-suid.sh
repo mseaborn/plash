@@ -20,13 +20,22 @@
 # USA.
 
 
-gcc run-as-nobody.c -o run-as-nobody
-gcc run-as-nobody+chroot.c -o run-as-nobody+chroot
+set -e
 
-chown root:root run-as-nobody
-chmod +s run-as-nobody
-chown root:root run-as-nobody+chroot
-chmod +s run-as-nobody+chroot
+gcc -Wall run-as-nobody.c -o run-as-nobody
+gcc -Wall run-as-nobody+chroot.c -o run-as-nobody+chroot
+gcc -Wall run-as-anonymous.c -o run-as-anonymous
+gcc -Wall gc-uid-locks.c -o gc-uid-locks
+
+setuid_root () {
+  chown root:root $1
+  chmod +s $1
+}
+
+setuid_root run-as-nobody
+setuid_root run-as-nobody+chroot
+setuid_root run-as-anonymous
+setuid_root gc-uid-locks
 
 # mkdir /usr/local/chroot-jail
 # mkdir /usr/local/chroot-jail/special

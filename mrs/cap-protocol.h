@@ -28,10 +28,14 @@
 cap_t *cap_make_connection(region_t r, int sock_fd,
 			   cap_seq_t export, int import_count,
 			   const char *name);
+/* This handles connections until there are no more objects exported.
+   It prints a warning if imported objects remain. */
 void cap_run_server(void);
 /* Returns 0 when there are no connections left to handle: */
 int cap_run_server_step(void);
 void cap_close_all_connections(void);
+
+void cap_print_connections_info(FILE *fp);
 
 
 /* For cap-call-return.c: */

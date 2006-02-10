@@ -170,7 +170,7 @@ void exec_obj_call(struct filesys_obj *obj1, region_t r,
     }
   }
  error:
-  marshall_cap_call(obj1, r, args, result);
+  marshal_cap_call(obj1, r, args, result);
   
   /*caps_free(args.caps);
   close_fds(args.fds);
@@ -179,32 +179,7 @@ void exec_obj_call(struct filesys_obj *obj1, region_t r,
   result->fds = fds_empty;*/
 }
 
-struct filesys_obj_vtable exec_obj_vtable = {
-  /* .free = */ exec_obj_free,
-
-  /* .cap_invoke = */ local_obj_invoke,
-  /* .cap_call = */ exec_obj_call,
-  /* .single_use = */ 0,
-
-  /* .type = */ objt_file,
-  /* .stat = */ exec_obj_stat,
-  /* .utimes = */ dummy_utimes,
-  /* .chmod = */ dummy_chmod,
-  /* .open = */ dummy_open,
-  /* .connect = */ dummy_socket_connect,
-  /* .traverse = */ dummy_traverse,
-  /* .list = */ dummy_list,
-  /* .create_file = */ dummy_create_file,
-  /* .mkdir = */ dummy_mkdir,
-  /* .symlink = */ dummy_symlink,
-  /* .rename = */ dummy_rename_or_link,
-  /* .link = */ dummy_rename_or_link,
-  /* .unlink = */ dummy_unlink,
-  /* .rmdir = */ dummy_rmdir,
-  /* .socket_bind = */ dummy_socket_bind,
-  /* .readlink = */ dummy_readlink,
-  1
-};
+OBJECT_VTABLE(exec_obj_vtable, exec_obj_free, exec_obj_call);
 
 
 int main(int argc, const char *argv[])

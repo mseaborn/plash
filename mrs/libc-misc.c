@@ -357,6 +357,11 @@ struct dirent *new_readdir(DIR *dir)
 }
 
 /* EXPORT: new_readdir_r => WEAK:readdir_r __readdir_r */
+/* This is a stupid interface too.  It provides a fixed-length buffer for
+   the leaf name, and no way to say how big the buffer is (we assume that
+   it's fixed by "struct dirent").  It's somewhat ambiguous whether the
+   buffer has to be used or not; whether we can return a different buffer
+   in "result" (if we do, how long is the buffer to be valid for?). */
 int new_readdir_r(DIR *dir, struct dirent *ent, struct dirent **result)
 {
   seqf_t buf;
@@ -373,6 +378,10 @@ int new_readdir_r(DIR *dir, struct dirent *ent, struct dirent **result)
     m_lenblock(&ok, &buf, &name);
     if(ok) {
       int rec_size = offsetof(struct dirent, d_name) + name.size + 1;
+      if(rec_size > sizeof(struct dirent)) {
+	__set_errno(EOVERFLOW);
+	return -1;
+      }
       ent->d_ino = inode;
       ent->d_off = 0; /* shouldn't be used */
       ent->d_reclen = rec_size; /* shouldn't be used */
@@ -430,6 +439,50 @@ struct dirent64 *new_readdir64(DIR *dir)
   }
 }
 
+/* The GLIBC_2.1 version / __old_readdir64_r is included although I don't
+   know how it's supposed to be different. */
+/* EXPORT: new_readdir64_r => __readdir64_r DEFVER:readdir64_r,GLIBC_2.2 VER:readdir64_r,GLIBC_2.1 __old_readdir64_r */
+/* This is a stupid interface too.  It provides a fixed-length buffer for
+   the leaf name, and no way to say how big the buffer is (we assume that
+   it's fixed by "struct dirent").  It's somewhat ambiguous whether the
+   buffer has to be used or not; whether we can return a different buffer
+   in "result" (if we do, how long is the buffer to be valid for?). */
+int new_readdir64_r(DIR *dir, struct dirent64 *ent, struct dirent64 **result)
+{
+  seqf_t buf;
+  if(!dir) { __set_errno(EBADF); return -1; }
+  buf.data = dir->data.data + dir->offset;
+  buf.size = dir->data.size - dir->offset;
+  if(buf.size == 0) { *result = 0; return 0; } /* end of directory */
+  {
+    int inode, type;
+    seqf_t name;
+    int ok = 1;
+    m_int(&ok, &buf, &inode);
+    m_int(&ok, &buf, &type);
+    m_lenblock(&ok, &buf, &name);
+    if(ok) {
+      int rec_size = offsetof(struct dirent64, d_name) + name.size + 1;
+      if(rec_size > sizeof(struct dirent64)) {
+	__set_errno(EOVERFLOW);
+	return -1;
+      }
+      ent->d_ino = inode;
+      ent->d_off = 0; /* shouldn't be used */
+      ent->d_reclen = rec_size; /* shouldn't be used */
+      ent->d_type = type;
+      memcpy(ent->d_name, name.data, name.size);
+      ent->d_name[name.size] = 0;
+      dir->offset = dir->data.size - buf.size;
+      *result = ent;
+      return 0;
+    }
+    else {
+      __set_errno(EIO); return -1;
+    }
+  }
+}
+
 /* EXPORT: new_closedir => WEAK:closedir __closedir */
 int new_closedir(DIR *dir)
 {
@@ -437,6 +490,14 @@ int new_closedir(DIR *dir)
   free(dir->buf);
   free(dir);
   return 0;
+}
+
+/* EXPORT: dirfd */
+int dirfd(DIR *dir)
+{
+  if(!dir) { __set_errno(EBADF); return -1; }
+  __set_errno(ENOSYS);
+  return -1;
 }
 
 /* EXPORT: rewinddir */

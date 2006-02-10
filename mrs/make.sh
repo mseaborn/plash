@@ -43,6 +43,8 @@ OPTS_C="-Wall -nostdlib \
 
 ./mrs/make-config-h.sh
 ./mrs/make-variants.pl
+#./mrs/make-marshal.pl
+./mrs/make-vtables.pl
 
 if [ $BUILD_SERVER = yes ]; then
   OPTS_S="-O1 -Wall -g `pkg-config gtk+-2.0 --cflags`"
@@ -64,12 +66,16 @@ if [ $BUILD_SERVER = yes ]; then
   $CC $OPTS_S -c mrs/filesysobj-readonly.c -o mrs/filesysobj-readonly.o
   $CC $OPTS_S -c mrs/filesysobj-union.c -o mrs/filesysobj-union.o
   $CC $OPTS_S -c mrs/filesysslot.c -o mrs/filesysslot.o
+  $CC $OPTS_S -c mrs/log-proxy.c -o mrs/log-proxy.o
+  $CC $OPTS_S -c mrs/reconnectable-obj.c -o mrs/reconnectable-obj.o
   $CC $OPTS_S -c mrs/build-fs.c -o mrs/build-fs.o
   $CC $OPTS_S -DUSE_GTK -c mrs/shell.c -o mrs/shell.o
   $CC $OPTS_S -c mrs/shell.c -o mrs/shell-nogtk.o
   $CC $OPTS_S -Wno-unused -c mrs/shell-parse.c -o mrs/shell-parse.o
   $CC $OPTS_S -c mrs/shell-variants.c -o mrs/shell-variants.o
   $CC $OPTS_S -c mrs/shell-globbing.c -o mrs/shell-globbing.o
+  $CC $OPTS_S -c mrs/shell-fds.c -o mrs/shell-fds.o
+  $CC $OPTS_S -c mrs/shell-wait.c -o mrs/shell-wait.o
   $CC $OPTS_S -c mrs/resolve-filename.c -o mrs/resolve-filename.o
   $CC $OPTS_S -c mrs/fs-operations.c -o mrs/fs-operations.o
   $CC $OPTS_S -c mrs/server.c -o mrs/server.o
@@ -78,7 +84,11 @@ if [ $BUILD_SERVER = yes ]; then
   #     $DIET/bin-i386/dietlibc.a -lgcc -o mrs/driver
   rm -f mrs/libplash.a
   ar cru mrs/libplash.a \
-	mrs/shell-parse.o mrs/shell-variants.o mrs/shell-globbing.o \
+	mrs/shell-parse.o \
+	mrs/shell-variants.o \
+	mrs/shell-globbing.o \
+	mrs/shell-fds.o \
+	mrs/shell-wait.o \
 	mrs/build-fs.o \
 	mrs/server.o mrs/fs-operations.o mrs/resolve-filename.o \
 	mrs/cap-utils.o mrs/cap-call-return.o mrs/cap-protocol.o \
@@ -88,6 +98,8 @@ if [ $BUILD_SERVER = yes ]; then
 	mrs/filesysobj-readonly.o \
 	mrs/filesysobj-real.o \
 	mrs/filesysobj.o \
+	mrs/log-proxy.o \
+	mrs/reconnectable-obj.o \
 	mrs/parse-filename.o mrs/comms.o \
 	mrs/serialise.o mrs/region.o mrs/utils.o
   $CC $OPTS_S mrs/shell.o mrs/libplash.a \

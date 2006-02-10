@@ -236,6 +236,9 @@ Standard services are:
  * fs_op
  * conn_maker
  * fs_op_maker
+ * union_dir_maker
+ * fab_dir_maker
+ * return_cont (this is passed by the "capcmd" expression)
 
 
 conn_maker object
@@ -442,6 +445,9 @@ The data is an array of pairs:
  * ("Root", obj):  obj is the root directory
  * ("Cwd.", string):  pathname of current working directory
    (this can be omitted, in which case process will have no defined cwd)
+ * ("Pgid", int):  process group ID to set for the new process
+   (this is optional, but reading from the console won't work without
+   setting it, and neither will Ctrl-C or Ctrl-Z)
 The invocation returns when the process started has exited.  It returns
 the exit code that `wait' returns for the process.
 

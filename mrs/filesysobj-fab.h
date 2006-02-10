@@ -60,7 +60,7 @@ extern struct filesys_obj_vtable fab_symlink_vtable;
 
 struct slot_list {
   char *name;
-  struct filesys_slot *slot;
+  struct filesys_obj *slot;
   struct slot_list *next;
 };
 

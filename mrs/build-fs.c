@@ -38,7 +38,7 @@ struct node {
   char *symlink_dest;
   /* Slot object to attach read-write.  May be null.  If this is used,
      the read-only object and the children are ignored. */
-  struct filesys_slot *attach_rw_obj;
+  struct filesys_obj *attach_rw_slot;
   /* Object to attach read-only, in a read-only slot.  This object may
      be writable; it needs to be attached using a read-only proxy.
      May be null.  If this is used, children may be attached below in
@@ -58,7 +58,7 @@ struct node *make_empty_node()
 {
   struct node *n = amalloc(sizeof(struct node));
   n->symlink_dest = 0;
-  n->attach_rw_obj = 0;
+  n->attach_rw_slot = 0;
   n->attach_ro_obj = 0;
   n->children = 0;
   return n;
@@ -76,7 +76,7 @@ void free_node(struct node *node)
   }
 
   if(node->attach_ro_obj) filesys_obj_free(node->attach_ro_obj);
-  if(node->attach_rw_obj) filesys_slot_free(node->attach_rw_obj);
+  if(node->attach_rw_slot) filesys_obj_free(node->attach_rw_slot);
   if(node->symlink_dest) free(node->symlink_dest);
   free(node);
 }
@@ -105,7 +105,7 @@ void print_tree(int indent, struct node *node)
   for(i = 0; i < indent; i++) putchar(' ');
   printf("obj: symlink=%s, attach=%s\n",
 	 node->symlink_dest ? node->symlink_dest : "none",
-	 node->attach_rw_obj ? "rw" : node->attach_ro_obj ? "ro" : "none");
+	 node->attach_rw_slot ? "rw" : node->attach_ro_obj ? "ro" : "none");
   for(list = node->children; list; list = list->next) {
     for(i = 0; i < indent+2; i++) putchar(' ');
     printf("%s =>\n", list->name);
@@ -156,14 +156,14 @@ int attach_ro_obj(struct node *node, cap_t obj)
   return replaced;
 }
 
-int attach_rw_obj(struct node *node, struct filesys_slot *obj)
+int attach_rw_slot(struct node *node, struct filesys_obj *obj)
 {
   int replaced = 0;
-  if(node->attach_rw_obj) {
-    filesys_slot_free(node->attach_rw_obj);
+  if(node->attach_rw_slot) {
+    filesys_obj_free(node->attach_rw_slot);
     replaced = 1;
   }
-  node->attach_rw_obj = obj;
+  node->attach_rw_slot = obj;
   return replaced;
 }
 
@@ -238,7 +238,7 @@ int attach_at_pathname(struct node *root_node, struct dir_stack *cwd_ds,
     }
     /* Doesn't check trailing_slash.  FIXME? */
   }
-  if(attach_rw_obj(node, make_read_only_slot(obj))) {
+  if(attach_rw_slot(node, make_read_only_slot(obj))) {
     printf("plash: warning: object bound to `");
     fprint_d(stdout, filename);
     printf("' was replaced\n");
@@ -311,7 +311,7 @@ int resolve_populate_aux
       if(end && attach && create) {
 	struct node *next_node = tree_traverse(dirstack->node, name1);
 	dirstack->dir->refcount++;
-	next_node->attach_rw_obj =
+	next_node->attach_rw_slot =
 	  make_generic_slot(dirstack->dir, name1);
 	dirnode_stack_free(dirstack);
 	return ATTACHED_OBJ;
@@ -406,7 +406,7 @@ int resolve_populate_aux
   if(attach) {
     dirstack->dir->refcount++;
     if(create) {
-      dirstack->node->attach_rw_obj = make_read_only_slot(dirstack->dir);
+      dirstack->node->attach_rw_slot = make_read_only_slot(dirstack->dir);
     }
     else {
       /* FIXME: produce warning for overwriting? */
@@ -469,7 +469,7 @@ int resolve_populate
 int next_inode = 1;
 
 /* Returns an owning reference. */
-struct filesys_slot *build_fs(struct node *node)
+struct filesys_obj *build_fs(struct node *node)
 {
   if(node->symlink_dest) {
     struct fab_symlink *sym = amalloc(sizeof(struct fab_symlink));
@@ -480,9 +480,9 @@ struct filesys_slot *build_fs(struct node *node)
     sym->inode = next_inode++;
     return make_read_only_slot((struct filesys_obj *) sym);
   }
-  else if(node->attach_rw_obj) {
-    node->attach_rw_obj->refcount++;
-    return node->attach_rw_obj;
+  else if(node->attach_rw_slot) {
+    node->attach_rw_slot->refcount++;
+    return node->attach_rw_slot;
   }
   else if(node->attach_ro_obj) {
     node->attach_ro_obj->refcount++;

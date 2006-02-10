@@ -183,6 +183,7 @@ void glob_resolve(region_t r,
     pathname_got = mk_string(r, "/");
   }
   else if(m_start_cwd(start)) {
+    if(!cwd) return; /* Error, but not reported */
     dirstack = cwd;
     dirstack->refcount++;
     pathname_got = mk_string(r, "");

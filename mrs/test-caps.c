@@ -111,6 +111,7 @@ int main()
     hw->hdr.vtable = &hellow_obj_vtable;
     
     cap_make_connection(r, socks[0], mk_caps1(r, (cap_t) hw), 0, "b");
+    filesys_obj_free((cap_t) hw);
     printf("2: starting server\n");
     cap_run_server();
     printf("2: server finished\n");

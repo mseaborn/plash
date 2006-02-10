@@ -199,12 +199,12 @@ void run_server(struct server_state *state)
       struct process_list *node;
       for(node = state->list.next; node->id && result > 0; node = node->next) {
 	if(FD_ISSET(node->comm->sock, &read_fds)) {
-	  int r;
+	  int r, err;
 	  seqf_t msg;
 	  fds_t fds;
     
 	  result--;
-	  r = comm_read(node->comm);
+	  r = comm_read(node->comm, &err);
 	  if(r < 0 || r == COMM_END) {
 	    struct process_list *node_next = node->next;
 	    if(DO_LOG_MESSAGES(state)) fprintf(state->log, "\nprocess %i error/end\n", node->id);

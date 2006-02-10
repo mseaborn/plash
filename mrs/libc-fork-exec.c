@@ -261,7 +261,7 @@ static int exec_object(cap_t obj, int argc, const char **argv,
     /* Also make sure that we don't pass on the socket that's connected
        to the server. */
     if(0 <= comm_sock && comm_sock < limit) fds[comm_sock] = -2;
-    
+
     for(i = 0; i < limit; i++) {
       if(fds[i] == -1) {
 	int fd = dup(i);
@@ -292,8 +292,10 @@ static int exec_object(cap_t obj, int argc, const char **argv,
   }
 
   {
+    int pgid = getpgid(0);
+    int i;
     bufref_t *a;
-    args = argmk_array(argbuf, 4 + (got_cwd ? 1:0), &a);
+    args = argmk_array(argbuf, 4 + (got_cwd ? 1:0) + (pgid > 0 ? 1:0), &a);
     a[0] = argmk_pair(argbuf,
 		      argmk_str(argbuf, mk_string(r, "Argv")),
 		      argv_arg);
@@ -306,10 +308,16 @@ static int exec_object(cap_t obj, int argc, const char **argv,
     a[3] = argmk_pair(argbuf,
 		      argmk_str(argbuf, mk_string(r, "Root")),
 		      root_arg);
+    i = 4;
     if(got_cwd) {
-      a[4] = argmk_pair(argbuf,
-			argmk_str(argbuf, mk_string(r, "Cwd.")),
-			cwd_arg);
+      a[i++] = argmk_pair(argbuf,
+			  argmk_str(argbuf, mk_string(r, "Cwd.")),
+			  cwd_arg);
+    }
+    if(pgid > 0) {
+      a[i++] = argmk_pair(argbuf,
+			  argmk_str(argbuf, mk_string(r, "Pgid")),
+			  argmk_int(argbuf, pgid));
     }
   }
   cap_call(obj, r,
@@ -438,6 +446,7 @@ int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
     if(ok && result.fds.count == 0 && result.caps.size == 1) {
       cap_t exec_obj = result.caps.caps[0];
       region_free(r);
+      close(exec_fd);
       return exec_object(exec_obj, argc, argv, envp);
     }
   }

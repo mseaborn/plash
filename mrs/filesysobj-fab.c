@@ -163,31 +163,6 @@ int fab_dir_list(struct filesys_obj *obj, region_t r, seqt_t *result, int *err)
   return count;
 }
 
-struct filesys_obj_vtable fab_dir_vtable = {
-  /* .free = */ fab_dir_free,
-  /* .cap_invoke = */ local_obj_invoke,
-  /* .cap_call = */ marshall_cap_call,
-  /* .single_use = */ 0,
-  /* .type = */ objt_dir,
-  /* .stat = */ fab_dir_stat,
-  /* .utimes = */ refuse_utimes,
-  /* .chmod = */ refuse_chmod,
-  /* .open = */ dummy_open,
-  /* .socket_connect = */ dummy_socket_connect,
-  /* .traverse = */ fab_dir_traverse,
-  /* .list = */ fab_dir_list,
-  /* .create_file = */ refuse_create_file,
-  /* .mkdir = */ refuse_mkdir,
-  /* .symlink = */ refuse_symlink,
-  /* .rename = */ refuse_rename_or_link,
-  /* .link = */ refuse_rename_or_link,
-  /* .unlink = */ refuse_unlink,
-  /* .rmdir = */ refuse_rmdir,
-  /* .socket_bind = */ refuse_socket_bind,
-  /* .readlink = */ dummy_readlink,
-  1
-};
-
 
 void fab_symlink_free(struct filesys_obj *obj1)
 {
@@ -221,31 +196,6 @@ int fab_symlink_readlink(struct filesys_obj *obj, region_t r, seqf_t *result, in
   return 0;
 }
 
-struct filesys_obj_vtable fab_symlink_vtable = {
-  /* .free = */ fab_symlink_free,
-  /* .cap_invoke = */ local_obj_invoke,
-  /* .cap_call = */ marshall_cap_call,
-  /* .single_use = */ 0,
-  /* .type = */ objt_symlink,
-  /* .stat = */ fab_symlink_stat,
-  /* .utimes = */ refuse_utimes,
-  /* .chmod = */ dummy_chmod,
-  /* .open = */ dummy_open,
-  /* .socket_connect = */ dummy_socket_connect,
-  /* .traverse = */ dummy_traverse,
-  /* .list = */ dummy_list,
-  /* .create_file = */ dummy_create_file,
-  /* .mkdir = */ dummy_mkdir,
-  /* .symlink = */ dummy_symlink,
-  /* .rename = */ dummy_rename_or_link,
-  /* .link = */ dummy_rename_or_link,
-  /* .unlink = */ dummy_unlink,
-  /* .rmdir = */ dummy_rmdir,
-  /* .socket_bind = */ dummy_socket_bind,
-  /* .readlink = */ fab_symlink_readlink,
-  1
-};
-
 
 
 void s_fab_dir_free(struct filesys_obj *obj1)
@@ -255,7 +205,7 @@ void s_fab_dir_free(struct filesys_obj *obj1)
   while(node) {
     struct slot_list *next = node->next;
     free(node->name);
-    filesys_slot_free(node->slot);
+    filesys_obj_free(node->slot);
     free(node);
     node = next;
   }
@@ -284,7 +234,7 @@ struct filesys_obj *s_fab_dir_traverse(struct filesys_obj *obj, const char *leaf
 {
   struct s_fab_dir *dir = (void *) obj;
   struct slot_list *l = (void *) assoc((void *) dir->entries, leaf);
-  if(l) return l->slot->vtable->get(l->slot);
+  if(l) return l->slot->vtable->slot_get(l->slot);
   else return 0;
 }
 
@@ -295,7 +245,7 @@ int s_fab_dir_list(struct filesys_obj *obj, region_t r, seqt_t *result, int *err
   seqt_t got = seqt_empty;
   int count = 0;
   for(l = dir->entries; l; l = l->next) {
-    struct filesys_obj *obj = l->slot->vtable->get(l->slot);
+    struct filesys_obj *obj = l->slot->vtable->slot_get(l->slot);
     if(obj) {
       /* FIXME: wasteful of space */
       int len = strlen(l->name);
@@ -396,10 +346,61 @@ int s_fab_dir_socket_bind(struct filesys_obj *obj, const char *leaf,
   }
 }
 
+#if 0
+struct filesys_obj_vtable fab_symlink_vtable = {
+  /* .free = */ fab_symlink_free,
+  /* .cap_invoke = */ local_obj_invoke,
+  /* .cap_call = */ marshal_cap_call,
+  /* .single_use = */ 0,
+  /* .type = */ objt_symlink,
+  /* .stat = */ fab_symlink_stat,
+  /* .utimes = */ refuse_utimes,
+  /* .chmod = */ dummy_chmod,
+  /* .open = */ dummy_open,
+  /* .socket_connect = */ dummy_socket_connect,
+  /* .traverse = */ dummy_traverse,
+  /* .list = */ dummy_list,
+  /* .create_file = */ dummy_create_file,
+  /* .mkdir = */ dummy_mkdir,
+  /* .symlink = */ dummy_symlink,
+  /* .rename = */ dummy_rename_or_link,
+  /* .link = */ dummy_rename_or_link,
+  /* .unlink = */ dummy_unlink,
+  /* .rmdir = */ dummy_rmdir,
+  /* .socket_bind = */ dummy_socket_bind,
+  /* .readlink = */ fab_symlink_readlink,
+  1
+};
+
+struct filesys_obj_vtable fab_dir_vtable = {
+  /* .free = */ fab_dir_free,
+  /* .cap_invoke = */ local_obj_invoke,
+  /* .cap_call = */ marshal_cap_call,
+  /* .single_use = */ 0,
+  /* .type = */ objt_dir,
+  /* .stat = */ fab_dir_stat,
+  /* .utimes = */ refuse_utimes,
+  /* .chmod = */ refuse_chmod,
+  /* .open = */ dummy_open,
+  /* .socket_connect = */ dummy_socket_connect,
+  /* .traverse = */ fab_dir_traverse,
+  /* .list = */ fab_dir_list,
+  /* .create_file = */ refuse_create_file,
+  /* .mkdir = */ refuse_mkdir,
+  /* .symlink = */ refuse_symlink,
+  /* .rename = */ refuse_rename_or_link,
+  /* .link = */ refuse_rename_or_link,
+  /* .unlink = */ refuse_unlink,
+  /* .rmdir = */ refuse_rmdir,
+  /* .socket_bind = */ refuse_socket_bind,
+  /* .readlink = */ dummy_readlink,
+  1
+};
+
 struct filesys_obj_vtable s_fab_dir_vtable = {
   /* .free = */ s_fab_dir_free,
   /* .cap_invoke = */ local_obj_invoke,
-  /* .cap_call = */ marshall_cap_call,
+  /* .cap_call = */ marshal_cap_call,
   /* .single_use = */ 0,
   /* .type = */ objt_dir,
   /* .stat = */ s_fab_dir_stat,
@@ -420,3 +421,6 @@ struct filesys_obj_vtable s_fab_dir_vtable = {
   /* .readlink = */ dummy_readlink,
   1
 };
+#endif
+
+#include "out-vtable-filesysobj-fab.h"

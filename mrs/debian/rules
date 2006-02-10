@@ -36,17 +36,19 @@ binary-arch:	checkroot
 		-d debian/tmp/usr/bin
 	cp debian/copyright debian/tmp/usr/share/doc/$(package)/
 	cp debian/changelog debian/tmp/usr/share/doc/$(package)/changelog.Debian
-	cp README NOTES protocols.txt debian/tmp/usr/share/doc/$(package)/
+	cp README NOTES NOTES.exec protocols.txt debian/tmp/usr/share/doc/$(package)/
 	# Could use "cp -a A B" instead of "strip A -o B"
-	strip ../mrs/shell -o debian/tmp/usr/bin/plash
+	strip ../mrs/shell       -o debian/tmp/usr/bin/plash
 	strip ../mrs/shell-nogtk -o debian/tmp/usr/bin/plash-nogtk
-	strip ../mrs/chroot -o debian/tmp/usr/bin/plash-chroot
+	strip ../mrs/chroot      -o debian/tmp/usr/bin/plash-chroot
+	strip ../mrs/exec-object -o debian/tmp/usr/bin/exec-object
 	strip ../mrs/run-as-nobody -o debian/tmp/usr/lib/plash/run-as-nobody
 	strip ../mrs/run-as-nobody+chroot -o debian/tmp/usr/lib/plash/run-as-nobody+chroot
 	strip ../mrs/run-as-anonymous -o debian/tmp/usr/lib/plash/run-as-anonymous
 	strip ../mrs/gc-uid-locks -o debian/tmp/usr/lib/plash/gc-uid-locks
 	strip ../mrs/ld.so -o $(chroot_jail)/special/ld-linux.so.2
-	cp -rv inst_stripped/lib/* $(libdir)/
+	(cd .. && ./mrs/install.pl)
+	cp -rv out-inst-stripped/lib/* $(libdir)/
 	dpkg-shlibdeps shell shell-nogtk
 	dpkg-gencontrol -isp
 	chown -R root.root debian/tmp

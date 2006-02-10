@@ -24,6 +24,7 @@
 #include "region.h"
 #include "filesysobj.h"
 #include "cap-utils.h"
+#include "marshal.h"
 
 
 int set_close_on_exec_flag(int fd, int value)
@@ -81,39 +82,67 @@ void close_our_fds()
 
 /* Abstract types */
 
+DECLARE_VTABLE(invalid_vtable);
+
 void filesys_obj_free(struct filesys_obj *obj)
 {
-  assert(obj);
-  assert(obj->refcount > 0);
+  filesys_obj_check(obj);
   obj->refcount--;
   if(obj->refcount <= 0) {
     obj->vtable->free(obj);
+
+    /* Ensures that using the pointer will fail but give a useful error. */
+    obj->vtable = &invalid_vtable;
+
     free(obj);
   }
 }
 
-
-void marshall_cap_call(struct filesys_obj *obj, region_t r,
-		       struct cap_args args, struct cap_args *result)
+void filesys_obj_check(struct filesys_obj *obj)
 {
+  assert(obj);
+  assert(obj->refcount > 0);
+  assert(obj->vtable->sentinel == 1);
+}
+
+void caps_free(cap_seq_t c)
+{
+  int i;
+  for(i = 0; i < c.size; i++) filesys_obj_free(c.caps[i]);
+}
+
+cap_seq_t cap_seq_append(region_t r, cap_seq_t seq1, cap_seq_t seq2)
+{
+  cap_seq_t seq;
+  cap_t *array = region_alloc(r, (seq1.size + seq2.size) * sizeof(cap_t));
+  memcpy(array, seq1.caps, seq1.size * sizeof(cap_t));
+  memcpy(array + seq1.size, seq2.caps, seq2.size * sizeof(cap_t));
+  seq.caps = array;
+  seq.size = seq1.size + seq2.size;
+  return seq;
+}
+
+void generic_free(struct filesys_obj *obj)
+{
+}
+
+
+void marshal_cap_call(struct filesys_obj *obj, region_t r,
+		      struct cap_args args, struct cap_args *result)
+{
+  seqf_t data = flatten_reuse(r, args.data);
+  int method_id;
+  int ok = 1;
+  m_int(&ok, &data, &method_id);
+  if(ok) switch(method_id) {
+  case METHOD_FSOBJ_TYPE:
   {
-    seqf_t data = flatten_reuse(r, args.data);
-    int ok = 1;
-    m_str(&ok, &data, "Otyp");
-    m_end(&ok, &data);
-    if(ok && args.caps.size == 0 && args.fds.count == 0) {
-      result->data =
-	cat2(r, mk_string(r, "Okay"),
-	     mk_int(r, obj->vtable->type(obj)));
-      result->caps = caps_empty;
-      result->fds = fds_empty;
-      return;
-    }
+    if(unpack_fsobj_type(r, args) < 0) goto bad_msg;
+    *result = pack_fsobj_type_result(r, obj->vtable->type(obj));
+    return;
   }
+  case METHOD_FSOBJ_STAT:
   {
-    seqf_t data = flatten_reuse(r, args.data);
-    int ok = 1;
-    m_str(&ok, &data, "Osta");
     m_end(&ok, &data);
     if(ok && args.caps.size == 0 && args.fds.count == 0) {
       int err;
@@ -140,7 +169,291 @@ void marshall_cap_call(struct filesys_obj *obj, region_t r,
 			       mk_int(r, stat.st_ctime)));
       return;
     }
+    goto bad_msg;
   }
+  case METHOD_FSOBJ_UTIMES:
+  {
+    int atime_sec, atime_usec;
+    int mtime_sec, mtime_usec;
+    m_int(&ok, &data, &atime_sec);
+    m_int(&ok, &data, &atime_usec);
+    m_int(&ok, &data, &mtime_sec);
+    m_int(&ok, &data, &mtime_usec);
+    if(ok && args.caps.size == 0 && args.fds.count == 0) {
+      int err;
+      struct timeval atime, mtime;
+      atime.tv_sec = atime_sec;
+      atime.tv_usec = atime_usec;
+      mtime.tv_sec = mtime_sec;
+      mtime.tv_usec = mtime_usec;
+      if(obj->vtable->utimes(obj, &atime, &mtime, &err) < 0) {
+	*result = pack_fail(r, err);
+	return;
+      }
+      result->caps = caps_empty;
+      result->fds = fds_empty;
+      result->data = mk_string(r, "Okay");
+      return;
+    }
+    goto bad_msg;
+  }
+  case METHOD_FSOBJ_CHMOD:
+  {
+    int mode;
+    int err;
+    if(unpack_fsobj_chmod(r, args, &mode) < 0) goto bad_msg;
+    if(obj->vtable->chmod(obj, mode, &err) < 0) {
+      *result = pack_fail(r, err);
+      return;
+    }
+    *result = pack_fsobj_chmod_result(r);
+    return;
+  }
+  case METHOD_FILE_OPEN:
+  {
+    int flags;
+    int fd;
+    int err;
+    if(unpack_file_open(r, args, &flags) < 0) goto bad_msg;
+    fd = obj->vtable->open(obj, flags, &err);
+    if(fd < 0) {
+      *result = pack_fail(r, err);
+      return;
+    }
+    *result = pack_file_open_result(r, fd);
+    return;
+  }
+  case METHOD_FILE_SOCKET_CONNECT:
+  {
+    int sock;
+    int err;
+    if(unpack_file_socket_connect(r, args, &sock) < 0) goto bad_msg;
+    if(obj->vtable->socket_connect(obj, sock, &err) < 0) {
+      *result = pack_fail(r, err);
+      close(sock);
+      return;
+    }
+    *result = pack_file_socket_connect_result(r);
+    close(sock);
+    return;
+  }
+  case METHOD_DIR_TRAVERSE:
+  {
+    seqf_t leaf;
+    cap_t x;
+    if(unpack_dir_traverse(r, args, &leaf) < 0) goto bad_msg;
+    x = obj->vtable->traverse(obj, region_strdup_seqf(r, leaf));
+    if(!x) {
+      *result = pack_fail(r, ENOENT);
+      return;
+    }
+    *result = pack_dir_traverse_result(r, x);
+    return;
+  }
+  case METHOD_DIR_LIST:
+  {
+    int count;
+    seqt_t data;
+    int err;
+    if(unpack_dir_list(r, args) < 0) goto bad_msg;
+    count = obj->vtable->list(obj, r, &data, &err);
+    if(count < 0) {
+      *result = pack_fail(r, err);
+      return;
+    }
+    *result = pack_dir_list_result(r, count, data);
+    return;
+  }
+  case METHOD_DIR_CREATE_FILE:
+  {
+    int flags;
+    int mode;
+    seqf_t leaf;
+    int fd;
+    int err;
+    if(unpack_dir_create_file(r, args, &flags, &mode, &leaf) < 0) goto bad_msg;
+    fd = obj->vtable->create_file(obj, region_strdup_seqf(r, leaf),
+				  flags, mode, &err);
+    if(fd < 0) {
+      *result = pack_fail(r, err);
+      return;
+    }
+    *result = pack_dir_create_file_result(r, fd);
+    return;
+  }
+  case METHOD_DIR_MKDIR:
+  {
+    int mode;
+    seqf_t leaf;
+    int err;
+    if(unpack_dir_mkdir(r, args, &mode, &leaf) < 0) goto bad_msg;
+    if(obj->vtable->mkdir(obj, region_strdup_seqf(r, leaf), mode, &err) < 0) {
+      *result = pack_fail(r, err);
+      return;
+    }
+    *result = pack_dir_mkdir_result(r);
+    return;
+  }
+  case METHOD_DIR_SYMLINK:
+  {
+    seqf_t leaf;
+    seqf_t dest_path;
+    int err;
+    if(unpack_dir_symlink(r, args, &leaf, &dest_path) < 0) goto bad_msg;
+    if(obj->vtable->symlink(obj, region_strdup_seqf(r, leaf),
+			    region_strdup_seqf(r, dest_path), &err) < 0) {
+      *result = pack_fail(r, err);
+      return;
+    }
+    *result = pack_dir_symlink_result(r);
+    return;
+  }
+  case METHOD_DIR_RENAME:
+  {
+    seqf_t leaf;
+    cap_t dest_dir;
+    seqf_t dest_leaf;
+    int err;
+    if(unpack_dir_rename(r, args, &leaf, &dest_dir, &dest_leaf) < 0) goto bad_msg;
+    if(obj->vtable->rename(obj, region_strdup_seqf(r, leaf),
+			   dest_dir, region_strdup_seqf(r, dest_leaf), &err) < 0) {
+      *result = pack_fail(r, err);
+      filesys_obj_free(dest_dir);
+      return;
+    }
+    *result = pack_dir_rename_result(r);
+    filesys_obj_free(dest_dir);
+    return;
+  }
+  case METHOD_DIR_LINK:
+  {
+    seqf_t leaf;
+    cap_t dest_dir;
+    seqf_t dest_leaf;
+    int err;
+    if(unpack_dir_link(r, args, &leaf, &dest_dir, &dest_leaf) < 0) goto bad_msg;
+    if(obj->vtable->link(obj, region_strdup_seqf(r, leaf),
+			 dest_dir, region_strdup_seqf(r, dest_leaf), &err) < 0) {
+      *result = pack_fail(r, err);
+      filesys_obj_free(dest_dir);
+      return;
+    }
+    *result = pack_dir_link_result(r);
+    filesys_obj_free(dest_dir);
+    return;
+  }
+  case METHOD_DIR_UNLINK:
+  {
+    seqf_t leaf;
+    int err;
+    if(unpack_dir_unlink(r, args, &leaf) < 0) goto bad_msg;
+    if(obj->vtable->unlink(obj, region_strdup_seqf(r, leaf), &err) < 0) {
+      *result = pack_fail(r, err);
+      return;
+    }
+    *result = pack_dir_unlink_result(r);
+    return;
+  }
+  case METHOD_DIR_RMDIR:
+  {
+    seqf_t leaf;
+    int err;
+    if(unpack_dir_rmdir(r, args, &leaf) < 0) goto bad_msg;
+    if(obj->vtable->rmdir(obj, region_strdup_seqf(r, leaf), &err) < 0) {
+      *result = pack_fail(r, err);
+      return;
+    }
+    *result = pack_dir_rmdir_result(r);
+    return;
+  }
+  case METHOD_DIR_SOCKET_BIND:
+  {
+    seqf_t leaf;
+    int sock;
+    int err;
+    if(unpack_dir_socket_bind(r, args, &leaf, &sock) < 0) goto bad_msg;
+    if(obj->vtable->socket_bind(obj, region_strdup_seqf(r, leaf), sock, &err) < 0) {
+      *result = pack_fail(r, err);
+      close(sock);
+      return;
+    }
+    *result = pack_dir_socket_bind_result(r);
+    close(sock);
+    return;
+  }
+  case METHOD_SYMLINK_READLINK:
+  {
+    seqf_t data;
+    int err;
+    if(unpack_symlink_readlink(r, args) < 0) goto bad_msg;
+    if(obj->vtable->readlink(obj, r, &data, &err) < 0) {
+      *result = pack_fail(r, err);
+      return;
+    }
+    *result = pack_symlink_readlink_result(r, mk_leaf(r, data));
+    return;
+  }
+  case METHOD_MAKE_CONN:
+  {
+    int import_count;
+    m_int(&ok, &data, &import_count);
+    m_end(&ok, &data);
+    if(ok && args.fds.count == 0) {
+      cap_t *import;
+      int fd = obj->vtable->make_conn(obj, r, args.caps, import_count, &import);
+      caps_free(args.caps);
+      if(fd < 0) {
+	*result = cap_args_make(mk_int(r, METHOD_FAIL),
+				caps_empty, fds_empty);
+      }
+      else {
+	*result = cap_args_make(mk_int(r, METHOD_OKAY),
+				cap_seq_make(import, import_count),
+				mk_fds1(r, fd));
+      }
+      return;
+    }
+    goto bad_msg;
+  }
+  case METHOD_MAKE_FS_OP:
+  {
+    cap_t root_dir;
+    cap_t fs_op;
+    if(unpack_make_fs_op(r, args, &root_dir) < 0) goto bad_msg;
+    fs_op = obj->vtable->make_fs_op(obj, root_dir);
+    filesys_obj_free(root_dir);
+    if(!fs_op) {
+      *result = pack_fail(r, EIO);
+      return;
+    }
+    *result = pack_make_fs_op_result(r, fs_op);
+    return;
+  }
+  case METHOD_MAKE_UNION_DIR:
+  {
+    cap_t dir1;
+    cap_t dir2;
+    cap_t result_dir;
+    if(unpack_make_union_dir(r, args, &dir1, &dir2) < 0) goto bad_msg;
+    result_dir = obj->vtable->make_union_dir(obj, dir1, dir2);
+    filesys_obj_free(dir1);
+    filesys_obj_free(dir2);
+    if(!result_dir) {
+      *result = pack_fail(r, EIO);
+      return;
+    }
+    *result = pack_make_union_dir_result(r, result_dir);
+    return;
+  }
+  default:
+    caps_free(args.caps);
+    close_fds(args.fds);
+    result->data = mk_string(r, "RMth");
+    result->caps = caps_empty;
+    result->fds = fds_empty;
+    return;
+  }
+bad_msg:
   caps_free(args.caps);
   close_fds(args.fds);
   result->data = mk_string(r, "RMsg");
@@ -148,33 +461,22 @@ void marshall_cap_call(struct filesys_obj *obj, region_t r,
   result->fds = fds_empty;
 }
 
-int marshall_type(struct filesys_obj *obj)
+int marshal_type(struct filesys_obj *obj)
 {
+  int type;
   region_t r = region_make();
   struct cap_args result;
-  cap_call(obj, r,
-	   cap_args_make(mk_string(r, "Otyp"),
-			 caps_empty, fds_empty),
-	   &result);
-  {
-    seqf_t msg = flatten_reuse(r, result.data);
-    int t;
-    int ok = 1;
-    m_str(&ok, &msg, "Okay");
-    m_int(&ok, &msg, &t);
-    m_end(&ok, &msg);
-    if(ok && result.caps.size == 0 && result.fds.count == 0) {
-      region_free(r);
-      return t;
-    }
+  cap_call(obj, r, pack_fsobj_type(r), &result);
+  if(unpack_fsobj_type_result(r, result, &type) < 0) {
+    type = 0;
+    caps_free(result.caps);
+    close_fds(result.fds);
   }
-  caps_free(result.caps);
-  close_fds(result.fds);
   region_free(r);
-  return 0;
+  return type;
 }
 
-int marshall_stat(struct filesys_obj *obj, struct stat *buf, int *err)
+int marshal_stat(struct filesys_obj *obj, struct stat *buf, int *err)
 {
   region_t r = region_make();
   struct cap_args result;
@@ -187,7 +489,7 @@ int marshall_stat(struct filesys_obj *obj, struct stat *buf, int *err)
     int myst_dev, myst_ino, myst_mode, myst_nlink, myst_uid, myst_gid, myst_rdev,
       myst_size, myst_blksize, myst_blocks, myst_atime, myst_mtime, myst_ctime;
     int ok = 1;
-    m_str(&ok, &msg, "Okay");
+    m_int_const(&ok, &msg, METHOD_OKAY);
     m_int(&ok, &msg, &myst_dev);
     m_int(&ok, &msg, &myst_ino);
     m_int(&ok, &msg, &myst_mode);
@@ -223,7 +525,7 @@ int marshall_stat(struct filesys_obj *obj, struct stat *buf, int *err)
   {
     seqf_t msg = flatten_reuse(r, result.data);
     int ok = 1;
-    m_str(&ok, &msg, "Fail");
+    m_int_const(&ok, &msg, METHOD_FAIL);
     m_int(&ok, &msg, err);
     m_end(&ok, &msg);
     if(ok) {
@@ -237,6 +539,352 @@ int marshall_stat(struct filesys_obj *obj, struct stat *buf, int *err)
   *err = ENOSYS;
   return -1;
 }
+
+int marshal_utimes(struct filesys_obj *obj, const struct timeval *atime,
+		   const struct timeval *mtime, int *err)
+{
+  int rc;
+  region_t r = region_make();
+  struct cap_args result;
+  cap_call(obj, r,
+	   cap_args_make
+	     (cat5(r, mk_int(r, METHOD_FSOBJ_UTIMES),
+		   mk_int(r, atime->tv_sec), mk_int(r, atime->tv_usec),
+		   mk_int(r, mtime->tv_sec), mk_int(r, mtime->tv_usec)),
+	      caps_empty,
+	      fds_empty),
+	   &result);
+  if(expect_ok(result) >= 0) { rc = 0; }
+  else if(unpack_fail(r, result, err) >= 0) { rc = -1; }
+  else {
+    *err = ENOSYS;
+    rc = -1;
+    caps_free(result.caps);
+    close_fds(result.fds);
+  }
+  region_free(r);
+  return rc;
+}
+
+int marshal_chmod(struct filesys_obj *obj, int mode, int *err)
+{
+  int rc;
+  region_t r = region_make();
+  struct cap_args result;
+  cap_call(obj, r, pack_fsobj_chmod(r, mode), &result);
+  if(unpack_fsobj_chmod_result(r, result) >= 0) { rc = 0; }
+  else if(unpack_fail(r, result, err) >= 0) { rc = -1; }
+  else {
+    *err = ENOSYS;
+    rc = -1;
+    caps_free(result.caps);
+    close_fds(result.fds);
+  }
+  region_free(r);
+  return rc;
+}
+
+int marshal_open(struct filesys_obj *obj, int flags, int *err)
+{
+  int fd;
+  region_t r = region_make();
+  struct cap_args result;
+  cap_call(obj, r, pack_file_open(r, flags), &result);
+  if(unpack_file_open_result(r, result, &fd) >= 0) {}
+  else if(unpack_fail(r, result, err) >= 0) { fd = -1; }
+  else {
+    *err = ENOSYS;
+    fd = -1;
+    caps_free(result.caps);
+    close_fds(result.fds);
+  }
+  region_free(r);
+  return fd;
+}
+
+/* FIXME: change ownership & remove dup */
+int marshal_socket_connect(struct filesys_obj *obj, int sock_fd, int *err)
+{
+  int rc;
+  region_t r = region_make();
+  struct cap_args result;
+  cap_call(obj, r, pack_file_socket_connect(r, dup(sock_fd)), &result);
+  if(unpack_file_socket_connect_result(r, result) >= 0) { rc = 0; }
+  else if(unpack_fail(r, result, err) >= 0) { rc = -1; }
+  else {
+    *err = ENOSYS;
+    rc = -1;
+    caps_free(result.caps);
+    close_fds(result.fds);
+  }
+  region_free(r);
+  return rc;
+}
+
+struct filesys_obj *marshal_traverse(struct filesys_obj *obj, const char *leaf)
+{
+  cap_t x;
+  region_t r = region_make();
+  struct cap_args result;
+  cap_call(obj, r, pack_dir_traverse(r, mk_string(r, leaf)), &result);
+  if(unpack_dir_traverse_result(r, result, &x) < 0) {
+    x = 0;
+    caps_free(result.caps);
+    close_fds(result.fds);
+  }
+  region_free(r);
+  return x;
+}
+
+int marshal_list(struct filesys_obj *obj, region_t r, seqt_t *result_data, int *err)
+{
+  int count;
+  seqf_t result_data1;
+  struct cap_args result;
+  cap_call(obj, r, pack_dir_list(r), &result);
+  if(unpack_dir_list_result(r, result, &count, &result_data1) >= 0) {
+    *result_data = mk_leaf(r, result_data1);
+  }
+  else if(unpack_fail(r, result, err) >= 0) { count = -1; }
+  else {
+    *err = ENOSYS;
+    count = -1;
+    caps_free(result.caps);
+    close_fds(result.fds);
+  }
+  return count;
+}
+
+int marshal_create_file(struct filesys_obj *obj, const char *leaf,
+		      int flags, int mode, int *err)
+{
+  int fd;
+  region_t r = region_make();
+  struct cap_args result;
+  cap_call(obj, r, pack_dir_create_file(r, flags, mode,
+					mk_string(r, leaf)), &result);
+  if(unpack_dir_create_file_result(r, result, &fd) >= 0) {}
+  else if(unpack_fail(r, result, err) >= 0) { fd = -1; }
+  else {
+    *err = ENOSYS;
+    fd = -1;
+    caps_free(result.caps);
+    close_fds(result.fds);
+  }
+  region_free(r);
+  return fd;
+}
+
+int marshal_mkdir(struct filesys_obj *obj, const char *leaf, int mode, int *err)
+{
+  int rc;
+  region_t r = region_make();
+  struct cap_args result;
+  cap_call(obj, r, pack_dir_mkdir(r, mode, mk_string(r, leaf)), &result);
+  if(unpack_dir_mkdir_result(r, result) >= 0) { rc = 0; }
+  else if(unpack_fail(r, result, err) >= 0) { rc = -1; }
+  else {
+    *err = ENOSYS;
+    rc = -1;
+    caps_free(result.caps);
+    close_fds(result.fds);
+  }
+  region_free(r);
+  return rc;
+}
+
+int marshal_symlink(struct filesys_obj *obj, const char *leaf,
+		    const char *oldpath, int *err)
+{
+  int rc;
+  region_t r = region_make();
+  struct cap_args result;
+  cap_call(obj, r, pack_dir_symlink(r, mk_string(r, leaf),
+				    mk_string(r, oldpath)), &result);
+  if(unpack_dir_symlink_result(r, result) >= 0) { rc = 0; }
+  else if(unpack_fail(r, result, err) >= 0) { rc = -1; }
+  else {
+    *err = ENOSYS;
+    rc = -1;
+    caps_free(result.caps);
+    close_fds(result.fds);
+  }
+  region_free(r);
+  return rc;
+}
+
+int marshal_rename(struct filesys_obj *obj, const char *leaf,
+		   struct filesys_obj *dest_dir, const char *dest_leaf,
+		   int *err)
+{
+  int rc;
+  region_t r = region_make();
+  struct cap_args result;
+  cap_call(obj, r, pack_dir_rename(r, mk_string(r, leaf), inc_ref(dest_dir),
+				   mk_string(r, dest_leaf)), &result);
+  if(unpack_dir_rename_result(r, result) >= 0) { rc = 0; }
+  else if(unpack_fail(r, result, err) >= 0) { rc = -1; }
+  else {
+    *err = ENOSYS;
+    rc = -1;
+    caps_free(result.caps);
+    close_fds(result.fds);
+  }
+  region_free(r);
+  return rc;
+}
+
+int marshal_link(struct filesys_obj *obj, const char *leaf,
+		 struct filesys_obj *dest_dir, const char *dest_leaf,
+		 int *err)
+{
+  int rc;
+  region_t r = region_make();
+  struct cap_args result;
+  cap_call(obj, r, pack_dir_link(r, mk_string(r, leaf), inc_ref(dest_dir),
+				 mk_string(r, dest_leaf)), &result);
+  if(unpack_dir_link_result(r, result) >= 0) { rc = 0; }
+  else if(unpack_fail(r, result, err) >= 0) { rc = -1; }
+  else {
+    *err = ENOSYS;
+    rc = -1;
+    caps_free(result.caps);
+    close_fds(result.fds);
+  }
+  region_free(r);
+  return rc;
+}
+
+int marshal_unlink(struct filesys_obj *obj, const char *leaf, int *err)
+{
+  int rc;
+  region_t r = region_make();
+  struct cap_args result;
+  cap_call(obj, r, pack_dir_unlink(r, mk_string(r, leaf)), &result);
+  if(unpack_dir_unlink_result(r, result) >= 0) { rc = 0; }
+  else if(unpack_fail(r, result, err) >= 0) { rc = -1; }
+  else {
+    *err = ENOSYS;
+    rc = -1;
+    caps_free(result.caps);
+    close_fds(result.fds);
+  }
+  region_free(r);
+  return rc;
+}
+
+int marshal_rmdir(struct filesys_obj *obj, const char *leaf, int *err)
+{
+  int rc;
+  region_t r = region_make();
+  struct cap_args result;
+  cap_call(obj, r, pack_dir_rmdir(r, mk_string(r, leaf)), &result);
+  if(unpack_dir_rmdir_result(r, result) >= 0) { rc = 0; }
+  else if(unpack_fail(r, result, err) >= 0) { rc = -1; }
+  else {
+    *err = ENOSYS;
+    rc = -1;
+    caps_free(result.caps);
+    close_fds(result.fds);
+  }
+  region_free(r);
+  return rc;
+}
+
+int marshal_socket_bind(struct filesys_obj *obj, const char *leaf, int sock_fd, int *err)
+{
+  int rc;
+  region_t r = region_make();
+  struct cap_args result;
+  cap_call(obj, r, pack_dir_socket_bind(r, mk_string(r, leaf),
+					dup(sock_fd)), &result);
+  if(unpack_dir_socket_bind_result(r, result) >= 0) { rc = 0; }
+  else if(unpack_fail(r, result, err) >= 0) { rc = -1; }
+  else {
+    *err = ENOSYS;
+    rc = -1;
+    caps_free(result.caps);
+    close_fds(result.fds);
+  }
+  region_free(r);
+  return rc;
+}
+
+int marshal_readlink(struct filesys_obj *obj, region_t r, seqf_t *dest, int *err)
+{
+  int rc;
+  struct cap_args result;
+  cap_call(obj, r, pack_symlink_readlink(r), &result);
+  if(unpack_symlink_readlink_result(r, result, dest) >= 0) { rc = 0; }
+  else if(unpack_fail(r, result, err) >= 0) { rc = -1; }
+  else {
+    *err = ENOSYS;
+    rc = -1;
+    caps_free(result.caps);
+    close_fds(result.fds);
+  }
+  return rc;
+}
+
+int marshal_make_conn(struct filesys_obj *obj, region_t r, cap_seq_t export,
+		      int import_count, cap_t **import)
+{
+  struct cap_args result;
+  int i;
+  for(i = 0; i < export.size; i++) inc_ref(export.caps[i]);
+  cap_call(obj, r,
+	   cap_args_make(cat2(r, mk_int(r, METHOD_MAKE_CONN),
+			      mk_int(r, import_count)),
+			 export,
+			 fds_empty),
+	   &result);
+  {
+    seqf_t msg = flatten_reuse(r, result.data);
+    int ok = 1;
+    m_int_const(&ok, &msg, METHOD_OKAY);
+    m_end(&ok, &msg);
+    if(ok && result.caps.size == import_count && result.fds.count == 1) {
+      *import = (cap_t *) result.caps.caps;
+      return result.fds.fds[0];
+    }
+  }
+  caps_free(result.caps);
+  close_fds(result.fds);
+  return -1;
+}
+
+cap_t marshal_make_fs_op(struct filesys_obj *obj, cap_t root_dir)
+{
+  cap_t fs_op;
+  region_t r = region_make();
+  struct cap_args result;
+  cap_call(obj, r, pack_make_fs_op(r, inc_ref(root_dir)), &result);
+  if(unpack_make_fs_op_result(r, result, &fs_op) >= 0) { }
+  else {
+    fs_op = 0;
+    caps_free(result.caps);
+    close_fds(result.fds);
+  }
+  region_free(r);
+  return fs_op;
+}
+
+cap_t marshal_make_union_dir(struct filesys_obj *obj, cap_t dir1, cap_t dir2)
+{
+  cap_t result_dir;
+  region_t r = region_make();
+  struct cap_args result;
+  cap_call(obj, r, pack_make_union_dir(r, inc_ref(dir1), inc_ref(dir2)), &result);
+  if(unpack_make_union_dir_result(r, result, &result_dir) >= 0) { }
+  else {
+    result_dir = 0;
+    caps_free(result.caps);
+    close_fds(result.fds);
+  }
+  region_free(r);
+  return result_dir;
+}
+
 
 int objt_unknown(struct filesys_obj *obj) { return 0; }
 int objt_file(struct filesys_obj *obj) { return OBJT_FILE; }
@@ -336,3 +984,206 @@ int dummy_socket_connect(struct filesys_obj *obj, int sock_fd, int *err)
   *err = ENOSYS;
   return -1;
 }
+
+struct filesys_obj *dummy_slot_get(struct filesys_obj *obj)
+{
+  return 0;
+}
+int dummy_slot_create_file(struct filesys_obj *obj, int flags, int mode,
+			   int *err)
+{
+  *err = ENOSYS;
+  return -1;
+}
+int dummy_slot_mkdir(struct filesys_obj *slot, int mode, int *err)
+{
+  *err = ENOSYS;
+  return -1;
+}
+int dummy_slot_symlink(struct filesys_obj *slot, const char *oldpath, int *err)
+{
+  *err = ENOSYS;
+  return -1;
+}
+int dummy_slot_unlink(struct filesys_obj *slot, int *err)
+{
+  *err = ENOSYS;
+  return -1;
+}
+int dummy_slot_rmdir(struct filesys_obj *slot, int *err)
+{
+  *err = ENOSYS;
+  return -1;
+}
+int dummy_slot_socket_bind(struct filesys_obj *slot, int sock_fd, int *err)
+{
+  *err = ENOSYS;
+  return -1;
+}
+
+int dummy_make_conn(struct filesys_obj *obj, region_t r, cap_seq_t export,
+		    int import_count, cap_t **import)
+{
+  return -1;
+}
+
+int dummy_make_conn2(struct filesys_obj *obj, region_t r, int sock_fd,
+		     cap_seq_t export, int import_count, cap_t **import)
+{
+  close(sock_fd);
+  return -1;
+}
+
+cap_t dummy_make_fs_op(struct filesys_obj *obj, cap_t root_dir)
+{
+  return 0;
+}
+
+cap_t dummy_make_union_dir(struct filesys_obj *obj, cap_t dir1, cap_t dir2)
+{
+  return 0;
+}
+
+
+void invalid_cap_invoke(struct filesys_obj *obj, struct cap_args args)
+{
+  assert(0);
+}
+void invalid_cap_call(struct filesys_obj *obj, region_t r,
+		      struct cap_args args, struct cap_args *result)
+{
+  assert(0);
+}
+
+int invalid_objt(struct filesys_obj *obj) { assert(0); }
+
+int invalid_stat(struct filesys_obj *obj, struct stat *buf, int *err)
+{
+  assert(0);
+}
+
+int invalid_utimes(struct filesys_obj *obj, const struct timeval *atime,
+		   const struct timeval *mtime, int *err)
+{
+  assert(0);
+  *err = ENOSYS;
+  return -1;
+}
+
+int invalid_chmod(struct filesys_obj *obj, int mode, int *err)
+{
+  assert(0);
+  *err = ENOSYS;
+  return -1;
+}
+
+struct filesys_obj *invalid_traverse(struct filesys_obj *obj, const char *leaf)
+{
+  assert(0);
+  return 0;
+}
+
+int invalid_list(struct filesys_obj *obj, region_t r, seqt_t *result, int *err)
+{
+  assert(0);
+  *err = ENOSYS;
+  return -1;
+}
+
+int invalid_create_file(struct filesys_obj *obj, const char *leaf,
+			int flags, int mode, int *err)
+{
+  assert(0);
+  *err = ENOSYS;
+  return -1;
+}
+
+int invalid_mkdir(struct filesys_obj *obj, const char *leaf, int mode, int *err)
+{
+  assert(0);
+  *err = ENOSYS;
+  return -1;
+}
+
+int invalid_symlink(struct filesys_obj *obj, const char *leaf,
+		    const char *oldpath, int *err)
+{
+  assert(0);
+  *err = ENOSYS;
+  return -1;
+}
+
+int invalid_rename_or_link(struct filesys_obj *obj, const char *leaf,
+			   struct filesys_obj *dest_dir, const char *dest_leaf,
+			   int *err)
+{
+  assert(0);
+  *err = ENOSYS;
+  return -1;
+}
+
+int invalid_unlink(struct filesys_obj *obj, const char *leaf, int *err)
+{
+  assert(0);
+  *err = ENOSYS;
+  return -1;
+}
+
+int invalid_rmdir(struct filesys_obj *obj, const char *leaf, int *err)
+{
+  assert(0);
+  *err = ENOSYS;
+  return -1;
+}
+
+int invalid_socket_bind(struct filesys_obj *obj, const char *leaf, int sock_fd, int *err)
+{
+  *err = ENOSYS;
+  return -1;
+}
+
+int invalid_readlink(struct filesys_obj *obj, region_t r, seqf_t *result, int *err)
+{
+  assert(0);
+  *err = ENOSYS;
+  return -1;
+}
+
+int invalid_open(struct filesys_obj *obj, int flags, int *err)
+{
+  assert(0);
+  *err = ENOSYS;
+  return -1;
+}
+
+int invalid_socket_connect(struct filesys_obj *obj, int sock_fd, int *err)
+{
+  assert(0);
+  *err = ENOSYS;
+  return -1;
+}
+
+struct filesys_obj_vtable invalid_vtable = {
+  /* .free = */ generic_free,
+  /* .cap_invoke = */ invalid_cap_invoke,
+  /* .cap_call = */ invalid_cap_call,
+  /* .single_use = */ 0,
+  /* .type = */ invalid_objt,
+  /* .stat = */ invalid_stat,
+  /* .utimes = */ invalid_utimes,
+  /* .chmod = */ invalid_chmod,
+  /* .open = */ invalid_open,
+  /* .socket_connect = */ invalid_socket_connect,
+  /* .traverse = */ invalid_traverse,
+  /* .list = */ invalid_list,
+  /* .create_file = */ invalid_create_file,
+  /* .mkdir = */ invalid_mkdir,
+  /* .symlink = */ invalid_symlink,
+  /* .rename = */ invalid_rename_or_link,
+  /* .link = */ invalid_rename_or_link,
+  /* .unlink = */ invalid_unlink,
+  /* .rmdir = */ invalid_rmdir,
+  /* .socket_bind = */ invalid_socket_bind,
+  /* .readlink = */ invalid_readlink,
+  1
+};

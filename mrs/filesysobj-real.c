@@ -611,10 +611,11 @@ int real_symlink_readlink(struct filesys_obj *obj, region_t r, seqf_t *result, i
 }
 
 
+#if 0
 struct filesys_obj_vtable real_dir_vtable = {
   /* .free = */ real_dir_free,
   /* .cap_invoke = */ local_obj_invoke,
-  /* .cap_call = */ marshall_cap_call,
+  /* .cap_call = */ marshal_cap_call,
   /* .single_use = */ 0,
   /* .type = */ objt_dir,
   /* .stat = */ real_dir_stat,
@@ -639,7 +640,7 @@ struct filesys_obj_vtable real_dir_vtable = {
 struct filesys_obj_vtable real_file_vtable = {
   /* .free = */ real_file_free,
   /* .cap_invoke = */ local_obj_invoke,
-  /* .cap_call = */ marshall_cap_call,
+  /* .cap_call = */ marshal_cap_call,
   /* .single_use = */ 0,
   /* .type = */ objt_file,
   /* .stat = */ real_file_stat,
@@ -664,7 +665,7 @@ struct filesys_obj_vtable real_file_vtable = {
 struct filesys_obj_vtable real_symlink_vtable = {
   /* .free = */ real_symlink_free,
   /* .cap_invoke = */ local_obj_invoke,
-  /* .cap_call = */ marshall_cap_call,
+  /* .cap_call = */ marshal_cap_call,
   /* .single_use = */ 0,
   /* .type = */ objt_symlink,
   /* .stat = */ real_symlink_stat,
@@ -685,3 +686,6 @@ struct filesys_obj_vtable real_symlink_vtable = {
   /* .readlink = */ real_symlink_readlink,
   1
 };
+#endif
+
+#include "out-vtable-filesysobj-real.h"

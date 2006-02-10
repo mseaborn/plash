@@ -400,6 +400,7 @@ void handle_fs_op_message1(region_t r, struct process *proc,
       if(proc->cwd) proc->cwd->refcount++;
       new_server = make_fs_op_server(obj->shared, proc->root, proc->cwd);
       cap_make_connection(r, socks[1], mk_caps1(r, new_server), 0, "to-client");
+      filesys_obj_free(new_server);
       
       *reply = mk_string(r, "RFrk");
       *reply_fds = mk_fds1(r, socks[0]);
@@ -500,11 +501,11 @@ void handle_fs_op_message1(region_t r, struct process *proc,
       /* Unpack arguments. */
       {
 	const bufref_t *a;
-	if(argm_array(&argbuf, argv_ref, &argc, &a)) goto exec_error;
+	if(argm_array(&argbuf, argv_ref, &argc, &a)) goto exec_fail;
 	argv = region_alloc(r, argc * sizeof(seqf_t));
 	for(i = 0; i < argc; i++) {
 	  seqf_t arg;
-	  if(argm_str(&argbuf, a[i], &arg)) goto exec_error;
+	  if(argm_str(&argbuf, a[i], &arg)) goto exec_fail;
 	  argv[i] = region_strdup_seqf(r, arg);
 	}
       }
@@ -591,7 +592,6 @@ void handle_fs_op_message1(region_t r, struct process *proc,
       *log_reply = mk_string(r, "fail");
       return;
     }
-  exec_error:
   }
   handle_fs_op_message(r, proc, msg_orig, fds_orig, reply, reply_fds,
 		       log_msg, log_reply);
@@ -1215,49 +1215,23 @@ void conn_maker_free(struct filesys_obj *obj)
 {
 }
 
-void conn_maker_call(struct filesys_obj *obj1, region_t r,
-		     struct cap_args args, struct cap_args *result)
+int conn_maker_make_conn(struct filesys_obj *obj1, region_t r,
+			 cap_seq_t export, int import_count, cap_t **import)
 {
-  seqf_t data = flatten_reuse(r, args.data);
-  int ok = 1;
-  int import_count;
-  m_str(&ok, &data, "Mkco");
-  m_int(&ok, &data, &import_count);
-  m_end(&ok, &data);
-  if(ok && args.fds.count == 0) {
-    cap_t *import;
-    int socks[2];
-    if(socketpair(AF_LOCAL, SOCK_STREAM, 0, socks) < 0) {
-      caps_free(args.caps);
-      close_fds(args.fds);
-      result->data = cat2(r, mk_string(r, "Fail"), mk_int(r, errno));
-      result->caps = caps_empty;
-      result->fds = fds_empty;
-    }
-    set_close_on_exec_flag(socks[0], 1);
-    set_close_on_exec_flag(socks[1], 1);
-    result->data = mk_string(r, "Okay");
-    import = cap_make_connection(r, socks[1], args.caps, import_count,
-				 "to-client");
-    result->caps.caps = import;
-    result->caps.size = import_count;
-    result->fds = mk_fds1(r, socks[0]);
+  int socks[2];
+  if(socketpair(AF_LOCAL, SOCK_STREAM, 0, socks) < 0) {
+    caps_free(export);
+    return -1;
   }
-  else {
-    caps_free(args.caps);
-    close_fds(args.fds);
-    result->data = mk_string(r, "RMsg");
-    result->caps = caps_empty;
-    result->fds = fds_empty;
-  }
+  set_close_on_exec_flag(socks[0], 1);
+  set_close_on_exec_flag(socks[1], 1);
+  *import = cap_make_connection(r, socks[1], export, import_count,
+				"to-client");
+  return socks[0];
 }
 
-OBJECT_VTABLE(conn_maker_vtable, conn_maker_free, conn_maker_call);
-
-
-void generic_free(struct filesys_obj *obj)
-{
-}
+// OBJECT_VTABLE(conn_maker_vtable, conn_maker_free, conn_maker_call);
+#include "out-vtable-fs-operations.h"
 
 
 DECLARE_VTABLE(fab_dir_maker_vtable);

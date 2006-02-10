@@ -81,6 +81,16 @@ static inline void m_int(int *ok, seqf_t *block, int *res)
   else { *ok = 0; }
 }
 
+static inline void m_int_const(int *ok, seqf_t *block, int x)
+{
+  if(!*ok) return;
+  if(block->size >= sizeof(int) && *(int *) block->data == x) {
+    block->data += sizeof(int);
+    block->size -= sizeof(int);
+  }
+  else { *ok = 0; }
+}
+
 static inline void m_str(int *ok, seqf_t *block, const char *str)
 {
   if(!*ok) return;

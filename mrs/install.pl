@@ -36,7 +36,9 @@ my $libs = [
   ['login/libutil.so', 'libutil.so.1'],
 ];
 
-my $dir = 'mrs/inst_stripped';
+my $dir = 'mrs/out-inst-stripped';
+if(-e $dir) { do_cmd('rm', '-rv', $dir); }
+
 mkdir($dir) || die "Can't mkdir $dir: $!";
 mkdir("$dir/lib") || die;
 foreach my $x (@$libs) {

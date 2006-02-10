@@ -76,17 +76,9 @@ void local_obj_invoke(struct filesys_obj *obj, struct cap_args args)
   region_t r = region_make();
   seqf_t data = flatten_reuse(r, args.data);
   int ok = 1;
-  cap_t return_cont;
   m_str(&ok, &data, "Call");
-  if(ok) {
-    if(args.caps.size >= 1) {
-      return_cont = args.caps.caps[0];
-      args.caps.caps++;
-      args.caps.size--;
-    }
-    else ok = 0;
-  }
-  if(ok) {
+  if(ok && args.caps.size >= 1) {
+    cap_t return_cont = args.caps.caps[0];
     struct cap_args result;
     
     /* Catch code that forgets to fill out all of the results. */
@@ -96,7 +88,8 @@ void local_obj_invoke(struct filesys_obj *obj, struct cap_args args)
 
     obj->vtable->cap_call(obj, r,
 			  cap_args_make(mk_leaf(r, data),
-					args.caps,
+					cap_seq_make(args.caps.caps + 1,
+						     args.caps.size - 1),
 					args.fds),
 			  &result);
 
@@ -152,6 +145,7 @@ void return_cont_free(struct filesys_obj *obj1)
 }
 
 
+#if 0
 struct filesys_obj_vtable return_cont_vtable = {
   /* .free = */ return_cont_free,
 
@@ -178,3 +172,6 @@ struct filesys_obj_vtable return_cont_vtable = {
   /* .readlink = */ dummy_readlink,
   1
 };
+#endif
+
+#include "out-vtable-cap-call-return.h"

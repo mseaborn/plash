@@ -69,6 +69,7 @@ my @rtld_files = qw(
   io/rtld-readlink.os
   io/rtld-xstatconv.os
   io/rtld-lxstat.os
+  io/rtld-dup.os
   linuxthreads/rtld-forward.os
   linuxthreads/rtld-libc-cancellation.os
   misc/rtld-getpagesize.os

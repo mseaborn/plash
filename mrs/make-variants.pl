@@ -77,7 +77,12 @@ my $defs =
        ['command_fg', ['job char_cons']],
        ['command_bg', ['job char_cons']],
        ['def_binding', ['c char_cons', 'e shell_expr']],
+       ['command_source', ['filename char_cons']],
       ]
+  },
+  { Name => 'command_list',
+    Variants =>
+      [['commands_cons', ['c command', 'rest command_list']]]
   },
   { Name => 'pipeline',
     Variants =>
@@ -117,6 +122,7 @@ my $defs =
       [['expr_var', ['c char_cons']],
        ['cap_cmd', ['c char_cons', 'a arg_list']],
        ['expr_filename', ['filename char_cons']],
+       ['expr_mkfs', ['args arg_list']],
       ]
   },
 ];

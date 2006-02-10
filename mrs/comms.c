@@ -17,6 +17,7 @@
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
    USA.  */
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,7 +29,6 @@
 
 
 #define MOD_DEBUG 0
-#define MOD_ERROR_PRINT 1
 #define MOD_MSG HALF_NAME ":comm: "
 
 #ifdef IN_RTLD
@@ -36,13 +36,20 @@ static int printf(const char *fmt, ...)
 {
   return 0;
 }
+
+#else
+
+#define DO_LOG
+#define MOD_LOG_ERRORS 1
+
 #endif
 
 
 /* Tries to receive data and FDs from a socket.
    Returns 0 if there was no error, -1 otherwise. */
 int recv_with_fds(int sock, char *buffer, int buffer_size,
-		  int *fds, int fds_size, int *bytes_got_ret, int *fds_got_ret)
+		  int *fds, int fds_size, int *bytes_got_ret, int *fds_got_ret,
+		  int *err)
 {
   int control_buf_size = CMSG_SPACE(fds_size * sizeof(int));
   struct msghdr msghdr;
@@ -62,7 +69,11 @@ int recv_with_fds(int sock, char *buffer, int buffer_size,
 
   bytes_got = recvmsg(sock, &msghdr, 0);
   if(bytes_got < 0) {
-    if(MOD_DEBUG) { perror("recvmsg"); }
+    *err = errno;
+#ifdef DO_LOG
+    /* Expect to get EINTR when SIGCHLD is handled. */
+    if(MOD_LOG_ERRORS && errno != EINTR) { perror("recvmsg"); }
+#endif
     *bytes_got_ret = 0;
     *fds_got_ret = 0;
     return -1;
@@ -71,10 +82,12 @@ int recv_with_fds(int sock, char *buffer, int buffer_size,
   /* MSG_CTRUNC means the ancillary data was truncated, so FDs were lost.
      We don't have any way of recovering from that. */
   if(msghdr.msg_flags & MSG_CTRUNC) {
-    if(MOD_ERROR_PRINT) {
+#ifdef DO_LOG
+    if(MOD_LOG_ERRORS) {
       printf(MOD_MSG "ancillary data truncated: had allocated %i bytes\n",
 	     control_buf_size);
     }
+#endif
     assert(0);
   }
 
@@ -89,10 +102,12 @@ int recv_with_fds(int sock, char *buffer, int buffer_size,
       memcpy(fds, data, fds_got * sizeof(int));
     }
     else {
-      if(MOD_ERROR_PRINT) {
+#ifdef DO_LOG
+      if(MOD_LOG_ERRORS) {
 	printf(MOD_MSG "unknown ancillary data, level=%i, type=%i\n",
 	       cmsg->cmsg_level, cmsg->cmsg_type);
       }
+#endif
     }
   }
   *bytes_got_ret = bytes_got;
@@ -127,20 +142,32 @@ int send_with_fds(int sock, const char *buffer, int buffer_size,
 
   /* FDs are never partially sent.  Data may be partially sent, but in
      this case, all the FDs have been sent. */
-  sent = sendmsg(sock, &msghdr, 0);
+  /* The flag MSG_NOSIGNAL stops this from generating a SIGPIPE signal;
+     EPIPE would be returned instead. */
+  sent = sendmsg(sock, &msghdr, MSG_NOSIGNAL);
   if(sent < 0) {
-    if(MOD_DEBUG) { perror("sendmsg"); }
+#ifdef DO_LOG
+    if(MOD_LOG_ERRORS) { perror("sendmsg"); }
+#endif
     return -1;
   }
+  /*#ifdef DO_LOG
+  fprintf(stderr, "put %i of %i\n", sent, buffer_size);
+  #endif*/
 
   while(sent < buffer_size) {
     int sent2 = send(sock, buffer + sent, buffer_size - sent, 0);
     if(sent2 < 0) {
-      if(MOD_DEBUG) { perror("send"); }
+#ifdef DO_LOG
+      if(MOD_LOG_ERRORS) { perror("send"); }
+#endif
       return -1;
     }
     assert(sent2 > 0);
     sent += sent2;
+    /*#ifdef DO_LOG
+    fprintf(stderr, "put %i of %i\n", sent, buffer_size);
+    #endif*/
   }
   return 0;
 }
@@ -150,7 +177,10 @@ struct comm *comm_init(int sock)
 {
   struct comm *comm = amalloc(sizeof(struct comm));
   comm->sock = sock;
-  comm->buf_size = 1024;
+  /* I've been having problems with receiving messages bigger than the
+     buffer.  Upping the default buffer size has fixed the problems.
+     This appears to be a Linux bug (2.4.18). */
+  comm->buf_size = 10 * 1024;
   comm->buf = amalloc(comm->buf_size);
   comm->pos = 0;
   comm->got = 0;
@@ -218,7 +248,9 @@ static void comm_fds_resize(struct comm *comm, int avail)
 }
 
 /* Read some data into the buffer */
-int comm_read(struct comm *comm)
+/* Returns -1 if there's an error (and fills out `err'); 0 for the end of
+   the stream; 1 if it got some data. */
+int comm_read(struct comm *comm, int *err)
 {
   int bytes_got, fds_got;
   assert(comm);
@@ -229,16 +261,16 @@ int comm_read(struct comm *comm)
   {
   int offset = comm->pos + comm->got;
   int fds_offset = comm->fds_pos + comm->fds_got;
-  int err =
+  int rc =
     recv_with_fds(comm->sock,
 		  comm->buf + offset, comm->buf_size - offset,
 		  comm->fds_buf + fds_offset, comm->fds_buf_size - fds_offset,
-		  &bytes_got, &fds_got);
+		  &bytes_got, &fds_got, err);
   comm->got += bytes_got;
   comm->fds_got += fds_got;
   if(MOD_DEBUG) printf(MOD_MSG "read %i bytes, %i fds\n", bytes_got, fds_got);
   
-  if(err < 0) { return -1; }
+  if(rc < 0) { return -1; }
   if(bytes_got == 0 && fds_got == 0) { return 0; }
   return 1;
   }
@@ -297,9 +329,10 @@ int comm_get(struct comm *comm, seqf_t *result_data, fds_t *result_fds)
 {
   assert(comm);
   while(1) {
+    int err;
     int r = comm_try_get(comm, result_data, result_fds);
     if(r != COMM_UNAVAIL) return r;
-    r = comm_read(comm);
+    r = comm_read(comm, &err);
     if(r == 0) assert(0);
     if(r < 0) return r;
   }

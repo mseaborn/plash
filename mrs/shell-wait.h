@@ -17,36 +17,21 @@
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
    USA.  */
 
-#ifndef comms_h
-#define comms_h
-
-#include "region.h"
+#ifndef plash_shell_wait_h
+#define plash_shell_wait_h
 
 
-struct comm {
-  int sock;
-  
-  char *buf;
-  int buf_size; /* Allocated size of buf */
-  int pos; /* Position of message being received; number of consumed bytes in buf */
-  int got; /* Number of bytes received after pos */
+/* Registers a handler for when the given process exits.  The handler is
+   also called when the process is stopped with a signal.  The handler
+   is expected to free x when the process exits, but not when it is
+   stopped. */
+void w_add_process(int pid, void (*f)(void *x, int status), void *x);
 
-  int *fds_buf;
-  int fds_buf_size;
-  int fds_pos;
-  int fds_got;
-};
+void w_handle_process_status(int pid, int status);
 
-#define COMM_END 0
-#define COMM_AVAIL 1
-#define COMM_UNAVAIL 2
+void print_wait_status(FILE *fp, int status);
 
-struct comm *comm_init(int sock);
-void comm_free(struct comm *comm);
-int comm_read(struct comm *comm, int *err);
-int comm_try_get(struct comm *comm, seqf_t *result_data, fds_t *result_fds);
-int comm_get(struct comm *comm, seqf_t *result_data, fds_t *result_fds);
-int comm_send(region_t r, int sock, seqt_t msg, fds_t fds);
+void w_setup();
 
 
 #endif

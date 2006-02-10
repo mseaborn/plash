@@ -114,6 +114,36 @@ struct filesys_obj_vtable {
   /* Symlinks only: */
   int (*readlink)(struct filesys_obj *obj, region_t r, seqf_t *result, int *err);
 
+  /* Slots only: */
+  struct filesys_obj *(*slot_get)(struct filesys_obj *obj); /* Returns 0 if slot is currently empty */
+  int (*slot_create_file)(struct filesys_obj *obj, int flags, int mode,
+			  int *err);
+  int (*slot_mkdir)(struct filesys_obj *slot, int mode, int *err);
+  int (*slot_symlink)(struct filesys_obj *slot, const char *oldpath, int *err);
+  int (*slot_unlink)(struct filesys_obj *slot, int *err);
+  int (*slot_rmdir)(struct filesys_obj *slot, int *err);
+  int (*slot_socket_bind)(struct filesys_obj *slot, int sock_fd, int *err);
+
+  /* Returns FD for connection, or -1 for error. */
+  /* `export' contains non-owning references. */
+  int (*make_conn)(struct filesys_obj *obj, region_t r, cap_seq_t export,
+		   int import_count, cap_t **import);
+  /* Returns 0 for success, -1 for failure */
+  int (*make_conn2)(struct filesys_obj *obj, region_t r,
+		    int sock_fd, cap_seq_t export,
+		    int import_count, cap_t **import);
+  /* These take non-owning references as arguments: */
+  cap_t (*make_fs_op)(struct filesys_obj *obj, cap_t root_dir);
+  cap_t (*make_union_dir)(struct filesys_obj *obj, cap_t dir1, cap_t dir2);
+  /*
+  cap_t (*make_fab_dir)(struct filesys_obj *obj, struct dir_entry *entries, int count);
+  cap_t (*make_s_fab_dir)(struct filesys_obj *obj, struct dir_entry *entries, int count);
+  cap_t (*make_fab_symlink)(struct filesys_obj *obj, seqf_t dest);
+  */
+
+  /* This is for debugging. */
+  char *vtable_name;
+
   /* This is just here so that when I add fields, the compiler will give
      a warning when I forget to update all the vtables.  Unfortunately it
      doesn't give a warning when fields are missing. */
@@ -148,13 +178,18 @@ extern struct filesys_obj_vtable real_symlink_vtable;
 
 void filesys_obj_free(struct filesys_obj *obj);
 
+/* Checks that reference is valid */
+void filesys_obj_check(struct filesys_obj *obj);
+
 struct filesys_obj *initial_dir(const char *pathname, int *err);
 
 
-void marshall_cap_call(struct filesys_obj *obj, region_t r,
-		       struct cap_args args, struct cap_args *result);
-int marshall_type(struct filesys_obj *obj);
-int marshall_stat(struct filesys_obj *obj, struct stat *buf, int *err);
+void generic_free(struct filesys_obj *obj);
+
+void marshal_cap_call(struct filesys_obj *obj, region_t r,
+		      struct cap_args args, struct cap_args *result);
+int marshal_type(struct filesys_obj *obj);
+int marshal_stat(struct filesys_obj *obj, struct stat *buf, int *err);
 
 int objt_unknown(struct filesys_obj *obj);
 int objt_file(struct filesys_obj *obj);
@@ -182,6 +217,48 @@ int dummy_socket_bind(struct filesys_obj *obj, const char *leaf, int sock_fd, in
 int dummy_readlink(struct filesys_obj *obj, region_t r, seqf_t *result, int *err);
 int dummy_open(struct filesys_obj *obj, int flags, int *err);
 int dummy_socket_connect(struct filesys_obj *obj, int sock_fd, int *err);
+struct filesys_obj *dummy_slot_get(struct filesys_obj *obj);
+int dummy_slot_create_file(struct filesys_obj *obj, int flags, int mode,
+			   int *err);
+int dummy_slot_mkdir(struct filesys_obj *slot, int mode, int *err);
+int dummy_slot_symlink(struct filesys_obj *slot, const char *oldpath, int *err);
+int dummy_slot_unlink(struct filesys_obj *slot, int *err);
+int dummy_slot_rmdir(struct filesys_obj *slot, int *err);
+int dummy_slot_socket_bind(struct filesys_obj *slot, int sock_fd, int *err);
+int dummy_make_conn(struct filesys_obj *obj, region_t r, cap_seq_t export,
+		    int import_count, cap_t **import);
+int dummy_make_conn2(struct filesys_obj *obj, region_t r, int sock_fd,
+		     cap_seq_t export, int import_count, cap_t **import);
+cap_t dummy_make_fs_op(struct filesys_obj *obj, cap_t root_dir);
+cap_t dummy_make_union_dir(struct filesys_obj *obj, cap_t dir1, cap_t dir2);
+
+int marshal_stat(struct filesys_obj *obj, struct stat *buf, int *err);
+int marshal_utimes(struct filesys_obj *obj, const struct timeval *atime,
+		 const struct timeval *mtime, int *err);
+int marshal_chmod(struct filesys_obj *obj, int mode, int *err);
+int marshal_open(struct filesys_obj *obj, int flags, int *err);
+int marshal_socket_connect(struct filesys_obj *obj, int sock_fd, int *err);
+struct filesys_obj *marshal_traverse(struct filesys_obj *obj, const char *leaf);
+int marshal_list(struct filesys_obj *obj, region_t r, seqt_t *result, int *err);
+int marshal_create_file(struct filesys_obj *obj, const char *leaf,
+			int flags, int mode, int *err);
+int marshal_mkdir(struct filesys_obj *obj, const char *leaf, int mode, int *err);
+int marshal_symlink(struct filesys_obj *obj, const char *leaf,
+		    const char *oldpath, int *err);
+int marshal_rename(struct filesys_obj *obj, const char *leaf,
+		   struct filesys_obj *dest_dir, const char *dest_leaf,
+		   int *err);
+int marshal_link(struct filesys_obj *obj, const char *leaf,
+		 struct filesys_obj *dest_dir, const char *dest_leaf,
+		 int *err);
+int marshal_unlink(struct filesys_obj *obj, const char *leaf, int *err);
+int marshal_rmdir(struct filesys_obj *obj, const char *leaf, int *err);
+int marshal_socket_bind(struct filesys_obj *obj, const char *leaf, int sock_fd, int *err);
+int marshal_readlink(struct filesys_obj *obj, region_t r, seqf_t *result, int *err);
+int marshal_make_conn(struct filesys_obj *obj, region_t r, cap_seq_t export,
+		      int import_count, cap_t **import);
+cap_t marshal_make_fs_op(struct filesys_obj *obj, cap_t root_dir);
+cap_t marshal_make_union_dir(struct filesys_obj *obj, cap_t dir1, cap_t dir2);
 
 int refuse_chmod(struct filesys_obj *obj, int mode, int *err);
 int refuse_utimes(struct filesys_obj *obj, const struct timeval *atime,
@@ -227,10 +304,17 @@ static inline cap_seq_t mk_caps2(region_t r, cap_t cap0, cap_t cap1)
   return caps;
 }
 
-static inline void caps_free(cap_seq_t c)
+void caps_free(cap_seq_t c);
+cap_seq_t cap_seq_append(region_t r, cap_seq_t seq1, cap_seq_t seq2);
+
+static inline cap_seq_t cap_seq_dup(region_t r, cap_seq_t s)
 {
-  int i;
-  for(i = 0; i < c.size; i++) filesys_obj_free(c.caps[i]);
+  cap_seq_t result;
+  cap_t *a = region_alloc(r, s.size * sizeof(cap_t));
+  memcpy(a, s.caps, s.size * sizeof(cap_t));
+  result.caps = a;
+  result.size = s.size;
+  return result;
 }
 
 
@@ -269,6 +353,18 @@ struct filesys_obj_vtable name = { \
   /* .rmdir = */ dummy_rmdir, \
   /* .socket_bind = */ dummy_socket_bind, \
   /* .readlink = */ dummy_readlink, \
+  /* .slot_get = */ dummy_slot_get, \
+  /* .slot_create_file = */ dummy_slot_create_file, \
+  /* .slot_mkdir = */ dummy_slot_mkdir, \
+  /* .slot_symlink = */ dummy_slot_symlink, \
+  /* .slot_unlink = */ dummy_slot_unlink, \
+  /* .slot_rmdir = */ dummy_slot_rmdir, \
+  /* .slot_socket_bind = */ dummy_slot_socket_bind, \
+  /* .make_conn = */ dummy_make_conn, \
+  /* .make_conn2 = */ dummy_make_conn2, \
+  /* .make_fs_op = */ dummy_make_fs_op, \
+  /* .make_union_dir = */ dummy_make_union_dir, \
+  /* .vtable_name = */ "unknown", \
   1 \
 }
 

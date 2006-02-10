@@ -34,6 +34,6 @@ int resolve_populate
   (struct filesys_obj *root_obj, struct node *root_node,
    struct dir_stack *cwd_ds,
    seqf_t filename, int create, int *err);
-struct filesys_slot *build_fs(struct node *node);
+struct filesys_obj *build_fs(struct node *node);
 
 #endif

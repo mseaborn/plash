@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/perl
 
 # Copyright (C) 2004 Mark Seaborn
 #
@@ -20,16 +20,16 @@
 # USA.
 
 
-gcc run-as-nobody.c -o run-as-nobody
-gcc run-as-nobody+chroot.c -o run-as-nobody+chroot
+my @lines;
+my $line;
+while(defined($line = <>)) {
+  if($line =~ /^[a-zA-Z0-9]{8}(\s+[A-Za-z]\s+)/) {
+    push(@lines, (' 'x8).$1.$');
+  }
+  else {
+    push(@lines, $line);
+  }
+}
 
-chown root:root run-as-nobody
-chmod +s run-as-nobody
-chown root:root run-as-nobody+chroot
-chmod +s run-as-nobody+chroot
-
-# mkdir /usr/local/chroot-jail
-# mkdir /usr/local/chroot-jail/special
-# chown mrs: /usr/local/chroot-jail/special
-# mkdir /usr/local/mrs
-# chown mrs: /usr/local/mrs
+foreach my $x (sort @lines) { print $x; }
+print "(".scalar(@lines).")\n";

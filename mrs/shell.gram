@@ -1,8 +1,30 @@
+# Copyright (C) 2004 Mark Seaborn
+#
+# This file is part of Plash, the Principle of Least Authority Shell.
+#
+# Plash is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Lesser General Public License as
+# published by the Free Software Foundation; either version 2.1 of
+# the License, or (at your option) any later version.
+#
+# Plash is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with Plash; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
+# USA.
+
 
 command =
     "cd" ws dir:pathname {{ mk_chdir(r, dir) }}
   / "cd" ws {{ mk_chdir(r, char_cons(r, '~', 0)) }}
-  / c:pathname a:arglist1 {{ mk_command(r, c, a) }};
+  / "fg" ws n:number ws {{ mk_command_fg(r, n) }}
+  / "bg" ws n:number ws {{ mk_command_bg(r, n) }}
+  / c:pathname a:arglist1 bg_flag:(ampersand {{ 1 }} / null {{ 0 }})
+	{{ mk_command(r, c, a, bg_flag) }};
 
 arglist1 = a1:arglist2 arrow a2:arglist2
              {{ mk_arg_cat(r, mk_arg_read(r, a1), mk_arg_write(r, a2)) }}
@@ -26,7 +48,7 @@ arg = s:option {{ mk_arg_string(r, s) }}
 
 # pathname = s:(!wschar c:char {{ (void*) c }})+ ws;
 pathname = !(![a-zA-Z0-9_/.~]) s:pathname_aux ws {{ s }};
-pathname_aux = c:(!wschar c:char {{ (void*) c }})
+pathname_aux = c:(!(wschar / '&') c:char {{ (void*) c }})
                rest:(pathname_aux / null {{ 0 }})
                {{ char_cons(r, (int) c, rest) }};
 
@@ -48,6 +70,8 @@ char = '\\' '\\' {{ (void*) '\\' }}
      / '\\' 't' {{ (void*) '\t' }}
      / !('\\' .) c:. {{ (void*) c }};
 
+number = c:[0-9] rest:(number / null {{ 0 }}) {{ char_cons(r, (int) c, rest) }};
+
 
 # Lexical
 
@@ -55,5 +79,6 @@ c_open = '{' ws;
 c_close = '}' ws;
 arrow = "=>" ws;
 plus = "+" ws;
+ampersand = "&" ws;
 ws = (wschar / '#' (!'\n' .)* '\n')*;
 wschar = ' ' / '\t' / '\n';

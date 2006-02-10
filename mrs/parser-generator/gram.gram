@@ -1,0 +1,59 @@
+
+defs = ws x:def* {{ x }};
+def = v:var equals exp:pexp1 semicolon {{ (v, exp) }};
+
+pexp1 = e1:pexp2 slash e2:pexp1 {{ P_choice(e1, e2) }} / pexp2;
+pexp2 = e:pexp3 es:pexp3*
+        mexp:(sem_open text:(!(ws sem_close) c:. {{ c }})* ws
+              sem_close {{ string_of_list text }})?
+       {{ match (e::es, mexp) with
+            | ([(exp, None)], None) -> exp
+            | (list, _) -> P_seq(list, mexp) }};
+pexp3 = v:var colon exp:pexp4 {{ (exp, Some v) }}
+      / exp:pexp4 {{ (exp, None) }};
+pexp4 = neg e:pexp5 {{ P_not(e) }}
+      / e:pexp5 star {{ P_repeat(e) }}
+      / e:pexp5 plus {{ P_repeatplus(e) }}
+      / e:pexp5 question {{ P_opt(e) }}
+      / pexp5;
+pexp5 = string_literal
+      / char_literal / char_class / char_any
+      / v:var {{ P_var(v) }}
+      / open exp:pexp1 close {{ exp }}
+      / '\\' 's' 't' 'r' 'i' 'n' 'g' open e:pexp1 close {{ P_get_string(e) }};
+
+char_literal = '\'' c:char '\'' ws {{ P_char(c) }};
+string_literal = '"' s:char_s* '"' ws {{ P_string(string_of_list s) }};
+char_s = !'"' c:char {{ c }};
+
+char = '\\' '\\' {{ '\\' }}
+     / '\\' '\'' {{ '\'' }}
+     / '\\' '"' {{ '"' }}
+     / '\\' '-' {{ '-' }}
+     / '\\' 'n' {{ '\n' }}
+     / '\\' 't' {{ '\t' }}
+     / !('\\' .) c:. {{ c }};
+
+char_class =
+  '[' list:(c1:char2 '-' c2:char2 {{ (c1, c2) }} /
+            c:char2 {{ (c, c) }})*
+  ']' ws {{ P_char_class(list) }};
+char2 = !']' c:char {{ c }};
+
+char_any = dot {{ P_char_any }};
+
+open = '(' ws;
+close = ')' ws;
+sem_open = '{' '{' ws;
+sem_close = '}' '}' ws;
+var = v:\string([a-zA-Z_] [a-zA-Z_0-9]*) ws {{ v }};
+equals = '=' ws;
+semicolon = ';' ws;
+colon = ':' ws;
+star = '*' ws;
+plus = '+' ws;
+question = '?' ws;
+neg = '!' ws;
+dot = '.' ws;
+slash = '/' ws;
+ws = (' ' / '\t' / '\n' / '#' (!'\n' .)* '\n')*;

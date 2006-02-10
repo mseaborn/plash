@@ -1,3 +1,24 @@
+/* Copyright (C) 2004 Mark Seaborn
+
+   This file is part of Plash, the Principle of Least Authority Shell.
+
+   Plash is free software; you can redistribute it and/or modify it
+   under the terms of the GNU Lesser General Public License as
+   published by the Free Software Foundation; either version 2.1 of
+   the License, or (at your option) any later version.
+
+   Plash is distributed in the hope that it will be useful, but
+   WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Lesser General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public
+   License along with Plash; if not, write to the Free Software
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
+   USA.  */
+
+/* Needed for strsignal() */
+#define _GNU_SOURCE
 
 #include <stdio.h>
 #include <errno.h>
@@ -8,6 +29,7 @@
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <pwd.h>
+#include <termios.h>
 
 #include <readline/readline.h>
 #include <readline/history.h>
@@ -22,6 +44,35 @@
 int f_command(region_t r, const char *pos_in1, const char *end,
 	      const char **pos_out_p, void **ok_val_p);
 
+
+#define ST_RUNNING 0
+#define ST_STOPPED 1
+#define ST_FINISHED 2
+struct shell_process {
+  int pid;
+  int state;
+  int wait_status; /* Filled out when stopped or finished */
+  struct shell_process *next;
+};
+
+struct job {
+  int id;
+  struct shell_process *processes;
+  int pgid;
+  struct termios tmodes; /* Saved terminal state */
+  int last_state;
+  struct job *prev, *next;
+};
+
+struct shell_state {
+  struct filesys_obj *root;
+  struct dir_stack *cwd;
+
+  int interactive;
+  int next_job_id;
+  struct job jobs;
+  struct termios tmodes; /* Saved terminal state */
+};
 
 #define USE_CHROOT 1
 #define MOD_DEBUG 0
@@ -169,10 +220,13 @@ extern char **environ;
 void print_wait_status(int status)
 {
   if(WIFEXITED(status)) {
-    printf("normal: %i", WEXITSTATUS(status));
+    printf("normal exit: %i", WEXITSTATUS(status));
   }
   else if(WIFSIGNALED(status)) {
     printf("uncaught signal: %i", WTERMSIG(status));
+  }
+  else if(WIFSTOPPED(status)) {
+    printf("stopped with signal: %i", WSTOPSIG(status));
   }
   else printf("unknown");
 }
@@ -309,6 +363,134 @@ void exec_elf_program_from_fd(int fd, const char *cmd, int argc, const char **ar
   execve(cmd2, (char **) argv2, environ);
 }
 
+int job_state(struct job *job)
+{
+  struct shell_process *p;
+  int all_finished = 1;
+  for(p = job->processes; p; p = p->next) {
+    if(p->state == ST_RUNNING) return ST_RUNNING;
+    if(p->state != ST_FINISHED) all_finished = 0;
+  }
+  if(all_finished) return ST_FINISHED;
+  else return ST_STOPPED;
+}
+
+int wait_for_processes(struct shell_state *state, int check)
+{
+  struct job *job;
+  int status;
+  int pid = waitpid(-1, &status, WUNTRACED | (check ? WNOHANG : 0));
+  /* printf("pid %i: ", pid); print_wait_status(status); printf("\n"); */
+  if(pid < 0) return -1;
+  if(pid == 0) return 0;
+    
+  for(job = state->jobs.next; job->id; job = job->next) {
+    struct shell_process *p;
+    for(p = job->processes; p; p = p->next) {
+      if(p->pid == pid) {
+	p->state = WIFSTOPPED(status) ? ST_STOPPED : ST_FINISHED;
+	p->wait_status = status;
+	return 1;
+      }
+    }
+  }
+  printf("plash: unknown process %i\n", pid);
+  return 1;
+}
+
+void remove_job(struct job *job)
+{
+  struct shell_process *p = job->processes;
+  while(p) {
+    struct shell_process *next = p->next;
+    free(p);
+    p = next;
+  }
+  job->next->prev = job->prev;
+  job->prev->next = job->next;
+  free(job);
+}
+
+/* Used when starting a job in the foreground, or when returning a job
+   to the foreground. */
+void wait_for_job(struct shell_state *state, struct job *job)
+{
+  while(job->last_state == ST_RUNNING) {
+    if(wait_for_processes(state, 0 /* check */) < 0) { perror("wait"); break; }
+    job->last_state = job_state(job);
+  }
+  /* We now know that we can continue, because the job isn't running.
+     But there might be more information we can get from waitpid() that
+     indicates whether it is stopped or finished. */
+  while(wait_for_processes(state, 1 /* check */) > 0) /* nothing */;
+  job->last_state = job_state(job);
+
+  /* Grab control of the terminal. */
+  if(tcsetpgrp(STDIN_FILENO, getpid()) < 0) { perror("tcsetpgrp"); }
+  /* Save the terminal state. */
+  if(tcgetattr(STDIN_FILENO, &job->tmodes) < 0) { perror("tcgetattr"); }
+  /* Restore the terminal state. */
+  if(tcsetattr(STDIN_FILENO, TCSADRAIN, &state->tmodes) < 0) {
+    perror("tcsetattr");
+  }
+
+  if(job->last_state == ST_STOPPED) {
+    printf("plash: job %i stopped\n", job->id);
+  }
+  else if(job->last_state == ST_FINISHED) {
+    /* Don't print any message when a foreground job finishes normally. */
+    // printf("plash: job %i finished\n", job->id);
+    struct shell_process *p;
+    int i = 1;
+    for(p = job->processes; p; p = p->next) {
+      if(WIFEXITED(p->wait_status)) {
+	int rc = WEXITSTATUS(p->wait_status);
+	if(rc) {
+	  printf("plash: job %i: process #%i (pid %i) exited with status %i\n",
+		 job->id, i, p->pid, rc);
+	}
+      }
+      else if(WIFSIGNALED(p->wait_status)) {
+	int sig = WTERMSIG(p->wait_status);
+	const char *desc = strsignal(sig);
+	printf("plash: job %i: process %i died with signal %i (%s)\n",
+	       job->id, i, sig, desc ? desc : "unknown signal");
+      }
+      i++;
+    }
+    remove_job(job);
+  }
+  else {
+    printf("plash: unknown job state (job %i)\n", job->id);
+  }
+}
+
+void report_jobs(struct shell_state *state)
+{
+  struct job *job;
+  for(job = state->jobs.next; job->id; ) {
+    int state = job_state(job);
+    if(job->last_state != state) {
+      job->last_state = state;
+      if(state == ST_STOPPED) {
+	printf("plash: job %i stopped\n", job->id);
+      }
+      else if(state == ST_FINISHED) {
+	struct job *next = job->next;
+	printf("plash: job %i finished\n", job->id);
+	remove_job(job);
+	job = next;
+	goto next;
+      }
+      else {
+	printf("plash: unknown job state (job %i)\n", job->id);
+      }
+    }
+    job = job->next;
+  next:
+  }
+}
+
 /* cwd is a dir_stack in the user's namespace.  It is translated into
    one for the process's namespace.
    root is the process's namespace.
@@ -316,7 +498,8 @@ void exec_elf_program_from_fd(int fd, const char *cmd, int argc, const char **ar
    included in the process's namespace.  It is closed (in the parent
    process) before the function returns. */
 int spawn(struct filesys_obj *root, struct dir_stack *cwd,
-	  int exec_fd, const char *cmd, int argc, const char **argv)
+	  int exec_fd, const char *cmd, int argc, const char **argv,
+	  struct shell_state *state, int foreground)
 {
   int attach_gdb_to_server = 0;
   int attach_gdb_to_client = 0;
@@ -324,6 +507,8 @@ int spawn(struct filesys_obj *root, struct dir_stack *cwd,
   int strace_client = 0;
   int pid_client, pid_server;
   int socks[2];
+  int pgid;
+  struct job *job;
   
   if(socketpair(AF_LOCAL, SOCK_STREAM, 0, socks) < 0) {
     perror("socketpair");
@@ -337,7 +522,23 @@ int spawn(struct filesys_obj *root, struct dir_stack *cwd,
     // set_cloexec_flag(socks[1], 0);
     snprintf(buf, sizeof(buf), "%i", socks[1]);
     setenv("COMM_FD", buf, 1);
-    
+
+    if(state->interactive) {
+      /* Set this process's process group ID to pgid (= pid_client). */
+      if(setpgid(0, 0) < 0) { perror("setpgid"); }
+      if(foreground) {
+	if(tcsetpgrp(STDIN_FILENO, getpid()) < 0) { perror("tcsetpgrp"); }
+      }
+
+      /* Set the handling for job control signals back to the default. */
+      signal(SIGINT, SIG_DFL);
+      signal(SIGQUIT, SIG_DFL);
+      signal(SIGTSTP, SIG_DFL);
+      signal(SIGTTIN, SIG_DFL);
+      signal(SIGTTOU, SIG_DFL);
+      signal(SIGCHLD, SIG_DFL);
+    }
+
     /* Necessary for security when using run-as-nobody, otherwise the
        process can be left in a directory with read/write access which
        might not be reachable from the root directory. */
@@ -350,7 +551,7 @@ int spawn(struct filesys_obj *root, struct dir_stack *cwd,
     close_our_fds();
 
     if(attach_strace_to_client || attach_gdb_to_client) {
-      if(kill(getpid(), SIGSTOP) < 0) { perror("kill/SIGSTOP"); }
+      if(kill(getpid(), SIGSTOP) < 0) { perror("kill(SIGSTOP)"); }
     }
 
     exec_elf_program_from_fd(exec_fd, cmd, argc, argv);
@@ -359,6 +560,8 @@ int spawn(struct filesys_obj *root, struct dir_stack *cwd,
     exit(1);
   }
   if(pid_client < 0) { perror("fork"); return -1; }
+
+  pgid = pid_client;
 
   close(exec_fd);
   close(socks[1]);
@@ -387,8 +590,24 @@ int spawn(struct filesys_obj *root, struct dir_stack *cwd,
       region_free(r);
     }
 
+    if(state->interactive) {
+      /* Set this process's process group ID to pgid (= pid_client). */
+      if(setpgid(0, pgid) < 0) { perror("setpgid"); }
+      if(foreground) {
+	if(tcsetpgrp(STDIN_FILENO, pgid) < 0) { perror("tcsetpgrp"); }
+      }
+
+      /* Set the handling for job control signals back to the default. */
+      signal(SIGINT, SIG_DFL);
+      signal(SIGQUIT, SIG_DFL);
+      signal(SIGTSTP, SIG_DFL);
+      signal(SIGTTIN, SIG_DFL);
+      signal(SIGTTOU, SIG_DFL);
+      signal(SIGCHLD, SIG_DFL);
+    }
+
     if(attach_gdb_to_server) {
-      if(kill(getpid(), SIGSTOP) < 0) { perror("kill/SIGSTOP"); }
+      if(kill(getpid(), SIGSTOP) < 0) { perror("kill(SIGSTOP)"); }
     }
     
     server_log = fopen("/dev/null", "w");
@@ -398,6 +617,43 @@ int spawn(struct filesys_obj *root, struct dir_stack *cwd,
   }
   if(pid_server < 0) { perror("fork"); return -1; }
 
+  /* Since the client is changed to run as nobody, setpgid below can
+     fail on it.  It's a race condition.  If it fails here, the client
+     has already called setpgid itself, so that's okay.  FIXME. */
+  if(state->interactive) {
+    struct shell_process *p1;
+    struct shell_process *p2;
+
+    p1 = amalloc(sizeof(struct shell_process));
+    p1->pid = pid_client;
+    p1->state = ST_RUNNING;
+    p1->next = 0;
+
+    p2 = amalloc(sizeof(struct shell_process));
+    p2->pid = pid_server;
+    p2->state = ST_RUNNING;
+    p2->next = p1;
+
+    job = amalloc(sizeof(struct job));
+    job->id = state->next_job_id++;
+    job->processes = p2;
+    job->pgid = pgid;
+    job->prev = &state->jobs;
+    job->next = state->jobs.next;
+    job->last_state = ST_RUNNING;
+    state->jobs.next->prev = job;
+    state->jobs.next = job;
+    
+    if(setpgid(pid_client, pgid) < 0) { perror("setpgid"); }
+    if(setpgid(pid_server, pgid) < 0) { perror("setpgid"); }
+    /* Save the terminal state (needed for background jobs). */
+    if(tcgetattr(STDIN_FILENO, &job->tmodes) < 0) { perror("tcgetattr"); }
+    /* Give the terminal to the new job. */
+    if(foreground) {
+      if(tcsetpgrp(STDIN_FILENO, pgid) < 0) { perror("tcsetpgrp"); }
+    }
+  }
+  
   close(socks[0]);
 
   if(attach_gdb_to_server) {
@@ -439,25 +695,54 @@ int spawn(struct filesys_obj *root, struct dir_stack *cwd,
   }
 
   if(MOD_DEBUG) printf("client=%i, server=%i\n", pid_client, pid_server);
-  {
-    int wait_for = 2;
-    int pid;
-    int status;
-    int i;
 
-    for(i = 0; i < wait_for; i++) {
-      pid = wait(&status);
-      if(WIFSIGNALED(status) && pid == pid_client) {
-	printf("process died with signal %i\n", WTERMSIG(status));
+  if(foreground) {
+    if(state->interactive) {
+      wait_for_job(state, job);
+    }
+    else {
+      int wait_for = 2;
+      int pid;
+      int status;
+      int i;
+      
+      for(i = 0; i < wait_for; i++) {
+	pid = waitpid(-1, &status, WUNTRACED);
+	if(pid < 0) { perror("waitpid"); }
+	if(WIFSTOPPED(status)) {
+	  printf("plash: a process was stopped\n");
+	}
+	if(WIFSIGNALED(status) && pid == pid_client) {
+	  int sig = WTERMSIG(status);
+	  const char *desc = strsignal(sig);
+	  printf("plash: process died with signal %i (%s)\n", sig,
+		 desc ? desc : "unknown signal");
+	}
+	if(WIFSIGNALED(status) && pid == pid_server) {
+	  int sig = WTERMSIG(status);
+	  const char *desc = strsignal(sig);
+	  printf("plash: server died with signal %i (%s)\n", sig,
+		 desc ? desc : "unknown signal");
+	}
+	if(WIFEXITED(status) && pid == pid_client) {
+	  int rc = WEXITSTATUS(status);
+	  if(rc) printf("plash: process exited with code %i\n", rc);
+	}
+	if(WIFEXITED(status) && pid == pid_server) {
+	  int rc = WEXITSTATUS(status);
+	  if(rc) printf("plash: server exited with code %i\n", rc);
+	}
+	if(MOD_DEBUG) {
+	  printf("pid %i finished: ", pid);
+	  print_wait_status(status);
+	  printf("\n");
+	}
       }
-      if(WIFSIGNALED(status) && pid == pid_server) {
-	printf("server died with signal %i\n", WTERMSIG(status));
-      }
-      if(MOD_DEBUG) {
-	printf("pid %i finished: ", pid);
-	print_wait_status(status);
-	printf("\n");
-      }
+    }
+  }
+  else {
+    if(state->interactive) {
+      printf("plash: job %i started\n", job->id);
     }
   }
   return 0;
@@ -529,11 +814,6 @@ struct filesys_obj *shell_test()
 #endif
 
 
-struct shell_state {
-  struct filesys_obj *root;
-  struct dir_stack *cwd;
-};
-
 void shell_command(struct shell_state *state, seqf_t line)
 {
   region_t r = region_make();
@@ -541,9 +821,13 @@ void shell_command(struct shell_state *state, seqf_t line)
   void *val_out;
   if(f_command(r, line.data, line.data + line.size, &pos_out, &val_out) &&
      pos_out == line.data + line.size) {
-    struct char_cons *cmd_filename1;
     struct char_cons *dir_filename1;
+
+    struct char_cons *cmd_filename1;
     struct arg_list *args;
+    int bg_flag;
+
+    struct char_cons *job_id_str;
     
     if(MOD_DEBUG) printf("parsed\n");
     if(m_chdir(val_out, &dir_filename1)) {
@@ -562,7 +846,7 @@ void shell_command(struct shell_state *state, seqf_t line)
 	perror("cd");
       }
     }
-    else if(m_command(val_out, &cmd_filename1, &args)) {
+    else if(m_command(val_out, &cmd_filename1, &args, &bg_flag)) {
       struct flatten_params p;
       struct str_list *l;
       int count;
@@ -631,10 +915,10 @@ void shell_command(struct shell_state *state, seqf_t line)
 	obj = resolve_file(r, state->root, state->cwd, cmd_filename,
 			   SYMLINK_LIMIT, 0 /* nofollow */, &err);
 	region_free(r);
-	if(!obj) { errno = err; perror("open"); goto error; }
+	if(!obj) { errno = err; perror("open/exec"); goto error; }
 	exec_fd = obj->vtable->open(obj, O_RDONLY, &err);
 	filesys_obj_free(obj);
-	if(exec_fd < 0) { errno = err; perror("open"); goto error; }
+	if(exec_fd < 0) { errno = err; perror("open/exec"); goto error; }
       }
 
       if(0) print_tree(0, p.tree);
@@ -644,15 +928,76 @@ void shell_command(struct shell_state *state, seqf_t line)
       assert(root);
       root->refcount++;
       filesys_slot_free(root_slot);
-      spawn(root, state->cwd, exec_fd, cmd_filename.data, count+1, argv);
+      spawn(root, state->cwd, exec_fd, cmd_filename.data, count+1, argv,
+	    state, !bg_flag);
       filesys_obj_free(root);
       /* FIXME: deallocate tree */
       }
     }
-    else assert(0);
+    else if(m_command_fg(val_out, &job_id_str)) {
+      seqf_t arg = flatten_charlist(r, job_id_str);
+      int job_id = atoi(arg.data);
+      struct job *job;
+
+      for(job = state->jobs.next; job->id; job = job->next) {
+	if(job->id == job_id) {
+	  if(job->last_state == ST_STOPPED) {
+	    printf("plash: resuming job %i in foreground\n", job->id);
+	  }
+	  else {
+	    printf("plash: putting job %i in foreground\n", job->id);
+	  }
+
+	  /* Restore the job's terminal state. */
+	  if(tcsetattr(STDIN_FILENO, TCSADRAIN, &job->tmodes) < 0) {
+	    perror("tcsetattr");
+	  }
+	  /* Put the job into the foreground. */
+	  if(tcsetpgrp(STDIN_FILENO, job->pgid) < 0) { perror("tcsetpgrp"); }
+
+	  if(job->last_state == ST_STOPPED) {
+	    if(kill(-job->pgid, SIGCONT) < 0) {
+	      perror("kill(SIGCONT)");
+	    }
+	  }
+	  job->last_state = ST_RUNNING;
+
+	  wait_for_job(state, job);
+	  goto done1;
+	}
+      }
+      printf("plash: Unknown job ID: %i\n", job_id);
+    done1:
+    }
+    else if(m_command_bg(val_out, &job_id_str)) {
+      seqf_t arg = flatten_charlist(r, job_id_str);
+      int job_id = atoi(arg.data);
+      struct job *job;
+
+      for(job = state->jobs.next; job->id; job = job->next) {
+	if(job->id == job_id) {
+	  if(job->last_state == ST_RUNNING) {
+	    printf("plash: job %i already in background\n", job->id);
+	  }
+	  if(job->last_state == ST_STOPPED) {
+	    printf("plash: resuming job %i in background\n", job->id);
+	    if(kill(-job->pgid, SIGCONT) < 0) {
+	      perror("kill(SIGCONT)");
+	    }
+	    job->last_state = ST_RUNNING;
+	  }
+	  goto done2;
+	}
+      }
+      printf("plash: Unknown job ID: %i\n", job_id);
+    done2:
+    }
+    else {
+      printf("plash: command not handled\n");
+    }
   }
   else {
-    printf("parse failed\n");
+    printf("plash: parse failed\n");
   }
   if(MOD_DEBUG) printf("allocated %i bytes\n", region_allocated(r));
  error:
@@ -664,6 +1009,11 @@ int main(int argc, char *argv[])
   struct shell_state state;
   state.root = initial_dir("/");
   state.cwd = 0;
+  state.interactive = 0;
+  state.next_job_id = 1;
+  state.jobs.id = 0;
+  state.jobs.next = &state.jobs;
+  state.jobs.prev = &state.jobs;
   /* Set up the current directory */
   /* If this fails, the cwd is left undefined: you can't access anything
      through it.  This seems safer than just setting the cwd to the root
@@ -692,6 +1042,38 @@ int main(int argc, char *argv[])
   }
 
   if(argc <= 1) {
+    state.interactive = isatty(STDIN_FILENO);
+    if(state.interactive) {
+      int shell_pgid;
+      
+      /* Loop until we are in the foreground. */
+      while(1) {
+	int shell_pgid = getpgrp();
+	if(tcgetpgrp(STDIN_FILENO) == shell_pgid) break;
+	if(kill(-shell_pgid, SIGTTIN) < 0) { perror("kill(SIGTTIN)"); }
+      }
+      
+      /* Ignore interactive and job-control signals. */
+      signal(SIGINT, SIG_IGN);
+      signal(SIGQUIT, SIG_IGN);
+      signal(SIGTSTP, SIG_IGN);
+      signal(SIGTTIN, SIG_IGN);
+      signal(SIGTTOU, SIG_IGN);
+      /* signal(SIGCHLD, SIG_IGN); */
+      
+      /* Put ourselves in our own process group. */
+      shell_pgid = getpid();
+      if(setpgid(shell_pgid, 0) < 0) {
+	perror("plash: couldn't put the shell in its own process group");
+      }
+      
+      /* Grab control of the terminal. */
+      if(tcsetpgrp(STDIN_FILENO, shell_pgid) < 0) { perror("tcsetpgrp"); }
+
+      /* Save terminal state. */
+      if(tcgetattr(STDIN_FILENO, &state.tmodes) < 0) { perror("tcgetattr"); }
+    }
+    
     /* Interactive mode */
     using_history();
     while(1) {
@@ -709,10 +1091,18 @@ int main(int argc, char *argv[])
 	}
       }
       line1 = readline("plash$ ");
+      
+      while(wait_for_processes(&state, 1 /* check */) > 0) /* nothing */;
+      report_jobs(&state);
+      
       if(!line1) break;
       if(*line1) {
 	add_history(line1);
+	
 	shell_command(&state, seqf_string(line1));
+	
+	while(wait_for_processes(&state, 1 /* check */) > 0) /* nothing */;
+	report_jobs(&state);
       }
       /* As far as I can tell, add_history() doesn't take a copy of the line you give it. */
       /* free(line1); */
@@ -723,7 +1113,15 @@ int main(int argc, char *argv[])
     shell_command(&state, seqf_string(argv[2]));
   }
   else {
-    printf("Usage: shell [-c CMD]\n");
+    printf("Plash version " PLASH_VERSION "\n"
+	   "Copyright 2004 Mark Seaborn\n"
+	   "\n"
+	   "Usage: shell [-c CMD]\n"
+	   "\n"
+	   "Special commands in the shell:\n"
+	   "  cd <directory pathname>\n"
+	   "  fg <job number>\n"
+	   "  bg <job number>\n");
   }
   return 0;
 }

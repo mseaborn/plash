@@ -1,0 +1,57 @@
+
+(* Why pass errors around the way Bryan Ford does?  At the end of the
+   parse, only the rightmost error is kept: this is the effect of
+   join_errors.  A load of references to errors that don't turn out to
+   be the rightmost error are passed around and kept in the memo table.
+   The effect of <?> is merely to *explain* an error; it never
+   supercedes the rightmost error, it just replaces the message when
+   it occurs at the same position as the current rightmost error. *)
+
+
+
+'c' generates:
+if i < j && str.[i] = 'c' then OK (i+1) else FAIL
+
+'a' 'b' generates:
+match (if i < j && str.[i] = 'a' then OK (i+1) else FAIL) with
+  | OK i -> if i < j && str.[i] = 'b' then OK (i+1) else FAIL
+  | FAIL -> FAIL
+
+'a' 'b' 'c' generates:
+match (if i < j && str.[i] = 'a' then OK (i+1) else FAIL) with
+  | OK i ->
+      (match (if i < j && str.[i] = 'b' then OK (i+1) else FAIL) with
+         | OK i -> if i < j && str.[i] = 'c' then OK (i+1) else FAIL
+         | FAIL -> FAIL)
+  | FAIL -> FAIL
+ie.
+match (if i < j && str.[i] = 'a' then OK (i+1) else FAIL) with
+  | FAIL -> FAIL
+  | OK i ->
+      (match (if i < j && str.[i] = 'b' then OK (i+1) else FAIL) with
+         | FAIL -> FAIL
+         | OK i -> if i < j && str.[i] = 'c' then OK (i+1) else FAIL)
+
+'a' 'b' 'c' generates:
+if i < j && str.[i] = 'a' then
+  let i = i+1 in
+    if i < j && str.[i] = 'b' then
+      let i = i+1 in
+        if i < j && str.[i] = 'c' then
+          let i = i+1 in
+            OK (i+1)
+        else FAIL
+    else FAIL
+else FAIL
+
+E1 / E2 generates:
+match f1 i with
+  | OK i -> OK i
+  | FAIL -> f2 i
+
+E1 / E2 / E3 generates:
+match f1 i with
+  | OK i -> OK i
+  | FAIL -> match f2 i with
+      | OK i -> OK i
+      | FAIL -> f3 i

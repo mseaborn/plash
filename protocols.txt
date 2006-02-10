@@ -314,7 +314,8 @@ Resolved `pathname' to get any object; will follow symlinks.
 "Open" flags/int mode/int filename
 =>
 "ROpn" + FD
-"RDfd" // This is returned when open() is used on a directory
+"RDfd" + FD + dir_stack/obj // This is returned when open() is used on a directory.
+                            // FD is for /dev/null, and the object is a dir_stack.
 "Fail" errno/int
 
 // stat() and lstat() calls
@@ -333,6 +334,12 @@ Resolved `pathname' to get any object; will follow symlinks.
 "Chdr" pathname
 =>
 "RSuc"
+"Fail" errno/int
+
+// fchdir() call:  takes a dir_stack object as returned by open()
+"Fchd" + dir_stack/obj
+=>
+"Okay"
 "Fail" errno/int
 
 // getcwd() call

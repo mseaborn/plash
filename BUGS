@@ -1,6 +1,13 @@
 
 Programs that don't work:
 
+rm -r:
+needs to open directory FDs and use fchdir() to work without being
+vulnerable to symlink races.  fchdir() isn't implemented.
+
+install:
+uses fchdir() too, it seems.
+
 gcc:
 tries 1000 times to open files in /tmp in a loop (so hangs for a while),
 then aborts (without a descriptive error)
@@ -105,7 +112,11 @@ No thread safety in libc
 
 No resource accountability (not really a bug)
 
-stat64() doesn't work
+stat64() doesn't work properly
+
+Make sure that messages are encoded and decoded properly on 64-bit and
+other-endian machines.
+ * Currently I assume sizeof(int) == 4.
 
 Sending on a socket is never queued.  This could lead to DoS of
 servers.  It could potentially lead to deadlocks, if both ends of a
@@ -129,6 +140,8 @@ Actually, I have realised that following the symlink is not good from
 a security point of view.
 
 libc's object-based execve() ignores the close-on-exec flag
+
+There may be cases where libc calls should preserve errno but don't.
 
 
 

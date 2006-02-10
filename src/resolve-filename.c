@@ -30,37 +30,50 @@
 #define LOG stderr
 
 
+DECLARE_VTABLE(dir_stack_vtable);
+
 /* Takes a non-owning reference.  Returns an owning reference. */
 struct dir_stack *dir_stack_root(struct filesys_obj *dir)
 {
   struct dir_stack *root = amalloc(sizeof(struct dir_stack));
-  dir->refcount++;
-  root->refcount = 1;
-  root->dir = dir;
+  root->hdr.vtable = &dir_stack_vtable;
+  root->hdr.refcount = 1;
+  root->dir = inc_ref(dir);
   root->parent = 0;
   root->name = 0;
   return root;
 }
 
-void dir_stack_free(struct dir_stack *st)
+/* Takes owning references.  Returns an owning reference. */
+struct dir_stack *dir_stack_make(struct filesys_obj *dir,
+				 struct dir_stack *parent, char *name)
 {
-  /* Written using a loop instead of tail recursion
-     (although tail recursion would have been clearer). */
-  assert(st->refcount > 0);
-  st->refcount--;
-  while(st && st->refcount <= 0) {
-    struct dir_stack *parent = st->parent;
+  struct dir_stack *stack = amalloc(sizeof(struct dir_stack));
+  stack->hdr.vtable = &dir_stack_vtable;
+  stack->hdr.refcount = 1;
+  stack->dir = dir;
+  stack->parent = parent;
+  stack->name = name;
+  return stack;
+}
 
-    filesys_obj_free(st->dir);
-    if(st->parent) {
-      assert(st->parent->refcount > 0);
-      st->parent->refcount--;
-      free(st->name);
-    }
-    free(st);
-    st = parent;
+void dir_stack_method_free(struct filesys_obj *obj)
+{
+  struct dir_stack *stack = (void *) obj;
+  filesys_obj_free(stack->dir);
+  if(stack->parent) {
+    dir_stack_free(stack->parent);
+    free(stack->name);
   }
 }
+
+struct dir_stack *dir_stack_upcast(struct filesys_obj *obj)
+{
+  if(obj->vtable == &dir_stack_vtable) return (void *) obj;
+  else return 0;
+}
+
+#include "out-vtable-resolve-filename.h"
 
 seqt_t string_of_cwd(region_t r, struct dir_stack *dir)
 {
@@ -100,7 +113,7 @@ struct dir_stack *resolve_dir
     case FILENAME_CWD:
       dirstack = cwd;
       if(!dirstack) { *err = E_NO_CWD_DEFINED; return 0; }
-      dirstack->refcount++;
+      dirstack->hdr.refcount++;
       break;
     default: *err = ENOENT; return 0; /* Error: bad filename */
   }
@@ -112,7 +125,7 @@ struct dir_stack *resolve_dir
     if(filename_parent(name)) {
       if(dirstack->parent) {
 	struct dir_stack *p = dirstack->parent;
-	p->refcount++;
+	p->hdr.refcount++;
 	dir_stack_free(dirstack);
 	dirstack = p;
       }
@@ -134,12 +147,7 @@ struct dir_stack *resolve_dir
       }
       obj_type = obj->vtable->type(obj);
       if(obj_type == OBJT_DIR) {
-	struct dir_stack *new_d = amalloc(sizeof(struct dir_stack));
-	new_d->refcount = 1;
-	new_d->dir = obj;
-	new_d->parent = dirstack;
-	new_d->name = name1;
-	dirstack = new_d;
+	dirstack = dir_stack_make(obj, dirstack, name1);
       }
       else if(obj_type == OBJT_SYMLINK) {
 	struct dir_stack *new_stack;
@@ -193,7 +201,7 @@ struct filesys_obj *resolve_file
       if(MOD_DEBUG) fprintf(LOG, MOD_MSG "resolve_file: relative to cwd\n");
       dirstack = cwd;
       if(!dirstack) { *err = E_NO_CWD_DEFINED; return 0; }
-      dirstack->refcount++;
+      dirstack->hdr.refcount++;
       break;
     default: *err = ENOENT; return 0; /* Error: bad filename */
   }
@@ -213,7 +221,7 @@ struct filesys_obj *resolve_file
       if(end) goto got_directory;
       if(dirstack->parent) {
 	struct dir_stack *p = dirstack->parent;
-	p->refcount++;
+	p->hdr.refcount++;
 	dir_stack_free(dirstack);
 	dirstack = p;
       }
@@ -246,12 +254,8 @@ struct filesys_obj *resolve_file
 	  goto got_directory;
 	}
 	else {
-	  struct dir_stack *new_d = amalloc(sizeof(struct dir_stack));
-	  new_d->refcount = 1;
-	  new_d->dir = obj;
-	  new_d->parent = dirstack;
-	  new_d->name = name1; /* Don't really need to save this */
-	  dirstack = new_d;
+	  /* Don't really need to save name1 */
+	  dirstack = dir_stack_make(obj, dirstack, name1);
 	}
       }
       else if(obj_type == OBJT_SYMLINK) {
@@ -363,7 +367,7 @@ int resolve_obj(region_t r, struct filesys_obj *root, struct dir_stack *cwd,
       if(MOD_DEBUG) fprintf(LOG, MOD_MSG "resolve_obj: relative to cwd\n");
       dirstack = cwd;
       if(!dirstack) { *err = E_NO_CWD_DEFINED; return 0; }
-      dirstack->refcount++;
+      dirstack->hdr.refcount++;
       break;
     default: *err = ENOENT; return 0; /* Error: bad filename */
   }
@@ -375,7 +379,7 @@ int resolve_obj(region_t r, struct filesys_obj *root, struct dir_stack *cwd,
     if(filename_parent(name)) {
       if(dirstack->parent) {
 	struct dir_stack *p = dirstack->parent;
-	p->refcount++;
+	p->hdr.refcount++;
 	dir_stack_free(dirstack);
 	dirstack = p;
       }
@@ -392,9 +396,8 @@ int resolve_obj(region_t r, struct filesys_obj *root, struct dir_stack *cwd,
       if(end && create == CREATE_ONLY) {
 	struct resolved_slot *slot = amalloc(sizeof(struct resolved_slot));
 	if(MOD_DEBUG) fprintf(LOG, "create_only option; return slot\n");
-	slot->dir = dirstack->dir;
+	slot->dir = inc_ref(dirstack->dir);
 	slot->leaf = name1;
-	dirstack->dir->refcount++;
 	dir_stack_free(dirstack);
 	*result = slot;
 	return RESOLVED_EMPTY_SLOT;
@@ -405,9 +408,8 @@ int resolve_obj(region_t r, struct filesys_obj *root, struct dir_stack *cwd,
 	if(end && create) {
 	  struct resolved_slot *slot = amalloc(sizeof(struct resolved_slot));
 	  if(MOD_DEBUG) fprintf(LOG, "not found; create flag set\n");
-	  slot->dir = dirstack->dir;
+	  slot->dir = inc_ref(dirstack->dir);
 	  slot->leaf = name1;
-	  dirstack->dir->refcount++;
 	  dir_stack_free(dirstack);
 	  *result = slot;
 	  return RESOLVED_EMPTY_SLOT;
@@ -422,13 +424,8 @@ int resolve_obj(region_t r, struct filesys_obj *root, struct dir_stack *cwd,
       }
       obj_type = obj->vtable->type(obj);
       if(obj_type == OBJT_DIR) {
-	struct dir_stack *new_d = amalloc(sizeof(struct dir_stack));
 	if(MOD_DEBUG) fprintf(LOG, "dir\n");
-	new_d->refcount = 1;
-	new_d->dir = obj;
-	new_d->parent = dirstack;
-	new_d->name = name1;
-	dirstack = new_d;
+	dirstack = dir_stack_make(obj, dirstack, name1);
       }
       else if(obj_type == OBJT_SYMLINK) {
 	seqf_t link_dest;
@@ -521,8 +518,7 @@ struct filesys_obj *resolve_obj_simple
   region_free(r);
   if(rc == RESOLVED_DIR) {
     struct dir_stack *ds = result;
-    struct filesys_obj *dir = ds->dir;
-    dir->refcount++;
+    struct filesys_obj *dir = inc_ref(ds->dir);
     dir_stack_free(ds);
     return dir;
   }

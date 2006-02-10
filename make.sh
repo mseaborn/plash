@@ -24,7 +24,7 @@ GLIBC_VERSION=2.3.3
 #CC=gcc-3.3
 
 set -e
-set -x
+#set -x
 
 OPTS_C="-Wall -nostdlib \
         -g \
@@ -42,11 +42,13 @@ build_server () {
   # I used to use dietlibc for this, but then I wanted to link with readline
   $CC $OPTS_S -c src/region.c -o obj/region.o
   $CC $OPTS_S -c src/serialise.c -o obj/serialise.o
+  $CC $OPTS_S -c src/serialise-utils.c -o obj/serialise-utils.o
   $CC $OPTS_S '-DHALF_NAME="server"' -c src/comms.c -o obj/comms.o
   $CC $OPTS_S -c src/cap-protocol.c -o obj/cap-protocol.o
   $CC $OPTS_S -c src/cap-call-return.c -o obj/cap-call-return.o
   $CC $OPTS_S -c src/cap-utils.c -o obj/cap-utils.o
   $CC $OPTS_S -c src/cap-utils-libc.c -o obj/cap-utils-libc.o
+  $CC $OPTS_S -c src/marshal-exec.c -o obj/marshal-exec.o
   $CC $OPTS_S -c src/utils.c -o obj/utils.o
   $CC $OPTS_S -c src/parse-filename.c -o obj/parse-filename.o
   $CC $OPTS_S -c src/filesysobj.c -o obj/filesysobj.o
@@ -81,7 +83,8 @@ build_server () {
 	obj/shell-wait.o \
 	obj/build-fs.o obj/build-fs-static.o obj/build-fs-dynamic.o \
 	obj/fs-operations.o obj/resolve-filename.o \
-	obj/cap-utils.o obj/cap-utils-libc.o obj/cap-call-return.o obj/cap-protocol.o \
+	obj/cap-utils.o obj/cap-utils-libc.o obj/marshal-exec.o \
+	obj/cap-call-return.o obj/cap-protocol.o \
 	obj/filesysslot.o \
 	obj/filesysobj-fab.o \
 	obj/filesysobj-union.o \
@@ -91,7 +94,7 @@ build_server () {
 	obj/log-proxy.o \
 	obj/reconnectable-obj.o \
 	obj/parse-filename.o obj/comms.o \
-	obj/serialise.o obj/region.o obj/utils.o
+	obj/serialise.o obj/serialise-utils.o obj/region.o obj/utils.o
   # `pkg-config gtk+-2.0 --libs`
   $CC $OPTS_S obj/shell.o obj/libplash.a \
 	-lreadline -ltermcap \
@@ -100,6 +103,15 @@ build_server () {
   $CC $OPTS_S src/test-caps.c obj/libplash.a -o bin/test-caps
 
   LIBC_LINK="shobj/libc.so shobj/ld.so"
+
+  $CC $OPTS_S -c src/shell-options.c -o obj/shell-options.o
+  $CC $OPTS_S \
+	src/shell-options-gtk.c obj/shell-options.o $LIBC_LINK \
+	obj/libplash.a `pkg-config gtk+-2.0 --libs` -o bin/plash-opts-gtk
+  $CC $OPTS_S \
+	src/shell-options-cmd.c obj/shell-options.o $LIBC_LINK \
+	obj/libplash.a -o bin/plash-opts
+
   # libc.so contains a reference to __libc_stack_end, which ld.so defines.
   # With a newer `ld', I have to link ld.so here too.  With an older one,
   # I could leave ld.so out.
@@ -109,17 +121,10 @@ build_server () {
   $CC $OPTS_S \
 	src/exec-object.c $LIBC_LINK \
 	obj/libplash.a -o bin/exec-object
+
   $CC $OPTS_S \
 	src/run-emacs.c $LIBC_LINK \
 	obj/libplash.a -o bin/run-emacs
-
-  $CC $OPTS_S -c src/shell-options.c -o obj/shell-options.o
-  $CC $OPTS_S \
-	src/shell-options-gtk.c obj/shell-options.o $LIBC_LINK \
-	obj/libplash.a `pkg-config gtk+-2.0 --libs` -o bin/plash-opts-gtk
-  $CC $OPTS_S \
-	src/shell-options-cmd.c obj/shell-options.o $LIBC_LINK \
-	obj/libplash.a -o bin/plash-opts
 }
 
 
@@ -181,6 +186,7 @@ build_client () {
 	glibc/posix/execve.os \
 	glibc/socket/connect.os \
 	glibc/socket/bind.os \
+	glibc/io/close.os \
 	glibc/io/fstat.oS glibc/io/fxstat.os \
 	glibc/io/xstat64.os glibc/io/xstatconv.os \
 	-o obj/combined.os
@@ -193,6 +199,7 @@ build_client () {
 	socket/rtld-sendmsg.os \
 	socket/rtld-send.os \
 	socket/cmsg_nxthdr.os \
+	io/rtld-close.os \
 	io/rtld-fstat.os io/rtld-fxstat.os \
 	io/rtld-xstat64.os io/rtld-xstatconv.os"
   ld -r obj/libc-misc.os obj/libc-getuid.os \
@@ -218,6 +225,7 @@ build_client () {
   # open64.os used to be okay to leave in for glibc 2.2.5, because it
   # was defined in terms of open().  But in 2.3.3 it includes a syscall.
   EXCLUDE="io/open.os io/open64.os io/creat.os io/creat64.os
+	io/close.os
 	io/getcwd.os io/chdir.os io/fchdir.os
 	io/xmknod.os
 	io/xstat.os io/xstat64.os

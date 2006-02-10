@@ -30,6 +30,9 @@ typedef struct node *fs_node_t;
 
 fs_node_t fs_make_empty_node();
 void fs_print_tree(int indent, fs_node_t node);
+fs_node_t tree_traverse(fs_node_t node, const char *name);
+int attach_ro_obj(fs_node_t node, cap_t obj);
+int attach_rw_slot(fs_node_t node, struct filesys_obj *obj);
 int fs_attach_at_pathname(fs_node_t root_node, struct dir_stack *cwd_ds,
 			  seqf_t pathname, cap_t obj, int *err);
 int fs_resolve_populate

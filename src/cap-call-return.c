@@ -20,6 +20,7 @@
 #include "region.h"
 #include "filesysobj.h"
 #include "cap-protocol.h"
+#include "marshal.h"
 
 
 extern struct filesys_obj_vtable return_cont_vtable;
@@ -76,7 +77,7 @@ void local_obj_invoke(struct filesys_obj *obj, struct cap_args args)
   region_t r = region_make();
   seqf_t data = flatten_reuse(r, args.data);
   int ok = 1;
-  m_str(&ok, &data, "Call");
+  m_int_const(&ok, &data, METHOD_CALL);
   if(ok && args.caps.size >= 1) {
     cap_t return_cont = args.caps.caps[0];
     struct cap_args result;

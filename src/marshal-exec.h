@@ -1,4 +1,4 @@
-/* Copyright (C) 2004 Mark Seaborn
+/* Copyright (C) 2004, 2005 Mark Seaborn
 
    This file is part of Plash, the Principle of Least Authority Shell.
 
@@ -17,29 +17,29 @@
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
    USA.  */
 
-#ifndef cap_utils_h
-#define cap_utils_h
-
-#include "filesysobj.h"
+#ifndef marshal_exec_h
+#define marshal_exec_h
 
 
-static inline void cap_call(cap_t c, region_t r,
-			    struct cap_args args, struct cap_args *result)
-{
-  c->vtable->cap_call(c, r, args, result);
-}
+#include "serialise.h"
 
-static inline void cap_invoke(cap_t c, struct cap_args args)
-{
-  c->vtable->cap_invoke(c, args);
-}
+struct fd_mapping {
+  int fd_no;
+  int fd;
+};
 
-int expect_ok(struct cap_args args);
-int expect_cap1(struct cap_args args, cap_t *c);
-int expect_fd1(struct cap_args args, int *fd);
+struct exec_args {
+  char **argv, **env;
+  struct fd_mapping *fds;
+  int fds_count;
+  cap_t root_dir;
+  seqf_t cwd;
+  int got_cwd;
+  int pgid;
+};
 
-int parse_cap_list(seqf_t list, seqf_t *elt, seqf_t *rest);
-int get_process_caps(const char *arg, ...);
+int unpack_exec_args(region_t r, struct arg_m_buf argbuf, bufref_t args_ref,
+		     struct exec_args *ea);
 
 
 #endif

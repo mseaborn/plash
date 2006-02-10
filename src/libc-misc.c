@@ -32,15 +32,48 @@
 #include "region.h"
 #include "comms.h"
 #include "libc-comms.h"
+#include "marshal.h"
+#include "cap-utils.h"
 
+
+#define MOD_MSG "libc: "
+#define log_msg(msg) /* nothing */
+#if 0
+static void log_msg(const char *msg)
+{
+  write(2, msg, strlen(msg));
+}
+#endif
+
+
+/* This array maps file descriptor numbers to objects that implement
+   the FD.  The FD slot will be filled by a corresponding real FD in
+   the kernel's mapping for the process, but this is only a "dummy"
+   FD, created by opening /dev/null.
+   The array contains NULL when there is no mapping for the slot.
+   Only open(), close() and fchdir() use this array at present. */
+cap_t *g_fds = 0;
+int g_fds_size = 0;
+
+
+/* Try to set the errno from the given message, otherwise set it to ENOSYS. */
+void set_errno_from_reply(seqf_t msg)
+{
+  int ok = 1;
+  int err;
+  m_int_const(&ok, &msg, METHOD_FAIL);
+  m_int(&ok, &msg, &err);
+  m_end(&ok, &msg);
+  __set_errno(ok ? err : ENOSYS);
+}
 
 /* EXPORT: new_open => WEAK:open WEAK:__open __libc_open __GI_open __GI___open __GI___libc_open open_not_cancel open_not_cancel_2 */
 int new_open(const char *filename, int flags, ...)
 {
   region_t r = region_make();
-  seqf_t reply;
-  fds_t fds;
   int mode = 0;
+  struct cap_args result;
+  log_msg(MOD_MSG "open\n");
 
   if(!filename) {
     __set_errno(EINVAL);
@@ -52,54 +85,120 @@ int new_open(const char *filename, int flags, ...)
     mode = va_arg(arg, int);
     va_end(arg);
   }
-  if(req_and_reply_with_fds
-       (r, cat4(r, mk_string(r, "Open"),
-		mk_int(r, flags),
-		mk_int(r, mode),
-		mk_string(r, filename)),
-	&reply, &fds) < 0) goto error;
   {
-    seqf_t msg = reply;
-    int fd;
+    if(plash_init() < 0) goto error;
+    if(!fs_server) { __set_errno(ENOSYS); goto error; }
+    cap_call(fs_server, r,
+	     cap_args_make(cat4(r, mk_int(r, METHOD_FSOP_OPEN),
+				mk_int(r, flags),
+				mk_int(r, mode),
+				mk_string(r, filename)),
+			   caps_empty, fds_empty),
+	     &result);
+  }
+  {
+    seqf_t msg = flatten_reuse(r, result.data);
     int ok = 1;
     m_str(&ok, &msg, "ROpn");
     m_end(&ok, &msg);
-    m_fd(&ok, &fds, &fd);
-    if(ok) {
+    if(ok && result.fds.count == 1 && result.caps.size == 0) {
+      int fd = result.fds.fds[0];
       region_free(r);
       return fd;
     }
   }
   {
-    seqf_t msg = reply;
+    /* This handles the case in which a directory is opened.  The server
+       passes us a dummy FD for /dev/null, which we return. */
+    seqf_t msg = flatten_reuse(r, result.data);
     int ok = 1;
     m_str(&ok, &msg, "RDfd");
     m_end(&ok, &msg);
-    if(ok) {
-      /* This handles the case in which a directory is opened.  We return
-	 a dummy FD, for /dev/null.  This doesn't work if /dev/null is not
-	 available.  If /dev/null is a directory, this will enter an
-	 infinite loop.  This approach is not great. */
-      region_free(r);
-      return new_open("/dev/null", O_RDONLY);
-    }
-  }
-  {
-    seqf_t msg = reply;
-    int err;
-    int ok = 1;
-    m_str(&ok, &msg, "Fail");
-    m_int(&ok, &msg, &err);
-    m_end(&ok, &msg);
-    if(ok) {
-      __set_errno(err);
-      goto error;
-    }
-  }
+    if(ok && result.fds.count == 1 && result.caps.size == 1) {
+      int fd = result.fds.fds[0];
 
-  __set_errno(ENOSYS);
+      /* Resize the file descriptor array. */
+      assert(fd >= 0);
+      if(fd >= g_fds_size) {
+	int i;
+	int new_size = fd + 4;
+	cap_t *new_array = amalloc(new_size * sizeof(cap_t));
+	memcpy(new_array, g_fds, g_fds_size * sizeof(cap_t));
+	for(i = g_fds_size; i < new_size; i++) new_array[i] = 0;
+	free(g_fds);
+	g_fds = new_array;
+	g_fds_size = new_size;
+      }
+      if(g_fds[fd]) {
+	/* This shouldn't happen.  The kernel has returned a FD with a
+	   number that we think is already in use. */
+	/* This should give a warning once there is a mechanism for
+	   doing that.  FIXME. */
+	filesys_obj_free(g_fds[fd]);
+      }
+      g_fds[fd] = result.caps.caps[0];
+      
+      region_free(r);
+      return fd;
+    }
+  }
+  caps_free(result.caps);
+  close_fds(result.fds);
+  set_errno_from_reply(flatten_reuse(r, result.data));
  error:
   region_free(r);
+  return -1;
+}
+
+/* EXPORT: new_close => WEAK:close WEAK:__close __libc_close __GI_close __GI___close __GI___libc_close */
+int new_close(int fd)
+{
+  log_msg(MOD_MSG "close\n");
+  if(0 <= fd && fd < g_fds_size && g_fds[fd]) {
+    filesys_obj_free(g_fds[fd]);
+    g_fds[fd] = 0;
+  }
+  return close(fd);
+}
+
+/* EXPORT: new_fchdir => WEAK:fchdir __fchdir __GI_fchdir __GI___fchdir */
+int new_fchdir(int fd)
+{
+  log_msg(MOD_MSG "fchdir\n");
+  if(fd < g_fds_size) {
+    cap_t obj = g_fds[fd];
+    if(obj) {
+      struct cap_args result;
+      region_t r = region_make();
+      if(plash_init() < 0) goto error;
+      if(!fs_server) { __set_errno(ENOSYS); goto error; }
+      cap_call(fs_server, r,
+	       cap_args_make(mk_int(r, METHOD_FSOP_FCHDIR),
+			     mk_caps1(r, inc_ref(obj)),
+			     fds_empty),
+	       &result);
+      {
+	seqf_t msg = flatten_reuse(r, result.data);
+	int ok = 1;
+	m_int_const(&ok, &msg, METHOD_OKAY);
+	m_end(&ok, &msg);
+	if(ok && result.fds.count == 0 && result.caps.size == 0) {
+	  region_free(r);
+	  return 0;
+	}
+      }
+      caps_free(result.caps);
+      close_fds(result.fds);
+      set_errno_from_reply(flatten_reuse(r, result.data));
+    error:
+      region_free(r);
+      return -1;
+    }
+  }
+  /* This should really return EBADF if there is no file descriptor in
+     the slot `fd', but we don't have a good way of checking this.
+     Return ENOTDIR to say that the FD is not for a directory. */
+  __set_errno(ENOTDIR);
   return -1;
 }
 
@@ -107,6 +206,7 @@ int new_open(const char *filename, int flags, ...)
 int new_open64(const char *filename, int flags, ...)
 {
   int mode = 0;
+  log_msg(MOD_MSG "open64\n");
   if(flags & O_CREAT) {
     va_list arg;
     va_start(arg, flags);
@@ -119,12 +219,14 @@ int new_open64(const char *filename, int flags, ...)
 /* EXPORT: new_creat => WEAK:creat __libc_creat __GI_creat __GI___libc_creat */
 int new_creat(const char *filename, int mode)
 {
+  log_msg(MOD_MSG "creat\n");
   return new_open(filename, O_WRONLY | O_CREAT | O_TRUNC, mode);
 }
 
 /* EXPORT: new_creat64 => creat64 */
 int new_creat64(const char *filename, int mode)
 {
+  log_msg(MOD_MSG "creat64\n");
   return new_open64(filename, O_WRONLY | O_CREAT | O_TRUNC, mode);
 }
 
@@ -135,7 +237,8 @@ char *new_getcwd(char *buf, size_t size)
 {
   region_t r = region_make();
   seqf_t reply;
-  if(req_and_reply(r, mk_string(r, "Gcwd"), &reply) < 0) goto error;
+  log_msg(MOD_MSG "getcwd\n");
+  if(req_and_reply(r, mk_int(r, METHOD_FSOP_GETCWD), &reply) < 0) goto error;
   {
     seqf_t msg = reply;
     int ok = 1;
@@ -156,20 +259,7 @@ char *new_getcwd(char *buf, size_t size)
       return buf;
     }
   }
-  {
-    seqf_t msg = reply;
-    int err;
-    int ok = 1;
-    m_str(&ok, &msg, "Fail");
-    m_int(&ok, &msg, &err);
-    m_end(&ok, &msg);
-    if(ok) {
-      __set_errno(err);
-      goto error;
-    }
-  }
-
-  __set_errno(ENOSYS);
+  set_errno_from_reply(reply);
  error:
   region_free(r);
   return 0;
@@ -180,12 +270,13 @@ int new_chdir(const char *pathname)
 {
   region_t r = region_make();
   seqf_t reply;
+  log_msg(MOD_MSG "chdir\n");
 
   if(!pathname) {
     __set_errno(EINVAL);
     goto error;
   }
-  if(req_and_reply(r, cat2(r, mk_string(r, "Chdr"),
+  if(req_and_reply(r, cat2(r, mk_int(r, METHOD_FSOP_CHDIR),
 			   mk_string(r, pathname)), &reply) < 0) goto error;
   {
     seqf_t msg = reply;
@@ -197,29 +288,9 @@ int new_chdir(const char *pathname)
       return 0;
     }
   }
-  {
-    seqf_t msg = reply;
-    int err;
-    int ok = 1;
-    m_str(&ok, &msg, "Fail");
-    m_int(&ok, &msg, &err);
-    m_end(&ok, &msg);
-    if(ok) {
-      __set_errno(err);
-      goto error;
-    }
-  }
-
-  __set_errno(ENOSYS);
+  set_errno_from_reply(reply);
  error:
   region_free(r);
-  return -1;
-}
-
-/* EXPORT: new_fchdir => WEAK:fchdir __fchdir __GI_fchdir __GI___fchdir */
-int new_fchdir(int fd)
-{
-  __set_errno(ENOSYS);
   return -1;
 }
 
@@ -285,11 +356,12 @@ DIR *new_opendir(const char *pathname)
 {
   region_t r = region_make();
   seqf_t reply;
+  log_msg(MOD_MSG "opendir\n");
   if(!pathname) {
     __set_errno(EINVAL);
     goto error;
   }
-  if(req_and_reply(r, cat2(r, mk_string(r, "Dlst"),
+  if(req_and_reply(r, cat2(r, mk_int(r, METHOD_FSOP_DIRLIST),
 			   mk_string(r, pathname)), &reply) < 0) goto error;
   {
     seqf_t msg = reply;
@@ -309,20 +381,7 @@ DIR *new_opendir(const char *pathname)
       return dir;
     }
   }
-  {
-    seqf_t msg = reply;
-    int err;
-    int ok = 1;
-    m_str(&ok, &msg, "Fail");
-    m_int(&ok, &msg, &err);
-    m_end(&ok, &msg);
-    if(ok) {
-      __set_errno(err);
-      goto error;
-    }
-  }
-
-  __set_errno(ENOSYS);
+  set_errno_from_reply(reply);
  error:
   region_free(r);
   return 0;
@@ -335,6 +394,7 @@ DIR *new_opendir(const char *pathname)
 struct dirent *new_readdir(DIR *dir)
 {
   seqf_t buf;
+  log_msg(MOD_MSG "readdir\n");
   if(!dir) { __set_errno(EBADF); return 0; }
   buf.data = dir->data.data + dir->offset;
   buf.size = dir->data.size - dir->offset;
@@ -379,6 +439,7 @@ struct dirent *new_readdir(DIR *dir)
 int new_readdir_r(DIR *dir, struct dirent *ent, struct dirent **result)
 {
   seqf_t buf;
+  log_msg(MOD_MSG "readdir_r\n");
   if(!dir) { __set_errno(EBADF); return -1; }
   buf.data = dir->data.data + dir->offset;
   buf.size = dir->data.size - dir->offset;
@@ -418,6 +479,7 @@ int new_readdir_r(DIR *dir, struct dirent *ent, struct dirent **result)
 struct dirent64 *new_readdir64(DIR *dir)
 {
   seqf_t buf;
+  log_msg(MOD_MSG "readdir64\n");
   if(!dir) { __set_errno(EBADF); return 0; }
   buf.data = dir->data.data + dir->offset;
   buf.size = dir->data.size - dir->offset;
@@ -464,6 +526,7 @@ struct dirent64 *new_readdir64(DIR *dir)
 int new_readdir64_r(DIR *dir, struct dirent64 *ent, struct dirent64 **result)
 {
   seqf_t buf;
+  log_msg(MOD_MSG "readdir64_r\n");
   if(!dir) { __set_errno(EBADF); return -1; }
   buf.data = dir->data.data + dir->offset;
   buf.size = dir->data.size - dir->offset;
@@ -500,6 +563,7 @@ int new_readdir64_r(DIR *dir, struct dirent64 *ent, struct dirent64 **result)
 /* EXPORT: new_closedir => WEAK:closedir __closedir */
 int new_closedir(DIR *dir)
 {
+  log_msg(MOD_MSG "closedir\n");
   if(!dir) { __set_errno(EBADF); return -1; }
   free(dir->buf);
   free(dir);
@@ -509,6 +573,7 @@ int new_closedir(DIR *dir)
 /* EXPORT: dirfd */
 int dirfd(DIR *dir)
 {
+  log_msg(MOD_MSG "dirfd\n");
   if(!dir) { __set_errno(EBADF); return -1; }
   __set_errno(ENOSYS);
   return -1;
@@ -517,6 +582,7 @@ int dirfd(DIR *dir)
 /* EXPORT: rewinddir */
 void rewinddir(DIR *dir)
 {
+  log_msg(MOD_MSG "rewinddir\n");
   if(!dir) return; /* No way to return an error */
   dir->offset = 0;
 }
@@ -524,6 +590,7 @@ void rewinddir(DIR *dir)
 /* EXPORT: telldir */
 off_t telldir(DIR *dir)
 {
+  log_msg(MOD_MSG "telldir\n");
   if(!dir) { __set_errno(EBADF); return -1; }
   return dir->offset;
 }
@@ -531,6 +598,7 @@ off_t telldir(DIR *dir)
 /* EXPORT: seekdir */
 void seekdir(DIR *dir, off_t offset)
 {
+  log_msg(MOD_MSG "seekdir\n");
   if(!dir) return; /* We can't return an error */
   dir->offset = offset;
 }
@@ -538,12 +606,14 @@ void seekdir(DIR *dir, off_t offset)
 /* EXPORT: new_getdents => __getdents */
 int new_getdents(int fd, struct dirent *buf, unsigned count)
 {
+  log_msg(MOD_MSG "getdents\n");
   __set_errno(ENOSYS);
   return -1;
 }
 /* EXPORT: new_getdents64 => __getdents64 */
 int new_getdents64(int fd, struct dirent *buf, unsigned count)
 {
+  log_msg(MOD_MSG "getdents64\n");
   __set_errno(ENOSYS);
   return -1;
 }
@@ -551,6 +621,7 @@ int new_getdents64(int fd, struct dirent *buf, unsigned count)
 /* EXPORT: new_xmknod => __xmknod __GI___xmknod */
 int new_xmknod(int ver, const char *path, mode_t mode, dev_t dev)
 {
+  log_msg(MOD_MSG "xmknod\n");
   __set_errno(ENOSYS);
   return -1;
 }
@@ -765,11 +836,12 @@ int my_stat(int nofollow, int type, const char *pathname, void *buf)
 {
   region_t r = region_make();
   seqf_t reply;
+  log_msg(MOD_MSG "stat\n");
   if(!pathname || !buf) {
     __set_errno(EINVAL);
     goto error;
   }
-  if(req_and_reply(r, cat3(r, mk_string(r, "Stat"),
+  if(req_and_reply(r, cat3(r, mk_int(r, METHOD_FSOP_STAT),
 			   mk_int(r, nofollow),
 			   mk_string(r, pathname)), &reply) < 0) goto error;
   {
@@ -844,19 +916,7 @@ int my_stat(int nofollow, int type, const char *pathname, void *buf)
       }
     }
   }
-  {
-    seqf_t msg = reply;
-    int err;
-    int ok = 1;
-    m_str(&ok, &msg, "Fail");
-    m_int(&ok, &msg, &err);
-    if(ok) {
-      __set_errno(err);
-      goto error;
-    }
-  }
-
-  __set_errno(ENOSYS);
+  set_errno_from_reply(reply);
  error:
   region_free(r);
   return -1;
@@ -865,6 +925,7 @@ int my_stat(int nofollow, int type, const char *pathname, void *buf)
 int my_fstat(int type, int fd, void *buf)
 {
   struct stat st;
+  log_msg(MOD_MSG "fstat\n");
   if(fstat(fd, &st) < 0) return -1;
   if(type == TYPE_STAT) {
     struct abi_stat *stat = buf;
@@ -990,11 +1051,12 @@ int new_readlink(const char *pathname, char *buf, size_t buf_size)
 {
   region_t r = region_make();
   seqf_t reply;
+  log_msg(MOD_MSG "readlink\n");
   if(!pathname || !buf) {
     __set_errno(EINVAL);
     goto error;
   }
-  if(req_and_reply(r, cat2(r, mk_string(r, "Rdlk"),
+  if(req_and_reply(r, cat2(r, mk_int(r, METHOD_FSOP_READLINK),
 			   mk_string(r, pathname)), &reply) < 0) goto error;
   {
     seqf_t msg = reply;
@@ -1008,20 +1070,7 @@ int new_readlink(const char *pathname, char *buf, size_t buf_size)
       return count;
     }
   }
-  {
-    seqf_t msg = reply;
-    int err;
-    int ok = 1;
-    m_str(&ok, &msg, "Fail");
-    m_int(&ok, &msg, &err);
-    m_end(&ok, &msg);
-    if(ok) {
-      __set_errno(err);
-      goto error;
-    }
-  }
-
-  __set_errno(ENOSYS);
+  set_errno_from_reply(reply);
  error:
   region_free(r);
   return -1;
@@ -1032,11 +1081,12 @@ int new_access(const char *pathname, unsigned int mode)
 {
   region_t r = region_make();
   seqf_t reply;
+  log_msg(MOD_MSG "access\n");
   if(!pathname) {
     __set_errno(EINVAL);
     goto error;
   }
-  if(req_and_reply(r, cat3(r, mk_string(r, "Accs"),
+  if(req_and_reply(r, cat3(r, mk_int(r, METHOD_FSOP_ACCESS),
 			   mk_int(r, mode),
 			   mk_string(r, pathname)), &reply) < 0) goto error;
   {
@@ -1049,20 +1099,7 @@ int new_access(const char *pathname, unsigned int mode)
       return 0;
     }
   }
-  {
-    seqf_t msg = reply;
-    int err;
-    int ok = 1;
-    m_str(&ok, &msg, "Fail");
-    m_int(&ok, &msg, &err);
-    m_end(&ok, &msg);
-    if(ok) {
-      __set_errno(err);
-      goto error;
-    }
-  }
-
-  __set_errno(ENOSYS);
+  set_errno_from_reply(reply);
  error:
   region_free(r);
   return -1;
@@ -1089,11 +1126,12 @@ int new_chmod(const char *pathname, unsigned int mode)
 
   region_t r = region_make();
   seqf_t reply;
+  log_msg(MOD_MSG "chmod\n");
   if(!pathname) {
     __set_errno(EINVAL);
     goto error;
   }
-  if(req_and_reply(r, cat3(r, mk_string(r, "Chmd"),
+  if(req_and_reply(r, cat3(r, mk_int(r, METHOD_FSOP_CHMOD),
 			   mk_int(r, mode),
 			   mk_string(r, pathname)), &reply) < 0) goto error;
   {
@@ -1106,20 +1144,7 @@ int new_chmod(const char *pathname, unsigned int mode)
       return 0;
     }
   }
-  {
-    seqf_t msg = reply;
-    int err;
-    int ok = 1;
-    m_str(&ok, &msg, "Fail");
-    m_int(&ok, &msg, &err);
-    m_end(&ok, &msg);
-    if(ok) {
-      __set_errno(err);
-      goto error;
-    }
-  }
-
-  __set_errno(ENOSYS);
+  set_errno_from_reply(reply);
  error:
   region_free(r);
   return -1;
@@ -1128,6 +1153,7 @@ int new_chmod(const char *pathname, unsigned int mode)
 /* EXPORT: new_lchmod => lchmod */
 int new_lchmod(const char *pathname, unsigned int mode)
 {
+  log_msg(MOD_MSG "lchmod\n");
   __set_errno(ENOSYS);
   return -1;
 }
@@ -1135,6 +1161,7 @@ int new_lchmod(const char *pathname, unsigned int mode)
 /* EXPORT: new_chown => DEFVER:chown,GLIBC_2.1 VER:chown,GLIBC_2.0 __chown __GI___chown */
 int new_chown(const char *pathname, unsigned int owner, unsigned int group)
 {
+  log_msg(MOD_MSG "chown\n");
   __set_errno(ENOSYS);
   return -1;
 }
@@ -1142,6 +1169,7 @@ int new_chown(const char *pathname, unsigned int owner, unsigned int group)
 /* EXPORT: new_lchown => lchown __lchown */
 int new_lchown(const char *pathname, unsigned int owner, unsigned int group)
 {
+  log_msg(MOD_MSG "lchown\n");
   __set_errno(ENOSYS);
   return -1;
 }
@@ -1151,11 +1179,12 @@ int new_rename(const char *oldpath, const char *newpath)
 {
   region_t r = region_make();
   seqf_t reply;
+  log_msg(MOD_MSG "rename\n");
   if(!oldpath || !newpath) {
     __set_errno(EINVAL);
     goto error;
   }
-  if(req_and_reply(r, cat4(r, mk_string(r, "Renm"),
+  if(req_and_reply(r, cat4(r, mk_int(r, METHOD_FSOP_RENAME),
 			   mk_int(r, strlen(newpath)),
 			   mk_string(r, newpath),
 			   mk_string(r, oldpath)), &reply) < 0) goto error;
@@ -1169,20 +1198,7 @@ int new_rename(const char *oldpath, const char *newpath)
       return 0;
     }
   }
-  {
-    seqf_t msg = reply;
-    int err;
-    int ok = 1;
-    m_str(&ok, &msg, "Fail");
-    m_int(&ok, &msg, &err);
-    m_end(&ok, &msg);
-    if(ok) {
-      __set_errno(err);
-      goto error;
-    }
-  }
-
-  __set_errno(ENOSYS);
+  set_errno_from_reply(reply);
  error:
   region_free(r);
   return -1;
@@ -1193,11 +1209,12 @@ int new_link(const char *oldpath, const char *newpath)
 {
   region_t r = region_make();
   seqf_t reply;
+  log_msg(MOD_MSG "link\n");
   if(!oldpath || !newpath) {
     __set_errno(EINVAL);
     goto error;
   }
-  if(req_and_reply(r, cat4(r, mk_string(r, "Link"),
+  if(req_and_reply(r, cat4(r, mk_int(r, METHOD_FSOP_LINK),
 			   mk_int(r, strlen(newpath)),
 			   mk_string(r, newpath),
 			   mk_string(r, oldpath)), &reply) < 0) goto error;
@@ -1211,20 +1228,7 @@ int new_link(const char *oldpath, const char *newpath)
       return 0;
     }
   }
-  {
-    seqf_t msg = reply;
-    int err;
-    int ok = 1;
-    m_str(&ok, &msg, "Fail");
-    m_int(&ok, &msg, &err);
-    m_end(&ok, &msg);
-    if(ok) {
-      __set_errno(err);
-      goto error;
-    }
-  }
-
-  __set_errno(ENOSYS);
+  set_errno_from_reply(reply);
  error:
   region_free(r);
   return -1;
@@ -1235,11 +1239,12 @@ int new_symlink(const char *oldpath, const char *newpath)
 {
   region_t r = region_make();
   seqf_t reply;
+  log_msg(MOD_MSG "symlink\n");
   if(!oldpath || !newpath) {
     __set_errno(EINVAL);
     goto error;
   }
-  if(req_and_reply(r, cat4(r, mk_string(r, "Syml"),
+  if(req_and_reply(r, cat4(r, mk_int(r, METHOD_FSOP_SYMLINK),
 			   mk_int(r, strlen(newpath)),
 			   mk_string(r, newpath),
 			   mk_string(r, oldpath)), &reply) < 0) goto error;
@@ -1253,20 +1258,7 @@ int new_symlink(const char *oldpath, const char *newpath)
       return 0;
     }
   }
-  {
-    seqf_t msg = reply;
-    int err;
-    int ok = 1;
-    m_str(&ok, &msg, "Fail");
-    m_int(&ok, &msg, &err);
-    m_end(&ok, &msg);
-    if(ok) {
-      __set_errno(err);
-      goto error;
-    }
-  }
-
-  __set_errno(ENOSYS);
+  set_errno_from_reply(reply);
  error:
   region_free(r);
   return -1;
@@ -1277,11 +1269,12 @@ int new_mkdir(const char *pathname, unsigned int mode)
 {
   region_t r = region_make();
   seqf_t reply;
+  log_msg(MOD_MSG "mkdir\n");
   if(!pathname) {
     __set_errno(EINVAL);
     goto error;
   }
-  if(req_and_reply(r, cat3(r, mk_string(r, "Mkdr"),
+  if(req_and_reply(r, cat3(r, mk_int(r, METHOD_FSOP_MKDIR),
 			   mk_int(r, mode),
 			   mk_string(r, pathname)), &reply) < 0) goto error;
   {
@@ -1294,20 +1287,7 @@ int new_mkdir(const char *pathname, unsigned int mode)
       return 0;
     }
   }
-  {
-    seqf_t msg = reply;
-    int err;
-    int ok = 1;
-    m_str(&ok, &msg, "Fail");
-    m_int(&ok, &msg, &err);
-    m_end(&ok, &msg);
-    if(ok) {
-      __set_errno(err);
-      goto error;
-    }
-  }
-
-  __set_errno(ENOSYS);
+  set_errno_from_reply(reply);
  error:
   region_free(r);
   return -1;
@@ -1316,6 +1296,7 @@ int new_mkdir(const char *pathname, unsigned int mode)
 /* EXPORT: new_mkfifo => mkfifo */
 int new_mkfifo(const char *pathname, unsigned int mode)
 {
+  log_msg(MOD_MSG "mkfifo\n");
   __set_errno(ENOSYS);
   return -1;
 }
@@ -1325,11 +1306,12 @@ int new_unlink(const char *pathname)
 {
   region_t r = region_make();
   seqf_t reply;
+  log_msg(MOD_MSG "unlink\n");
   if(!pathname) {
     __set_errno(EINVAL);
     goto error;
   }
-  if(req_and_reply(r, cat2(r, mk_string(r, "Unlk"),
+  if(req_and_reply(r, cat2(r, mk_int(r, METHOD_FSOP_UNLINK),
 			   mk_string(r, pathname)), &reply) < 0) goto error;
   {
     seqf_t msg = reply;
@@ -1341,20 +1323,7 @@ int new_unlink(const char *pathname)
       return 0;
     }
   }
-  {
-    seqf_t msg = reply;
-    int err;
-    int ok = 1;
-    m_str(&ok, &msg, "Fail");
-    m_int(&ok, &msg, &err);
-    m_end(&ok, &msg);
-    if(ok) {
-      __set_errno(err);
-      goto error;
-    }
-  }
-
-  __set_errno(ENOSYS);
+  set_errno_from_reply(reply);
  error:
   region_free(r);
   return -1;
@@ -1365,11 +1334,12 @@ int new_rmdir(const char *pathname)
 {
   region_t r = region_make();
   seqf_t reply;
+  log_msg(MOD_MSG "rmdir\n");
   if(!pathname) {
     __set_errno(EINVAL);
     goto error;
   }
-  if(req_and_reply(r, cat2(r, mk_string(r, "Rmdr"),
+  if(req_and_reply(r, cat2(r, mk_int(r, METHOD_FSOP_RMDIR),
 			   mk_string(r, pathname)), &reply) < 0) goto error;
   {
     seqf_t msg = reply;
@@ -1381,20 +1351,7 @@ int new_rmdir(const char *pathname)
       return 0;
     }
   }
-  {
-    seqf_t msg = reply;
-    int err;
-    int ok = 1;
-    m_str(&ok, &msg, "Fail");
-    m_int(&ok, &msg, &err);
-    m_end(&ok, &msg);
-    if(ok) {
-      __set_errno(err);
-      goto error;
-    }
-  }
-
-  __set_errno(ENOSYS);
+  set_errno_from_reply(reply);
  error:
   region_free(r);
   return -1;
@@ -1403,6 +1360,7 @@ int new_rmdir(const char *pathname)
 /* EXPORT: new_statfs => WEAK:statfs __statfs __GI_statfs __GI___statfs */
 int new_statfs(const char *path, void *buf) // struct statfs *buf
 {
+  log_msg(MOD_MSG "statfs\n");
   __set_errno(ENOSYS);
   return -1;
 }

@@ -1,4 +1,57 @@
 
+Version 1.10:
+
+New in this version is an implementation of fchdir().
+
+There are a number of programs that need fchdir(), including "rm -r",
+"install" and "mkdir -p".
+
+fchdir() sets the process's current directory given a file descriptor
+for a directory.
+
+Usually, under Plash, the open() function will return a real,
+kernel-level file descriptor for a file.  The file server passes the
+client this file descriptor across a socket.  But it's not safe to do
+this with kernel-level directory file descriptors, because if the
+client obtained one of these it could use it to break out of its
+chroot jail (using the kernel-level fchdir system call).
+
+So, for directories, the file server's open() method returns a
+dir_stack object, which is implemented by the file server rather than
+by the kernel.  Under Plash, libc's open() function returns a
+kernel-level file descriptor for the device /dev/null (a "dummy" file
+descriptor), but it stores the dir_stack object in a table maintained
+by libc.  Plash's fchdir() function in libc consults this table; it
+can only work if there is an entry for the given file descriptor
+number in the table.  Creating a "dummy" kernel-level file descriptor
+ensures that the file descriptor number stays allocated from the
+kernel's point of view, and it ensures that passing the file
+descriptor to functions such as select() or write(), which aren't
+useful for directory file descriptors, give an appropriate error
+rather than EBADF.
+
+Plash's dir_stack objects are a bit different from its directory
+objects.  Under Plash, a directory object doesn't know what its parent
+directory is -- multiple directories can contain the same object.
+This property is important because processes have their own private
+namespaces.  Plash implements the ".." component of filenames using
+dir_stacks.  A dir_stack is a list of directory objects corresponding
+to the components of a directory pathname.  For example, dir_stack for
+the pathname "/a/b" would contain the directory object for "/a/b" at
+the head, then the directory for "/a", then the root directory.  It
+also contains the names "b" and "a"; this is used to implement
+getcwd().
+
+This approach means that doing:
+  chdir("leafname")
+  chdir("..")
+has no effect (provided that the first call succeeds).  This contrasts
+with the usual Unix semantics, where the "leafname" directory could
+be moved between the two calls, giving it a different parent directory.
+This is partly why programs like "rm" use fchdir() -- to avoid this
+problem.
+
+
 Version 1.9:
 
 In this version, I have changed the implementation of how file
@@ -65,6 +118,10 @@ This change means that two things are immediately possible:
    directory, but read-write-create access to an object inside that
    directory.  (This means that the caveat mentioned in the note for
    version 1.5 no longer applies.)
+
+   For example, previously this command would not work as expected:
+     gcc -c foo.c => -o foo.o + .
+   It would fail to grant write access to foo.o.  Now it does so.
 
  * Using the "PATH=EXPR" syntax, you can add entries to or replace
    entries in directories, without changing the directory, including

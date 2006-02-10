@@ -33,7 +33,7 @@
 
 
 struct dir_stack {
-  int refcount;
+  struct filesys_obj hdr;
   struct filesys_obj *dir; /* Only those with OBJT_DIR */
   /* parent may be null if this is the root.
      In that case, name is null too. */
@@ -41,9 +41,19 @@ struct dir_stack {
   char *name;
 };
 
-void dir_stack_free(struct dir_stack *st);
-
 struct dir_stack *dir_stack_root(struct filesys_obj *dir);
+struct dir_stack *dir_stack_make(struct filesys_obj *dir,
+				 struct dir_stack *parent, char *name);
+static inline void dir_stack_free(struct dir_stack *st)
+{
+  filesys_obj_free((struct filesys_obj *) st);
+}
+static inline struct filesys_obj *dir_stack_downcast(struct dir_stack *st)
+{
+  return (void *) st;
+}
+struct dir_stack *dir_stack_upcast(struct filesys_obj *obj);
+
 seqt_t string_of_cwd(region_t r, struct dir_stack *dir);
 
 struct dir_stack *resolve_dir

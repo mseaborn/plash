@@ -60,10 +60,11 @@ int process_chdir(struct process *p, seqf_t pathname, int *err)
 }
 
 /* Returns FD, or -1 for an error.
-   Can set dummy_fd to 1 and return -1 to indicate a dummy directory FD. */
-int process_open(struct filesys_obj *root, struct dir_stack *cwd,
-		 seqf_t pathname, int flags, int mode, int *err,
-		 int *dummy_fd)
+   If this is returning a dummy FD (for directories), it will set
+   `dummy_fd' to 1, fill out `r_obj', and return -1. */
+int process_open_d(struct filesys_obj *root, struct dir_stack *cwd,
+		   seqf_t pathname, int flags, int mode, int *err,
+		   int *dummy_fd, cap_t *r_obj)
 {
   region_t r = region_make();
   void *result;
@@ -77,7 +78,7 @@ int process_open(struct filesys_obj *root, struct dir_stack *cwd,
   if(rc == RESOLVED_DIR) {
     /* Opening directories with open() is not implemented yet. */
     struct dir_stack *ds = result;
-    dir_stack_free(ds);
+    *r_obj = dir_stack_downcast(ds);
     *err = EISDIR;
 
     /* Give a warning about this */
@@ -136,6 +137,18 @@ int process_open(struct filesys_obj *root, struct dir_stack *cwd,
   else if(rc <= 0) { return -1; }
   *err = EIO;
   return -1;
+}
+
+/* Returns FD, or -1 for an error. */
+int process_open(struct filesys_obj *root, struct dir_stack *cwd,
+		 seqf_t pathname, int flags, int mode, int *err)
+{
+  int dummy_fd;
+  cap_t r_obj;
+  int fd = process_open_d(root, cwd, pathname, flags, mode, err,
+			  &dummy_fd, &r_obj);
+  if(fd < 0 && dummy_fd) filesys_obj_free(r_obj);
+  return fd;
 }
 
 /* mkdir() behaves like open() with O_EXCL: it won't follow a symbolic
@@ -418,12 +431,12 @@ int exec_for_scripts
   }
 }
 
-void handle_fs_op_message1(region_t r, struct process *proc,
-			   struct fs_op_object *obj,
-			   seqf_t msg_orig, fds_t fds_orig,
-			   seqt_t *reply, fds_t *reply_fds,
-			   cap_seq_t *r_caps,
-			   seqt_t *log_msg, seqt_t *log_reply)
+void handle_fs_op_message(region_t r, struct process *proc,
+			  struct fs_op_object *obj,
+			  seqf_t msg_orig, fds_t fds_orig, cap_seq_t cap_args,
+			  seqt_t *reply, fds_t *reply_fds,
+			  cap_seq_t *r_caps,
+			  seqt_t *log_msg, seqt_t *log_reply)
 {
   seqf_t msg = msg_orig;
   int ok = 1;
@@ -432,7 +445,6 @@ void handle_fs_op_message1(region_t r, struct process *proc,
   if(ok) switch(method_id) {
   case METHOD_FSOP_FORK: /* scheduled for removal */
   {
-    // m_str(&ok, &msg, "Fork");
     m_end(&ok, &msg);
     if(ok) {
       int socks[2];
@@ -449,8 +461,8 @@ void handle_fs_op_message1(region_t r, struct process *proc,
       set_close_on_exec_flag(socks[0], 1);
       set_close_on_exec_flag(socks[1], 1);
       obj->shared->refcount++;
-      proc->root->refcount++;
-      if(proc->cwd) proc->cwd->refcount++;
+      inc_ref(proc->root);
+      if(proc->cwd) proc->cwd->hdr.refcount++;
       new_server = make_fs_op_server(obj->shared, proc->root, proc->cwd);
       cap_make_connection(r, socks[1], mk_caps1(r, new_server), 0, "to-client");
       filesys_obj_free(new_server);
@@ -461,17 +473,17 @@ void handle_fs_op_message1(region_t r, struct process *proc,
 			     ((struct fs_op_object *) new_server)->id);
       return;
     }
+    break;
   }
   case METHOD_FSOP_COPY:
   {
-    // m_str(&ok, &msg, "Copy");
     m_end(&ok, &msg);
     if(ok) {
       cap_t new_server;
       *log_msg = mk_string(r, "copy fs ops object");
       obj->shared->refcount++;
-      proc->root->refcount++;
-      if(proc->cwd) proc->cwd->refcount++;
+      inc_ref(proc->root);
+      if(proc->cwd) proc->cwd->hdr.refcount++;
       new_server = make_fs_op_server(obj->shared, proc->root, proc->cwd);
       *r_caps = mk_caps1(r, new_server);
       *reply = mk_int(r, METHOD_OKAY);
@@ -479,25 +491,24 @@ void handle_fs_op_message1(region_t r, struct process *proc,
 			     ((struct fs_op_object *) new_server)->id);
       return;
     }
+    break;
   }
   case METHOD_FSOP_GET_ROOT_DIR:
   {
     /* Return a reference to the root directory */
-    // m_str(&ok, &msg, "Grtd");
     m_end(&ok, &msg);
     if(ok) {
       *log_msg = mk_string(r, "get root dir");
-      proc->root->refcount++;
-      *r_caps = mk_caps1(r, proc->root);
+      *r_caps = mk_caps1(r, inc_ref(proc->root));
       *reply = mk_int(r, METHOD_OKAY);
       *log_reply = mk_printf(r, "ok");
       return;
     }
+    break;
   }
   case METHOD_FSOP_GET_DIR:
   {
     /* Look up a pathname to a directory and return a reference to it */
-    // m_str(&ok, &msg, "Gdir");
     if(ok) {
       seqf_t pathname = msg;
       struct dir_stack *ds;
@@ -506,8 +517,7 @@ void handle_fs_op_message1(region_t r, struct process *proc,
       *log_msg = cat2(r, mk_string(r, "get dir: "), mk_leaf(r, pathname));
       ds = resolve_dir(r, proc->root, proc->cwd, pathname, SYMLINK_LIMIT, &err);
       if(ds) {
-	ds->dir->refcount++;
-	*r_caps = mk_caps1(r, ds->dir);
+	*r_caps = mk_caps1(r, inc_ref(ds->dir));
 	dir_stack_free(ds);
 	*reply = mk_int(r, METHOD_OKAY);
 	*log_reply = mk_printf(r, "ok");
@@ -519,12 +529,12 @@ void handle_fs_op_message1(region_t r, struct process *proc,
       }
       return;
     }
+    break;
   }
   case METHOD_FSOP_GET_OBJ:
   {
     /* Look up a pathname to any object and return a reference to the object */
     /* Will follow symlinks */
-    // m_str(&ok, &msg, "Gobj");
     if(ok) {
       seqf_t pathname = msg;
       int err;
@@ -545,6 +555,7 @@ void handle_fs_op_message1(region_t r, struct process *proc,
       }
       return;
     }
+    break;
   }
   case METHOD_FSOP_EXEC:
   {
@@ -552,7 +563,6 @@ void handle_fs_op_message1(region_t r, struct process *proc,
     seqf_t cmd_filename;
     int argc;
     bufref_t argv_ref;
-    // m_str(&ok, &msg, "Exec");
     m_int(&ok, &msg, &fd_number);
     m_lenblock(&ok, &msg, &cmd_filename);
     //m_int(&ok, &msg, &argc);
@@ -656,46 +666,53 @@ void handle_fs_op_message1(region_t r, struct process *proc,
       *log_reply = mk_string(r, "fail");
       return;
     }
+    break;
   }
-  }
-  handle_fs_op_message(r, proc, msg_orig, fds_orig, reply, reply_fds,
-		       log_msg, log_reply);
-}
-
-void handle_fs_op_message(region_t r, struct process *proc,
-			  seqf_t msg_orig, fds_t fds_orig,
-			  seqt_t *reply, fds_t *reply_fds,
-			  seqt_t *log_msg, seqt_t *log_reply)
-{
-  seqf_t msg = msg_orig;
-  int ok = 1;
-  int method_id;
-  m_int(&ok, &msg, &method_id);
-  if(ok) switch(method_id) {
   case METHOD_FSOP_OPEN:
   {
     int flags, mode;
-    // m_str(&ok, &msg, "Open");
     m_int(&ok, &msg, &flags);
     m_int(&ok, &msg, &mode);
     if(ok) {
       seqf_t pathname = msg;
       int fd, err = 0, dummy_fd;
+      cap_t d_obj;
 
       *log_msg =
 	cat2(r, mk_printf(r, "open: flags=0o%o, mode=0o%o, ", flags, mode),
 	     mk_leaf(r, pathname));
             
-      fd = process_open(proc->root, proc->cwd, pathname, flags, mode, &err,
-			&dummy_fd);
+      fd = process_open_d(proc->root, proc->cwd, pathname, flags, mode, &err,
+			  &dummy_fd, &d_obj);
       if(fd >= 0) {
 	*reply = mk_string(r, "ROpn");
 	*reply_fds = mk_fds1(r, fd);
 	*log_reply = mk_string(r, "ok");
       }
       else if(dummy_fd) {
+	/* Open a file descriptor to use as the dummy FD.
+	   We use /dev/null.  Check that we're getting what we expect
+	   by looking at the device type -- it's 1,3 under Linux. */
+	struct stat stat;
+	int fd = open("/dev/null", O_RDONLY);
+	if(fd < 0) goto dummy_fail;
+	if(fstat(fd, &stat) < 0 ||
+	   !S_ISCHR(stat.st_mode) ||
+	   stat.st_rdev != 0x103) {
+	  close(fd);
+	  goto dummy_fail;
+	}
+	
 	*reply = mk_string(r, "RDfd");
 	*log_reply = mk_string(r, "got dir, use dummy FD");
+	*reply_fds = mk_fds1(r, fd);
+	*r_caps = mk_caps1(r, d_obj);
+	return;
+      dummy_fail:
+	filesys_obj_free(d_obj);
+	*reply = cat2(r, mk_int(r, METHOD_FAIL),
+		      mk_int(r, EIO));
+	*log_reply = mk_string(r, "fail: can't use /dev/null as dummy");
       }
       else {
 	*reply = cat2(r, mk_int(r, METHOD_FAIL),
@@ -704,11 +721,11 @@ void handle_fs_op_message(region_t r, struct process *proc,
       }
       return;
     }
+    break;
   }
   case METHOD_FSOP_STAT:
   {
     int nofollow;
-    // m_str(&ok, &msg, "Stat");
     m_int(&ok, &msg, &nofollow);
     if(ok) {
       seqf_t pathname = msg;
@@ -753,10 +770,10 @@ void handle_fs_op_message(region_t r, struct process *proc,
       *log_reply = mk_string(r, "ok");
       return;
     }
+    break;
   }
   case METHOD_FSOP_READLINK:
   {
-    // m_str(&ok, &msg, "Rdlk");
     if(ok) {
       seqf_t pathname = msg;
       seqf_t link_dest;
@@ -775,10 +792,10 @@ void handle_fs_op_message(region_t r, struct process *proc,
       }
       return;
     }
+    break;
   }
   case METHOD_FSOP_GETCWD:
   {
-    // m_str(&ok, &msg, "Gcwd");
     m_end(&ok, &msg);
     if(ok) {
       *log_msg = mk_string(r, "getcwd");
@@ -793,10 +810,10 @@ void handle_fs_op_message(region_t r, struct process *proc,
       }
       return;
     }
+    break;
   }
   case METHOD_FSOP_DIRLIST:
   {
-    // m_str(&ok, &msg, "Dlst");
     if(ok) {
       seqf_t pathname = msg;
       int err = 0;
@@ -830,6 +847,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
       }
       return;
     }
+    break;
   }
   case METHOD_FSOP_ACCESS:
   {
@@ -844,7 +862,6 @@ void handle_fs_op_message(region_t r, struct process *proc,
     /* This implementation is incomplete.  It doesn't check permissions.
        It returns successfully simply if the object exists. */
     int mode;
-    // m_str(&ok, &msg, "Accs");
     m_int(&ok, &msg, &mode);
     if(ok) {
       seqf_t pathname = msg;
@@ -866,12 +883,12 @@ void handle_fs_op_message(region_t r, struct process *proc,
       }
       return;
     }
+    break;
   }
   case METHOD_FSOP_MKDIR:
   {
     /* mkdir() call */
     int mode;
-    // m_str(&ok, &msg, "Mkdr");
     m_int(&ok, &msg, &mode);
     if(ok) {
       seqf_t pathname = msg;
@@ -886,12 +903,12 @@ void handle_fs_op_message(region_t r, struct process *proc,
       }
       return;
     }
+    break;
   }
   case METHOD_FSOP_SYMLINK:
   {
     /* symlink() call */
     seqf_t newpath;
-    // m_str(&ok, &msg, "Syml");
     m_lenblock(&ok, &msg, &newpath);
     if(ok) {
       seqf_t oldpath = msg;
@@ -907,12 +924,12 @@ void handle_fs_op_message(region_t r, struct process *proc,
       }
       return;
     }
+    break;
   }
   case METHOD_FSOP_RENAME:
   {
     /* rename() call */
     seqf_t newpath;
-    // m_str(&ok, &msg, "Renm");
     m_lenblock(&ok, &msg, &newpath);
     if(ok) {
       seqf_t oldpath = msg;
@@ -931,12 +948,12 @@ void handle_fs_op_message(region_t r, struct process *proc,
 	return;
       }
     }
+    break;
   }
   case METHOD_FSOP_LINK:
   {
     /* link() call */
     seqf_t newpath;
-    // m_str(&ok, &msg, "Link");
     m_lenblock(&ok, &msg, &newpath);
     if(ok) {
       seqf_t oldpath = msg;
@@ -955,6 +972,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
 	return;
       }
     }
+    break;
   }
   case METHOD_FSOP_CHMOD:
   {
@@ -964,7 +982,6 @@ void handle_fs_op_message(region_t r, struct process *proc,
        not supposed to have write access to!  I have now added a chmod
        method to file and directory objects. */
     int mode;
-    // m_str(&ok, &msg, "Chmd");
     m_int(&ok, &msg, &mode);
     if(ok) {
       seqf_t pathname = msg;
@@ -979,6 +996,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
       }
       return;
     }
+    break;
   }
   case METHOD_FSOP_UTIME:
   {
@@ -986,7 +1004,6 @@ void handle_fs_op_message(region_t r, struct process *proc,
     int nofollow;
     int atime_sec, atime_usec;
     int mtime_sec, mtime_usec;
-    // m_str(&ok, &msg, "Utim");
     m_int(&ok, &msg, &nofollow);
     m_int(&ok, &msg, &atime_sec);
     m_int(&ok, &msg, &atime_usec);
@@ -1010,11 +1027,11 @@ void handle_fs_op_message(region_t r, struct process *proc,
       }
       return;
     }
+    break;
   }
   case METHOD_FSOP_UNLINK:
   {
     /* unlink() call */
-    // m_str(&ok, &msg, "Unlk");
     if(ok) {
       seqf_t pathname = msg;
       int err;
@@ -1030,11 +1047,11 @@ void handle_fs_op_message(region_t r, struct process *proc,
       }
       return;
     }
+    break;
   }
   case METHOD_FSOP_RMDIR:
   {
     /* rmdir() call */
-    // m_str(&ok, &msg, "Rmdr");
     if(ok) {
       seqf_t pathname = msg;
       int err;
@@ -1050,13 +1067,13 @@ void handle_fs_op_message(region_t r, struct process *proc,
       }
       return;
     }
+    break;
   }
   case METHOD_FSOP_CONNECT:
   {
     /* connect() for Unix domain sockets */
     fds_t fds = fds_orig;
     int sock_fd;
-    // m_str(&ok, &msg, "Fcon");
     m_fd(&ok, &fds, &sock_fd);
     if(ok) {
       seqf_t pathname = msg;
@@ -1079,13 +1096,13 @@ void handle_fs_op_message(region_t r, struct process *proc,
 		    mk_int(r, err));
       return;
     }
+    break;
   }
   case METHOD_FSOP_BIND:
   {
     /* bind() for Unix domain sockets */
     fds_t fds = fds_orig;
     int sock_fd;
-    // m_str(&ok, &msg, "Fbnd");
     m_fd(&ok, &fds, &sock_fd);
     if(ok) {
       seqf_t pathname = msg;
@@ -1109,10 +1126,10 @@ void handle_fs_op_message(region_t r, struct process *proc,
 		    mk_int(r, err));
       return;
     }
+    break;
   }
   case METHOD_FSOP_CHDIR:
   {
-    // m_str(&ok, &msg, "Chdr");
     if(ok) {
       seqf_t pathname = msg;
       int err = 0;
@@ -1130,6 +1147,29 @@ void handle_fs_op_message(region_t r, struct process *proc,
       }
       return;
     }
+    break;
+  }
+  case METHOD_FSOP_FCHDIR:
+  {
+    m_end(&ok, &msg);
+    if(ok && cap_args.size == 1) {
+      struct dir_stack *n = dir_stack_upcast(cap_args.caps[0]);
+      *log_msg = mk_string(r, "fchdir");
+      if(n) {
+	if(proc->cwd) dir_stack_free(proc->cwd);
+	n->hdr.refcount++;
+	proc->cwd = n;
+	*reply = mk_int(r, METHOD_OKAY);
+	*log_reply = mk_string(r, "ok");
+      }
+      else {
+	*reply = cat2(r, mk_int(r, METHOD_FAIL),
+		      mk_int(r, ENOTDIR));
+	*log_reply = mk_string(r, "fail: not a dir_stack object");
+      }
+      return;
+    }
+    break;
   }
   }
 
@@ -1190,10 +1230,11 @@ void fs_op_call(struct filesys_obj *obj1, region_t r,
   result->data = seqt_empty;
   result->caps = caps_empty;
   result->fds = fds_empty;
+  handle_fs_op_message(r, &obj->p, obj, flatten_reuse(r, args.data),
+		       args.fds, args.caps,
+		       &result->data, &result->fds, &result->caps,
+		       &log_msg, &log_reply);
   caps_free(args.caps);
-  handle_fs_op_message1(r, &obj->p, obj, flatten_reuse(r, args.data), args.fds,
-			&result->data, &result->fds, &result->caps,
-			&log_msg, &log_reply);
   close_fds(args.fds);
   
   if(obj->shared->log && obj->shared->log_messages) {
@@ -1292,7 +1333,6 @@ int conn_maker_make_conn(struct filesys_obj *obj1, region_t r,
   return socks[0];
 }
 
-// OBJECT_VTABLE(conn_maker_vtable, conn_maker_free, conn_maker_call);
 #include "out-vtable-fs-operations.h"
 
 

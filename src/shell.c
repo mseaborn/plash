@@ -457,7 +457,7 @@ int flatten_args(region_t r, struct flatten_params *p,
       }
       else if(m_dest_file(dest, &dest_file)) {
 	seqf_t filename = flatten_charlist(r, dest_file);
-	int flags, err, dummy_fd;
+	int flags, err;
 	switch(type) {
 	  case REDIR_IN: flags = O_RDONLY; break;
 	  case REDIR_OUT_TRUNC: flags = O_WRONLY | O_CREAT | O_TRUNC; break;
@@ -466,7 +466,7 @@ int flatten_args(region_t r, struct flatten_params *p,
 	  default: assert(0); return 1;
 	}
 	fd_dest = process_open(p->root_dir, p->cwd, filename,
-			       flags, 0666, &err, &dummy_fd);
+			       flags, 0666, &err);
 	if(fd_dest < 0) {
 	  printf("plash: couldn't open `");
 	  fprint_d(stdout, filename);
@@ -717,7 +717,7 @@ void report_jobs(struct shell_state *state)
       }
     }
     job = job->next;
-  next:
+  next:;
   }
 }
 

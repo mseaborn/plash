@@ -23,7 +23,9 @@
 use IO::File;
 
 my $methods =
-  [['Okay', 'okay'],
+  [['Call', 'call'],
+
+   ['Okay', 'okay'],
    ['Fail', 'fail', Args => 'errno_val/int'],
 
    ['Fork', 'fsop_fork'], # scheduled for removal
@@ -36,6 +38,7 @@ my $methods =
    ['Stat', 'fsop_stat'],
    ['Rdlk', 'fsop_readlink'],
    ['Chdr', 'fsop_chdir'],
+   ['Fchd', 'fsop_fchdir'],
    ['Gcwd', 'fsop_getcwd'],
    ['Dlst', 'fsop_dirlist'],
    ['Accs', 'fsop_access'],

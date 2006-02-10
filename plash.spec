@@ -1,6 +1,6 @@
 Summary: Principle of Least Authority shell (Plash)
 Name: plash
-Version: 1.9
+Version: 1.10
 Release: 1
 Packager: Mark Seaborn <mseaborn@onetel.com>
 Copyright: GPL and LGPL
@@ -51,46 +51,52 @@ affected.
 
 # Could do "rm -rv %{buildroot}" at the start, but that seems really dangerous
 
-install -d %{buildroot}/usr/share/doc/plash-%{version}
-install -d %{buildroot}/usr/share/man/man1
-install -d %{buildroot}/usr/lib/plash/lib
-install -d %{buildroot}/var/lib/plash-chroot-jail/special
-install -d %{buildroot}/var/lib/plash-chroot-jail/plash-uid-locks
-install -d %{buildroot}/usr/bin
+mkdir -p %{buildroot}/usr/share/doc/plash-%{version}
+mkdir -p %{buildroot}/usr/share/man/man1
+mkdir -p %{buildroot}/usr/lib/plash/lib
+mkdir -p %{buildroot}/var/lib/plash-chroot-jail/special
+mkdir -p %{buildroot}/var/lib/plash-chroot-jail/plash-uid-locks
+mkdir -p %{buildroot}/usr/bin
 
 # Install docs
-cp -pv plash/COPYRIGHT     %{buildroot}/usr/share/doc/plash-%{version}/
-cp -pv plash/README        %{buildroot}/usr/share/doc/plash-%{version}/
-cp -pv plash/NOTES         %{buildroot}/usr/share/doc/plash-%{version}/
-cp -pv plash/NOTES.exec    %{buildroot}/usr/share/doc/plash-%{version}/
-cp -pv plash/BUGS          %{buildroot}/usr/share/doc/plash-%{version}/
-cp -pv plash/protocols.txt %{buildroot}/usr/share/doc/plash-%{version}/
-cp -pv plash/debian/changelog %{buildroot}/usr/share/doc/plash-%{version}/
+cp -v plash/COPYRIGHT     %{buildroot}/usr/share/doc/plash-%{version}/
+cp -v plash/README        %{buildroot}/usr/share/doc/plash-%{version}/
+cp -v plash/NOTES         %{buildroot}/usr/share/doc/plash-%{version}/
+cp -v plash/NOTES.exec    %{buildroot}/usr/share/doc/plash-%{version}/
+cp -v plash/BUGS          %{buildroot}/usr/share/doc/plash-%{version}/
+cp -v plash/protocols.txt %{buildroot}/usr/share/doc/plash-%{version}/
+cp -v plash/debian/changelog %{buildroot}/usr/share/doc/plash-%{version}/
 
 # Install man pages
-cp -pv plash/docs/plash.1        %{buildroot}/usr/share/man/man1/
-cp -pv plash/docs/exec-object.1  %{buildroot}/usr/share/man/man1/
-cp -pv plash/docs/plash-opts.1   %{buildroot}/usr/share/man/man1/
-cp -pv plash/docs/plash-chroot.1 %{buildroot}/usr/share/man/man1/
+cp -v plash/docs/plash.1        %{buildroot}/usr/share/man/man1/
+cp -v plash/docs/exec-object.1  %{buildroot}/usr/share/man/man1/
+cp -v plash/docs/plash-opts.1   %{buildroot}/usr/share/man/man1/
+cp -v plash/docs/plash-chroot.1 %{buildroot}/usr/share/man/man1/
 gzip -9 %{buildroot}/usr/share/man/man1/*.1
 ( cd %{buildroot}/usr/share/man/man1 && ln -s plash-opts.1.gz plash-opts-gtk.1.gz )
 
 # Install libraries
-cp -pv plash/out-stripped/* %{buildroot}/usr/lib/plash/lib/
-cp -pv plash/out-stripped-2/ld.so %{buildroot}/var/lib/plash-chroot-jail/special/ld-linux.so.2
+( cd plash && ./src/install.pl --dest-dir %{buildroot}/usr/lib/plash/lib/ )
+strip --remove-section=.comment --remove-section=.note plash/shobj/ld.so -o %{buildroot}/var/lib/plash-chroot-jail/special/ld-linux.so.2
 chmod +x %{buildroot}/var/lib/plash-chroot-jail/special/ld-linux.so.2
 
 # Install executables
-cp -pv plash/bin/plash           %{buildroot}/usr/bin/
-cp -pv plash/bin/plash-chroot    %{buildroot}/usr/bin/
-cp -pv plash/bin/plash-opts      %{buildroot}/usr/bin/
-cp -pv plash/bin/plash-opts-gtk  %{buildroot}/usr/bin/
-cp -pv plash/bin/exec-object     %{buildroot}/usr/bin/
+STRIP_ARGS="--remove-section=.comment --remove-section=.note"
+# cp -v plash/bin/plash           %{buildroot}/usr/bin/
+# cp -v plash/bin/plash-chroot    %{buildroot}/usr/bin/
+# cp -v plash/bin/plash-opts      %{buildroot}/usr/bin/
+# cp -v plash/bin/plash-opts-gtk  %{buildroot}/usr/bin/
+# cp -v plash/bin/exec-object     %{buildroot}/usr/bin/
+strip $STRIP_ARGS plash/bin/plash           -o %{buildroot}/usr/bin/plash
+strip $STRIP_ARGS plash/bin/plash-chroot    -o %{buildroot}/usr/bin/plash-chroot
+strip $STRIP_ARGS plash/bin/plash-opts      -o %{buildroot}/usr/bin/plash-opts
+strip $STRIP_ARGS plash/bin/plash-opts-gtk  -o %{buildroot}/usr/bin/plash-opts-gtk
+strip $STRIP_ARGS plash/bin/exec-object     -o %{buildroot}/usr/bin/exec-object
 
-# cp -pv plash/mrs/run-as-nobody %{buildroot}/usr/lib/plash/
-# cp -pv plash/mrs/run-as-nobody+chroot %{buildroot}/usr/lib/plash/
-cp -pv plash/setuid/run-as-anonymous %{buildroot}/usr/lib/plash/
-cp -pv plash/setuid/gc-uid-locks %{buildroot}/usr/lib/plash/
+# cp -v plash/mrs/run-as-nobody %{buildroot}/usr/lib/plash/
+# cp -v plash/mrs/run-as-nobody+chroot %{buildroot}/usr/lib/plash/
+cp -v plash/setuid/run-as-anonymous %{buildroot}/usr/lib/plash/
+cp -v plash/setuid/gc-uid-locks %{buildroot}/usr/lib/plash/
 
 %clean
 

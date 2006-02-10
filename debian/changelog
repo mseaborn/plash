@@ -1,3 +1,23 @@
+plash (1.10) unstable; urgency=low
+
+  * Implemented fchdir():
+     * Convert `struct dir_stack' to be a `struct filesys_obj'; ie. added a
+       dummy vtable.  Add the function dir_stack_make().
+     * For the case when open() returns a dummy FD, changed it so that the
+       fs_op object (in the server) opens /dev/null, rather than the libc
+       client requesting /dev/null.  This removes the need for the client's
+       file namespace to contain /dev/null, and it removes the risk of an
+       infinite loop if /dev/null should be mapped to a directory.
+     * libc-misc.c:  Added fchdir().  Added a file descriptor table which
+       maps file descriptor slot numbers to objects.  For directory FDs,
+       these objects will be dir_stacks.  Added close(), not previously
+       intercepted by Plash, which will now remove an entry from the
+       table as well as closing the real kernel FD.
+     * fs-operations.c:  Added fchdir() case.
+  * libc-misc.c:  Moved duplicated error handling code into one function.
+
+ -- Mark Seaborn <mseaborn@onetel.com>  Tue, 19 Jul 2005 22:46:31 +0100
+
 plash (1.9) unstable; urgency=low
 
   * Use /var/lib/plash-chroot-jail rather than /usr/lib/plash-chroot-jail.

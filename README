@@ -4,7 +4,7 @@ Plash: the Principle of Least Authority Shell
 Mark Seaborn
 mrs35@cantab.net
 
-http://www.cs.jhu.edu/~seaborn/plash/plash.html
+http://plash.beasts.org
 
 
 Introduction
@@ -219,86 +219,26 @@ The simplest way to install Plash is to install the Debian or RPM
 packages.  Installation is straightforward because these only depend
 on libreadline.
 
-See <http://www.cs.jhu.edu/~seaborn/plash/> for the packages.
+See <http://plash.beasts.org> for the packages.
 
 Although Plash includes a copy of libc, this does not replace or
 interfere with your existing installation of libc.  Plash installs it
 in a separate directory.
 
 
-Building the shell and server:
+Building:
 
-Once the source is unpacked, this can be done with:
+On Debian, you can run "debian/rules".
 
-  ./mrs/make-config-h.sh
-  ./mrs/make-variants.pl
-  ./mrs/make.sh
+Otherwise, you can do:
+	./make-glibc.sh
+	./make-dirs.sh
+	./make.sh libc
+	./make.sh shell
+	./docs/make-docs.sh
+	(cd setuid && ./make-setuid.sh)
 
-The shell can then be run as `./mrs/shell'.
-
-
-Building the modified libc (the client):
-
-This is a lot more complicated.  I would recommend using the pre-built
-libc from the binary package and just recompiling the shell and
-server.
-
-If you want to build libc, this is how to do it:
-
- * Unpack glibc 2.3.3 (this is the latest version at the time of
-   writing).  Unpack linuxthreads 2.3.3 inside it.
-
-   Using NPTL instead of linuxthreads is not supported.
-
-   Available from:
-   http://ftp.gnu.org/gnu/glibc/glibc-2.3.3.tar.bz2
-   http://ftp.gnu.org/gnu/glibc/glibc-linuxthreads-2.3.3.tar.gz
-
- * Apply my patch, glibc-2004-12-06.diff to glibc.
-
- * Put symlinks to the `mrs' directory into glibc's source and build
-   directories.
-
- * Create a build directory, eg. `glibc-2.3.3-build'
-   (glibc 2.3.3 requires a separate build directory).
-
-   Run configure:
-     ../glibc-2.3.3/configure --enable-add-ons=linuxthreads \
-	--without-tls --without-__thread
-   (you may need a different path to configure)
-
-   Then:
-     make
-
-   This should run to completion.
-   You'll probably have to reverse the patch to
-   sysdeps/unix/sysv/linux/not-cancel.h temporarily.
-
- * Edit config.make:  add mrs/sysdeps to the variable config-sysdirs
-   (at the start)
-
-   Modify sysdeps/unix/sysv/linux/not-cancel.h in order to force files
-   to be re-built (it should not be used this time, though).
-
-   Run `make' again.  This time it won't run to completion.  You can
-   stop it when it starts to build libc.so (which would fail anyway).
-
- * Run:
-   ./mrs/make-rtld.sh
-   ./mrs/make-link-def.pl
-   (cd mrs/sysdeps; ./make.sh)
-   BUILD_SERVER=no BUILD_LIBC=yes BUILD_LDSO=yes ./mrs/make.sh
-
-   This should build mrs/libc.so and mrs/ld.so.
-
-   Also run, as root:
-     (cd mrs; ./make-suid.sh)
-   (The rest doesn't need to be done as root.)
-
-   Then the files can be installed with:
-     ./mrs/install.sh
-   Edit mrs/config.sh to change the installation locations, and run
-   ./mrs/make-config-h.sh after doing this.
+You may need to set "CC=gcc-3.3".
 
 
 Filesystem semantics

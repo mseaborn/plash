@@ -35,6 +35,7 @@
 #include "shell-fds.h"
 #include "shell-wait.h"
 #include "marshal.h"
+#include "marshal-exec.h"
 
 
 DECLARE_VTABLE(exec_obj_vtable);

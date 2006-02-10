@@ -24,8 +24,7 @@
 #include "filesysobj.h"
 
 int process_open(struct filesys_obj *root, struct dir_stack *cwd,
-		 seqf_t pathname, int flags, int mode, int *err,
-		 int *dummy_fd);
+		 seqf_t pathname, int flags, int mode, int *err);
 
 int open_executable_file(struct filesys_obj *obj, seqf_t cmd_filename, int *err);
 
@@ -58,11 +57,6 @@ struct fs_op_object {
   struct server_shared *shared;
   int id;
 };
-
-void handle_fs_op_message(region_t r, struct process *proc,
-			  seqf_t msg_orig, fds_t fds_orig,
-			  seqt_t *reply, fds_t *reply_fds,
-			  seqt_t *log_msg, seqt_t *log_reply);
 
 cap_t make_fs_op_server(struct server_shared *shared,
 			struct filesys_obj *root, struct dir_stack *cwd);

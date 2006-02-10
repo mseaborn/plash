@@ -405,6 +405,14 @@ put('src/out-vtable-reconnectable-obj.h',
      }
     ]);
 
+put('src/out-vtable-resolve-filename.h',
+    [{ Name => 'dir_stack_vtable',
+       Interfaces => [],
+       Contents =>
+         [['free', 'dir_stack_method_free']]
+     }
+    ]);
+
 put('src/out-vtable-build-fs.h',
     [{ Name => 'node_vtable',
        Interfaces => [],

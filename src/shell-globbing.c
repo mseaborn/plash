@@ -185,7 +185,7 @@ void glob_resolve(region_t r,
   else if(m_start_cwd(start)) {
     if(!cwd) return; /* Error, but not reported */
     dirstack = cwd;
-    dirstack->refcount++;
+    dirstack->hdr.refcount++;
     pathname_got = mk_string(r, "");
   }
   else if(m_start_home(start, &user_name)) {
@@ -325,7 +325,7 @@ void glob_aux(region_t r,
     qsort(got_array, got_count, sizeof(char *), compare_strings);
     /* Process each matched name. */
     for(i = 0; i < got_count; i++) {
-      dirstack->refcount++;
+      dirstack->hdr.refcount++;
       glob_aux2(r, root, dirstack, got_array[i], pathname_got, rest, params);
     }
     free(got_array);
@@ -410,12 +410,7 @@ void glob_aux2(region_t r,
     
     int obj_type = obj->vtable->type(obj);
     if(obj_type == OBJT_DIR) {
-      struct dir_stack *new_d = amalloc(sizeof(struct dir_stack));
-      new_d->refcount = 1;
-      new_d->dir = obj;
-      new_d->parent = dirstack;
-      new_d->name = name1;
-      dirstack = new_d;
+      dirstack = dir_stack_make(obj, dirstack, name1);
     }
     else if(obj_type == OBJT_SYMLINK) {
       int err;

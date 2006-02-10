@@ -23,31 +23,9 @@
 #include "region.h"
 #include "filesysobj.h"
 #include "cap-protocol.h"
+#include "cap-utils.h"
 #include "plash-libc.h"
 
-
-static int parse_cap_list(seqf_t list, seqf_t *elt, seqf_t *rest)
-{
-  if(list.size > 0) {
-    int i = 0;
-    while(i < list.size) {
-      if(list.data[i] == ';') {
-	elt->data = list.data;
-	elt->size = i;
-	rest->data = list.data + i + 1;
-	rest->size = list.size - i - 1;
-	return 1;
-      }
-      i++;
-    }
-    elt->data = list.data;
-    elt->size = i;
-    rest->data = 0;
-    rest->size = 0;
-    return 1;
-  }
-  else return 0;
-}
 
 extern char **environ;
 
@@ -106,49 +84,25 @@ int main(int argc, const char *argv[])
   {
     cap_t root_dir;
     cap_t new_fs_server;
+    struct cap_args result;
 
-    cap_seq_t caps;
-    seqt_t reply;
-    cap_seq_t reply_caps;
-    fds_t reply_fds;
-
-    fs_server->vtable->cap_call(fs_server, r,
-				cat2(r, mk_string(r, "Gdir"),
-				     mk_string(r, argv[1])),
-				caps_empty, fds_empty,
-				&reply, &reply_caps, &reply_fds);
-    close_fds(reply_fds);
-    {
-      seqf_t msg = flatten_reuse(r, reply);
-      int ok = 1;
-      m_str(&ok, &msg, "Okay");
-      m_end(&ok, &msg);
-      if(ok && reply_caps.size == 1) {
-	root_dir = reply_caps.caps[0];
-      }
-      else {
-	printf("get-root failed\n");
-	return 1;
-      }
+    cap_call(fs_server, r,
+	     cap_args_make(cat2(r, mk_string(r, "Gdir"),
+				mk_string(r, argv[1])),
+			   caps_empty, fds_empty),
+	     &result);
+    if(expect_cap1(result, &root_dir) < 0) {
+      printf("get-root failed\n");
+      return 1;
     }
     
-    fs_op_maker->vtable->cap_call(fs_op_maker, r,
-				   mk_string(r, "Mkfs"),
-				   mk_caps1(r, root_dir), fds_empty,
-				   &reply, &reply_caps, &reply_fds);
-    close_fds(reply_fds);
-    {
-      seqf_t msg = flatten_reuse(r, reply);
-      int ok = 1;
-      m_str(&ok, &msg, "Okay");
-      m_end(&ok, &msg);
-      if(ok && reply_caps.size == 1) {
-	new_fs_server = reply_caps.caps[0];
-      }
-      else {
-	printf("mkfs failed\n");
-	return 1;
-      }
+    cap_call(fs_op_maker, r,
+	     cap_args_make(mk_string(r, "Mkfs"),
+			   mk_caps1(r, root_dir), fds_empty),
+	     &result);
+    if(expect_cap1(result, &new_fs_server) < 0) {
+      printf("mkfs failed\n");
+      return 1;
     }
 
     {
@@ -157,28 +111,22 @@ int main(int argc, const char *argv[])
       a[0] = new_fs_server;
       a[1] = conn_maker;
       a[2] = fs_op_maker;
-      caps.caps = a;
-      caps.size = count;
+      cap_call(conn_maker, r,
+	       cap_args_make(cat2(r, mk_string(r, "Mkco"), mk_int(r, 0)),
+			     cap_seq_make(a, count),
+			     fds_empty),
+	       &result);
     }
-    conn_maker->vtable->cap_call(conn_maker, r,
-				 cat2(r, mk_string(r, "Mkco"), mk_int(r, 0)),
-				 caps, fds_empty,
-				 &reply, &reply_caps, &reply_fds);
     {
-      seqf_t msg = flatten_reuse(r, reply);
-      int ok = 1;
-      m_str(&ok, &msg, "Okay");
-      m_end(&ok, &msg);
-      if(ok && reply_fds.count == 1) {
-	char buf[20];
-	snprintf(buf, sizeof(buf), "%i", reply_fds.fds[0]);
-	setenv("PLASH_COMM_FD", buf, 1);
-	setenv("PLASH_CAPS", "fs_op;conn_maker;fs_op_maker", 1);
-      }
-      else {
+      int fd;
+      char buf[20];
+      if(expect_fd1(result, &fd) < 0) {
 	printf("mkco failed\n");
 	return 1;
       }
+      snprintf(buf, sizeof(buf), "%i", fd);
+      setenv("PLASH_COMM_FD", buf, 1);
+      setenv("PLASH_CAPS", "fs_op;conn_maker;fs_op_maker", 1);
     }
   }
   region_free(r);

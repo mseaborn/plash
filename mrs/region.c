@@ -188,6 +188,11 @@ static char *flatten_aux(char *data, struct seq_tree_node *node)
   }
 }
 
+void flatten_into(char *out, seqt_t seq)
+{
+  flatten_aux(out, seq.t);
+}
+
 seqf_t flatten(region_t r, seqt_t seq)
 {
   seqf_t flat;

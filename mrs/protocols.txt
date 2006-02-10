@@ -416,13 +416,54 @@ Same as <<"Gdir" "/">>.
 // The client receives an FD; it must copy it into that slot using "dup2".
 // This will be extended so that the server can also carry out the work of
 // the new process.
+// The RExo result returns an executable object which the client must invoke
+// with full arguments, including the root directory.
 "Exec" fd-number/int cmd-len/int cmd argc/int (arg-len/int arg)*
 =>
 "RExe" cmd-len/int cmd argc/int (arg-len/int arg)* + FD
+"RExo" + CAP
 "Fail" errno/int
+
+
+Executable objects accept the following methods:
+
+// Test whether this is an executable object.
+// Executables that are just files will not respond to this.
+"Exep"
+=> "Okay"
+
+"Exeo" ref/int data
+=> "Okay" return_code/int
+The data is an array of pairs:
+ * ("Argv", x):  x is an array of strings representing argv
+ * ("Env.", x):  x is an array of strings representing the environment
+   (usually each string is of the form "X=y")
+ * ("Fds.", x):  x is an array of (i, FD)
+ * ("Root", obj):  obj is the root directory
+ * ("Cwd.", string):  pathname of current working directory
+   (this can be omitted, in which case process will have no defined cwd)
+The invocation returns when the process started has exited.  It returns
+the exit code that `wait' returns for the process.
 
 
 where:
 
 stat = dev ino mode nlink uid gid rdev size blksize blocks atime mtime ctime
        (all ints)
+
+
+Filesystem objects
+==================
+
+Only the following is marshalled so far:
+
+// type
+"Otyp"
+=>
+"Okay" type/int
+
+// stat
+"Osta"
+=>
+"Okay" stat
+"Fail" errno/int

@@ -238,6 +238,7 @@ seqt_t mk_printf(region_t r, const char *fmt, ...);
 seqf_t flatten(region_t r, seqt_t seq);
 seqf_t flatten0(region_t r, seqt_t seq); /* Null-terminates data */
 seqf_t flatten_reuse(region_t r, seqt_t seq); /* This will re-use the existing copy if it's already flat */
+void flatten_into(char *out, seqt_t seq);
 void print_data(seqf_t b);
 void fprint_data(FILE *file, seqf_t b);
 void fprint_d(FILE *file, seqf_t b);

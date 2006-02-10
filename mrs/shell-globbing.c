@@ -260,7 +260,8 @@ void glob_aux(region_t r,
     struct str_list *got;
     int got_count;
     char **got_array;
-    
+
+    /* Copy list representing glob pattern into an array. */
     leaf = region_alloc(r, leaf_len * sizeof(int));
     for(p = leaf1, i = 0; p; p = p->next, i++) { leaf[i] = p->c; }
 

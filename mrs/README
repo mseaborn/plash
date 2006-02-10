@@ -499,9 +499,9 @@ other files:
 Future work
 ===========
 
-Implement read-only proxies for filesystem objects.
+link() and rename() are only partially implemented: they only work in
+the same-directory case.
 
-A number of filesystem operations are not implemented, such as link().
 Opening directories to give directory FDs is not implemented (to be
 done properly, this requires changing all functions that deal with
 FDs).

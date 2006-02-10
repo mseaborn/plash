@@ -23,6 +23,7 @@
 #include "comms.h"
 #include "libc-comms.h"
 #include "cap-protocol.h"
+#include "cap-utils.h"
 
 
 char *glibc_getenv(const char *name);
@@ -35,6 +36,14 @@ static int my_atoi(const char *str)
     if('0' <= *str && *str <= '9') x = x*10 + (*str - '0');
     else return -1;
   }
+  return x;
+}
+
+static char *strdup(const char *str)
+{
+  int len = strlen(str);
+  char *x = amalloc(len + 1);
+  memcpy(x, str, len + 1);
   return x;
 }
 
@@ -90,33 +99,11 @@ int req_and_reply(region_t r, seqt_t msg, seqf_t *reply)
 
 static int initialised = 0;
 int comm_sock = -1;
+char *process_caps_names = 0;
 cap_seq_t process_caps = { 0, 0 }; /* uses a malloc'd block */
 cap_t fs_server = 0;
 cap_t conn_maker = 0;
 cap_t fs_op_maker = 0; /* not used by libc itself, but needs to be passed on by fork() */
-
-static int parse_cap_list(seqf_t list, seqf_t *elt, seqf_t *rest)
-{
-  if(list.size > 0) {
-    int i = 0;
-    while(i < list.size) {
-      if(list.data[i] == ';') {
-	elt->data = list.data;
-	elt->size = i;
-	rest->data = list.data + i + 1;
-	rest->size = list.size - i - 1;
-	return 1;
-      }
-      i++;
-    }
-    elt->data = list.data;
-    elt->size = i;
-    rest->data = 0;
-    rest->size = 0;
-    return 1;
-  }
-  else return 0;
-}
 
 int plash_init()
 {
@@ -133,6 +120,7 @@ int plash_init()
 
     var = glibc_getenv("PLASH_CAPS");
     if(!var) { __set_errno(ENOSYS); return -1; }
+    process_caps_names = strdup(var);
 
     cap_list = seqf_string(var);
     list = cap_list;
@@ -156,16 +144,13 @@ int plash_init()
     while(parse_cap_list(list, &elt, &list)) {
       assert(i < count);
       if(seqf_equal(elt, seqf_string("fs_op"))) {
-	caps[i]->refcount++;
-	fs_server = caps[i];
+	fs_server = inc_ref(caps[i]);
       }
       else if(seqf_equal(elt, seqf_string("conn_maker"))) {
-	caps[i]->refcount++;
-	conn_maker = caps[i];
+	conn_maker = inc_ref(caps[i]);
       }
       else if(seqf_equal(elt, seqf_string("fs_op_maker"))) {
-	caps[i]->refcount++;
-	fs_op_maker = caps[i];
+	fs_op_maker = inc_ref(caps[i]);
       }
       i++;
     }
@@ -186,45 +171,49 @@ static void free_slot(cap_t *x) {
 /* EXPORT: plash_libc_reset_connection */
 void plash_libc_reset_connection()
 {
-  cap_close_all_connections();
+  if(initialised) {
+    cap_close_all_connections();
 
-  caps_free(process_caps);
-  free((void *) process_caps.caps);
-  process_caps = caps_empty;
+    caps_free(process_caps);
+    free((void *) process_caps.caps);
+    process_caps = caps_empty;
+    free(process_caps_names);
+    process_caps_names = 0;
 
-  free_slot(&fs_server);
-  free_slot(&conn_maker);
-  free_slot(&fs_op_maker);
+    free_slot(&fs_server);
+    free_slot(&conn_maker);
+    free_slot(&fs_op_maker);
 
-  initialised = 0;
+    initialised = 0;
+  }
 }
 
 int req_and_reply(region_t r, seqt_t msg, seqf_t *reply)
 {
-  seqt_t reply1;
-  cap_seq_t reply_caps;
-  fds_t reply_fds;
+  struct cap_args result;
   if(plash_init() < 0) return -1;
   if(!fs_server) { __set_errno(ENOSYS); return -1; }
-  fs_server->vtable->cap_call(fs_server, r, msg, caps_empty, fds_empty,
-			      &reply1, &reply_caps, &reply_fds);
-  caps_free(reply_caps);
-  close_fds(reply_fds);
-  *reply = flatten_reuse(r, reply1);
+  cap_call(fs_server, r,
+	   cap_args_make(msg, caps_empty, fds_empty),
+	   &result);
+  caps_free(result.caps);
+  close_fds(result.fds);
+  *reply = flatten_reuse(r, result.data);
   return 0;
 }
 
 int req_and_reply_with_fds2(region_t r, seqt_t msg, fds_t fds,
 			    seqf_t *reply, fds_t *reply_fds)
 {
-  seqt_t reply1;
-  cap_seq_t reply_caps;
+  struct cap_args result;
   if(plash_init() < 0) return -1;
   if(!fs_server) { __set_errno(ENOSYS); return -1; }
-  fs_server->vtable->cap_call(fs_server, r, msg, caps_empty, fds,
-			      &reply1, &reply_caps, reply_fds);
-  caps_free(reply_caps);
-  *reply = flatten_reuse(r, reply1);
+  cap_call(fs_server, r,
+	   cap_args_make(msg, caps_empty, fds),
+	   &result);
+  caps_free(result.caps);
+  *reply = flatten_reuse(r, result.data);
+  *reply_fds = result.fds;
   return 0;
 }
 
@@ -238,35 +227,23 @@ int req_and_reply_with_fds(region_t r, seqt_t msg,
 int plash_libc_duplicate_connection()
 {
   region_t r;
-  int i;
-  seqt_t reply1;
-  cap_seq_t reply_caps;
-  fds_t reply_fds;
+  int i, fd;
+  struct cap_args result;
   if(plash_init() < 0) return -1;
-  if(!conn_maker) return -1;
+  if(!conn_maker) { __set_errno(ENOSYS); return -1; }
 
   r = region_make();
   for(i = 0; i < process_caps.size; i++) process_caps.caps[i]->refcount++;
-  conn_maker->vtable->cap_call(conn_maker, r,
-			       cat2(r, mk_string(r, "Mkco"), mk_int(r, 0)),
-			       process_caps, fds_empty,
-			       &reply1, &reply_caps, &reply_fds);
-  caps_free(reply_caps);
-  {
-    seqf_t msg = flatten_reuse(r, reply1);
-    int fd;
-    int ok = 1;
-    m_str(&ok, &msg, "Okay");
-    m_end(&ok, &msg);
-    m_fd(&ok, &reply_fds, &fd);
-    if(ok) {
-      region_free(r);
-      return fd;
-    }
+  cap_call(conn_maker, r,
+	   cap_args_make(cat2(r, mk_string(r, "Mkco"), mk_int(r, 0)),
+			 process_caps, fds_empty),
+	   &result);
+  if(expect_fd1(result, &fd) < 0) {
+    region_free(r);
+    return -1;
   }
-  close_fds(reply_fds);
   region_free(r);
-  return -1;
+  return fd;
 }
 
 #endif

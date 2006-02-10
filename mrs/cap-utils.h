@@ -17,23 +17,28 @@
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
    USA.  */
 
-#ifndef build_fs_h
-#define build_fs_h
+#ifndef cap_utils_h
+#define cap_utils_h
 
 #include "filesysobj.h"
-#include "filesysslot.h"
 
-struct node;
 
-struct node *make_empty_node();
-void free_node(struct node *node);
-void print_tree(int indent, struct node *node);
-int attach_at_pathname(struct node *root_node, struct dir_stack *cwd_ds,
-		       seqf_t pathname, cap_t obj, int *err);
-int resolve_populate
-  (struct filesys_obj *root_obj, struct node *root_node,
-   struct dir_stack *cwd_ds,
-   seqf_t filename, int create, int *err);
-struct filesys_slot *build_fs(struct node *node);
+static inline void cap_call(cap_t c, region_t r,
+			    struct cap_args args, struct cap_args *result)
+{
+  c->vtable->cap_call(c, r, args, result);
+}
+
+static inline void cap_invoke(cap_t c, struct cap_args args)
+{
+  c->vtable->cap_invoke(c, args);
+}
+
+int expect_ok(struct cap_args args);
+int expect_cap1(struct cap_args args, cap_t *c);
+int expect_fd1(struct cap_args args, int *fd);
+
+int parse_cap_list(seqf_t list, seqf_t *elt, seqf_t *rest);
+
 
 #endif

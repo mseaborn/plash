@@ -46,6 +46,24 @@ struct cap_seq {
   int size;
 };
 typedef struct cap_seq cap_seq_t;
+static inline cap_seq_t cap_seq_make(const cap_t *caps, int size)
+{
+  cap_seq_t r = { caps, size };
+  return r;
+}
+
+
+struct cap_args {
+  seqt_t data;
+  cap_seq_t caps;
+  fds_t fds;
+};
+static inline struct cap_args cap_args_make
+  (seqt_t data, cap_seq_t caps, fds_t fds)
+{
+  struct cap_args r = { data, caps, fds };
+  return r;
+}
 
 
 struct filesys_obj {
@@ -58,11 +76,9 @@ struct filesys_obj {
 struct filesys_obj_vtable {
   void (*free)(struct filesys_obj *obj);
 
-  void (*cap_invoke)(struct filesys_obj *obj,
-		     seqt_t data, cap_seq_t caps, fds_t fds);
+  void (*cap_invoke)(struct filesys_obj *obj, struct cap_args args);
   void (*cap_call)(struct filesys_obj *obj, region_t r,
-		   seqt_t data, cap_seq_t caps, fds_t fds,
-		   seqt_t *r_data, cap_seq_t *r_caps, fds_t *r_fds);
+		   struct cap_args args, struct cap_args *result);
   int single_use; /* A hint to cap-protocol.c */
 
   /* Files, directories and symlinks: */
@@ -79,6 +95,7 @@ struct filesys_obj_vtable {
   
   /* Directories only: */
   struct filesys_obj *(*traverse)(struct filesys_obj *obj, const char *leaf);
+  /* `list' returns number of entries, or -1 for error */
   int (*list)(struct filesys_obj *obj, region_t r, seqt_t *result, int *err);
   int (*create_file)(struct filesys_obj *obj, const char *leaf,
 		     int flags, int mode, int *err);
@@ -134,11 +151,17 @@ void filesys_obj_free(struct filesys_obj *obj);
 struct filesys_obj *initial_dir(const char *pathname, int *err);
 
 
+void marshall_cap_call(struct filesys_obj *obj, region_t r,
+		       struct cap_args args, struct cap_args *result);
+int marshall_type(struct filesys_obj *obj);
+int marshall_stat(struct filesys_obj *obj, struct stat *buf, int *err);
+
 int objt_unknown(struct filesys_obj *obj);
 int objt_file(struct filesys_obj *obj);
 int objt_dir(struct filesys_obj *obj);
 int objt_symlink(struct filesys_obj *obj);
 
+void dummy_cap_invoke(struct filesys_obj *obj, struct cap_args args);
 int dummy_stat(struct filesys_obj *obj, struct stat *buf, int *err);
 int dummy_utimes(struct filesys_obj *obj, const struct timeval *atime,
 		 const struct timeval *mtime, int *err);
@@ -183,13 +206,24 @@ int refuse_socket_bind(struct filesys_obj *obj, const char *leaf,
 
 extern struct cap_seq caps_empty;
 
-static inline cap_seq_t mk_caps1(region_t r, cap_t cap1)
+static inline cap_seq_t mk_caps1(region_t r, cap_t cap0)
 {
   cap_seq_t caps;
   cap_t *caps_array = region_alloc(r, sizeof(cap_t));
-  caps_array[0] = cap1;
+  caps_array[0] = cap0;
   caps.caps = caps_array;
   caps.size = 1;
+  return caps;
+}
+
+static inline cap_seq_t mk_caps2(region_t r, cap_t cap0, cap_t cap1)
+{
+  cap_seq_t caps;
+  cap_t *caps_array = region_alloc(r, 2 * sizeof(cap_t));
+  caps_array[0] = cap0;
+  caps_array[1] = cap1;
+  caps.caps = caps_array;
+  caps.size = 2;
   return caps;
 }
 
@@ -197,6 +231,45 @@ static inline void caps_free(cap_seq_t c)
 {
   int i;
   for(i = 0; i < c.size; i++) filesys_obj_free(c.caps[i]);
+}
+
+
+static inline cap_t inc_ref(cap_t x)
+{
+  x->refcount++;
+  return x;
+}
+
+
+#define DECLARE_VTABLE(name) \
+extern struct filesys_obj_vtable name
+
+#define OBJECT_VTABLE(name, obj_free, obj_call) \
+struct filesys_obj_vtable name = { \
+  /* .free = */ obj_free, \
+ \
+  /* .cap_invoke = */ local_obj_invoke, \
+  /* .cap_call = */ obj_call, \
+  /* .single_use = */ 0, \
+ \
+  /* .type = */ objt_unknown, \
+  /* .stat = */ dummy_stat, \
+  /* .utimes = */ dummy_utimes, \
+  /* .chmod = */ dummy_chmod, \
+  /* .open = */ dummy_open, \
+  /* .connect = */ dummy_socket_connect, \
+  /* .traverse = */ dummy_traverse, \
+  /* .list = */ dummy_list, \
+  /* .create_file = */ dummy_create_file, \
+  /* .mkdir = */ dummy_mkdir, \
+  /* .symlink = */ dummy_symlink, \
+  /* .rename = */ dummy_rename_or_link, \
+  /* .link = */ dummy_rename_or_link, \
+  /* .unlink = */ dummy_unlink, \
+  /* .rmdir = */ dummy_rmdir, \
+  /* .socket_bind = */ dummy_socket_bind, \
+  /* .readlink = */ dummy_readlink, \
+  1 \
 }
 
 

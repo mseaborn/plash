@@ -145,6 +145,28 @@ void dirnode_stack_free(struct dirnode_stack *st)
   }
 }
 
+int attach_ro_obj(struct node *node, cap_t obj)
+{
+  int replaced = 0;
+  if(node->attach_ro_obj) {
+    filesys_obj_free(node->attach_ro_obj);
+    replaced = 1;
+  }
+  node->attach_ro_obj = obj;
+  return replaced;
+}
+
+int attach_rw_obj(struct node *node, struct filesys_slot *obj)
+{
+  int replaced = 0;
+  if(node->attach_rw_obj) {
+    filesys_slot_free(node->attach_rw_obj);
+    replaced = 1;
+  }
+  node->attach_rw_obj = obj;
+  return replaced;
+}
+
 /* Converts a dir_stack to a dirnode_stack, populating the filesystem
    tree as it goes. */
 /* Arguments `root' and `cwd' are taken as non-owning references.
@@ -167,6 +189,61 @@ struct dirnode_stack *cwd_populate(struct dirnode_stack *root,
     root->refcount++;
     return root;
   }
+}
+
+struct node *cwd_populate2(struct node *root, struct dir_stack *cwd)
+{
+  if(cwd->parent) {
+    return tree_traverse(cwd_populate2(root, cwd->parent), cwd->name);
+  }
+  else return root;
+}
+
+/* Attaches a given object at a given path in the filesystem structure. */
+/* Takes an owning reference to obj. */
+int attach_at_pathname(struct node *root_node, struct dir_stack *cwd_ds,
+		       seqf_t filename, cap_t obj, int *err)
+{
+  struct node *node;
+  int end;
+  switch(filename_parse_start(filename, &end, &filename)) {
+    case FILENAME_ROOT:
+      node = root_node;
+      break;
+    case FILENAME_CWD:
+      if(!cwd_ds) { filesys_obj_free(obj); *err = E_NO_CWD_DEFINED; return -1; }
+      node = cwd_populate2(root_node, cwd_ds);
+      break;
+    default: filesys_obj_free(obj); *err = ENOENT; return -1; /* Error: bad filename */
+  }
+
+  while(!end) {
+    seqf_t name;
+    int trailing_slash;
+    filename_parse_component(filename, &name, &end, &filename, &trailing_slash);
+    if(filename_parent(name)) {
+      /* Easier not to support "..". */
+      printf("plash: warning: \"..\" not supported in filesystem bindings\n");
+      filesys_obj_free(obj);
+      *err = ENOENT;
+      return -1;
+    }
+    else if(filename_samedir(name)) {
+      /* Do nothing */
+    }
+    else {
+      char *name1 = strdup_seqf(name);
+      node = tree_traverse(node, name1);
+      free(name1);
+    }
+    /* Doesn't check trailing_slash.  FIXME? */
+  }
+  if(attach_rw_obj(node, make_read_only_slot(obj))) {
+    printf("plash: warning: object bound to `");
+    fprint_d(stdout, filename);
+    printf("' was replaced\n");
+  }
+  return 0;
 }
 
 #define REACHED_DIR 1
@@ -332,7 +409,8 @@ int resolve_populate_aux
       dirstack->node->attach_rw_obj = make_read_only_slot(dirstack->dir);
     }
     else {
-      dirstack->node->attach_ro_obj = dirstack->dir;
+      /* FIXME: produce warning for overwriting? */
+      attach_ro_obj(dirstack->node, dirstack->dir);
     }
     dirnode_stack_free(dirstack);
     return ATTACHED_OBJ;
@@ -366,9 +444,10 @@ int resolve_populate
       cwd->refcount++;
       break;
     case FILENAME_CWD:
+      if(!cwd_ds) { *err = E_NO_CWD_DEFINED; return -1; }
       cwd = cwd_populate(root, cwd_ds);
       break;
-    default: *err = ENOENT; return 0; /* Error: bad filename */
+    default: *err = ENOENT; return -1; /* Error: bad filename */
   }
 
   {
@@ -387,7 +466,7 @@ int resolve_populate
 }
 
 
-static int next_inode = 1;
+int next_inode = 1;
 
 /* Returns an owning reference. */
 struct filesys_slot *build_fs(struct node *node)
@@ -411,7 +490,7 @@ struct filesys_slot *build_fs(struct node *node)
   }
   else {
     /* Construct directory */
-    struct s_fab_dir *dir = amalloc(sizeof(struct fab_dir));
+    struct s_fab_dir *dir = amalloc(sizeof(struct s_fab_dir));
     struct slot_list *nlist = 0;
     struct node_list *list;
     for(list = node->children; list; list = list->next) {

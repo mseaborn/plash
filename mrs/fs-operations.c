@@ -34,40 +34,12 @@
 #include "parse-filename.h"
 #include "comms.h"
 #include "config.h"
+#include "serialise.h"
 #include "cap-protocol.h"
+#include "cap-utils.h"
 #include "fs-operations.h"
-
-
-#define DECLARE_VTABLE(name) \
-extern struct filesys_obj_vtable name
-
-#define OBJECT_VTABLE(name, obj_free, obj_call) \
-struct filesys_obj_vtable name = { \
-  /* .free = */ obj_free, \
- \
-  /* .cap_invoke = */ local_obj_invoke, \
-  /* .cap_call = */ obj_call, \
-  /* .single_use = */ 0, \
- \
-  /* .type = */ objt_unknown, \
-  /* .stat = */ dummy_stat, \
-  /* .utimes = */ dummy_utimes, \
-  /* .chmod = */ dummy_chmod, \
-  /* .open = */ dummy_open, \
-  /* .connect = */ dummy_socket_connect, \
-  /* .traverse = */ dummy_traverse, \
-  /* .list = */ dummy_list, \
-  /* .create_file = */ dummy_create_file, \
-  /* .mkdir = */ dummy_mkdir, \
-  /* .symlink = */ dummy_symlink, \
-  /* .rename = */ dummy_rename_or_link, \
-  /* .link = */ dummy_rename_or_link, \
-  /* .unlink = */ dummy_unlink, \
-  /* .rmdir = */ dummy_rmdir, \
-  /* .socket_bind = */ dummy_socket_bind, \
-  /* .readlink = */ dummy_readlink, \
-  1 \
-}
+#include "filesysobj-fab.h"
+#include "filesysobj-union.h"
 
 
 int process_chdir(struct process *p, seqf_t pathname, int *err)
@@ -497,26 +469,22 @@ void handle_fs_op_message1(region_t r, struct process *proc,
       return;
     }
   }
-  handle_fs_op_message(r, proc, msg_orig, fds_orig, reply, reply_fds,
-		       log_msg, log_reply);
-}
-
-void handle_fs_op_message(region_t r, struct process *proc,
-			  seqf_t msg_orig, fds_t fds_orig,
-			  seqt_t *reply, fds_t *reply_fds,
-			  seqt_t *log_msg, seqt_t *log_reply)
-{
   {
     seqf_t msg = msg_orig;
     int ok = 1;
     int fd_number;
     seqf_t cmd_filename;
     int argc;
+    bufref_t argv_ref;
     m_str(&ok, &msg, "Exec");
     m_int(&ok, &msg, &fd_number);
     m_lenblock(&ok, &msg, &cmd_filename);
-    m_int(&ok, &msg, &argc);
-    if(ok && argc >= 1) {
+    //m_int(&ok, &msg, &argc);
+    m_int(&ok, &msg, &argv_ref);
+    if(ok
+       //&& argc >= 1
+       ) {
+      struct arg_m_buf argbuf = { msg, caps_empty, fds_empty };
       int extra_args = 5;
       int buf_size = 40;
       char *buf = region_alloc(r, buf_size);
@@ -528,7 +496,20 @@ void handle_fs_op_message(region_t r, struct process *proc,
       int fd;
 
       *log_msg = cat2(r, mk_string(r, "exec: "), mk_leaf(r, cmd_filename));
-      
+
+      /* Unpack arguments. */
+      {
+	const bufref_t *a;
+	if(argm_array(&argbuf, argv_ref, &argc, &a)) goto exec_error;
+	argv = region_alloc(r, argc * sizeof(seqf_t));
+	for(i = 0; i < argc; i++) {
+	  seqf_t arg;
+	  if(argm_str(&argbuf, a[i], &arg)) goto exec_error;
+	  argv[i] = region_strdup_seqf(r, arg);
+	}
+      }
+
+      /*
       argv = region_alloc(r, argc * sizeof(seqf_t));
       for(i = 0; i < argc; i++) {
 	seqf_t arg;
@@ -536,14 +517,43 @@ void handle_fs_op_message(region_t r, struct process *proc,
 	argv[i] = region_strdup_seqf(r, arg);
 	if(!ok) goto exec_error;
       }
+      */
       
       obj = resolve_file(r, proc->root, proc->cwd, cmd_filename,
 			 SYMLINK_LIMIT, 0 /* nofollow */, &err);
       if(!obj) goto exec_fail;
+
+      /* Is this an executable object?  If so, we return the object for
+	 the client to invoke itself. */
+      {
+	struct cap_args result;
+	cap_call(obj, r,
+		 cap_args_make(mk_string(r, "Exep"), caps_empty, fds_empty),
+		 &result);
+	if(expect_ok(result) >= 0) {
+	  *reply = mk_string(r, "RExo");
+	  *r_caps = mk_caps1(r, obj);
+	  *log_reply = mk_string(r, "ok: executable object");
+	  return;
+	}
+      }
+
+      /* If this is a setuid executable, warn that setuid is not supported. */
+      {
+	struct stat st;
+	if(obj->vtable->stat(obj, &st, &err) >= 0) {
+	  if(st.st_mode & (S_ISUID | S_ISGID)) {
+	    fprintf(stderr, "plash: warning: setuid/gid bit not honoured on `");
+	    fprint_d(stderr, cmd_filename);
+	    fprintf(stderr, "'\n");
+	  }
+	}
+      }
       fd = obj->vtable->open(obj, O_RDONLY, &err);
       filesys_obj_free(obj);
       if(fd < 0) goto exec_fail;
 
+      /* Handle "#!" scripts. */
       if(exec_for_scripts(r, proc->root, proc->cwd,
 			  region_strdup_seqf(r, cmd_filename), fd, argc, argv,
 			  &fd, &argc, &argv, &err) < 0) goto exec_fail;
@@ -583,6 +593,15 @@ void handle_fs_op_message(region_t r, struct process *proc,
     }
   exec_error:
   }
+  handle_fs_op_message(r, proc, msg_orig, fds_orig, reply, reply_fds,
+		       log_msg, log_reply);
+}
+
+void handle_fs_op_message(region_t r, struct process *proc,
+			  seqf_t msg_orig, fds_t fds_orig,
+			  seqt_t *reply, fds_t *reply_fds,
+			  seqt_t *log_msg, seqt_t *log_reply)
+{
   {
     seqf_t msg = msg_orig;
     int flags, mode;
@@ -1095,8 +1114,7 @@ void fs_op_free(struct filesys_obj *obj1)
 }
 
 void fs_op_call(struct filesys_obj *obj1, region_t r,
-		seqt_t data, cap_seq_t caps, fds_t fds,
-		seqt_t *r_data, cap_seq_t *r_caps, fds_t *r_fds)
+		struct cap_args args, struct cap_args *result)
 {
   struct fs_op_object *obj = (void *) obj1;
   seqt_t log_msg = mk_string(r, "?");
@@ -1104,19 +1122,22 @@ void fs_op_call(struct filesys_obj *obj1, region_t r,
   
   if(obj->shared->log && obj->shared->log_messages) {
     fprintf(obj->shared->log, "\nmessage from process %i\n", obj->id);
-    fprint_data(obj->shared->log, flatten_reuse(r, data));
+    fprint_data(obj->shared->log, flatten_reuse(r, args.data));
   }
-  *r_data = seqt_empty;
-  *r_fds = fds_empty;
-  *r_caps = caps_empty;
-  caps_free(caps);
-  handle_fs_op_message1(r, &obj->p, obj, flatten_reuse(r, data), fds,
-			r_data, r_fds, r_caps, &log_msg, &log_reply);
-  close_fds(fds);
+
+  result->data = seqt_empty;
+  result->caps = caps_empty;
+  result->fds = fds_empty;
+  caps_free(args.caps);
+  handle_fs_op_message1(r, &obj->p, obj, flatten_reuse(r, args.data), args.fds,
+			&result->data, &result->fds, &result->caps,
+			&log_msg, &log_reply);
+  close_fds(args.fds);
   
   if(obj->shared->log && obj->shared->log_messages) {
-    fprintf(obj->shared->log, "reply with %i FDs and this data:\n", r_fds->count);
-    fprint_data(obj->shared->log, flatten(r, *r_data));
+    fprintf(obj->shared->log, "reply with %i FDs and this data:\n",
+	    result->fds.count);
+    fprint_data(obj->shared->log, flatten(r, result->data));
   }
   if(obj->shared->log && obj->shared->log_summary) {
     fprintf(obj->shared->log, "#%i: ", obj->id);
@@ -1152,26 +1173,25 @@ void fs_op_maker_free(struct filesys_obj *obj1)
 }
 
 void fs_op_maker_call(struct filesys_obj *obj1, region_t r,
-		      seqt_t data1, cap_seq_t caps, fds_t fds,
-		      seqt_t *r_data, cap_seq_t *r_caps, fds_t *r_fds)
+		      struct cap_args args, struct cap_args *result)
 {
   struct fs_op_maker *obj = (void *) obj1;
-  seqf_t data = flatten_reuse(r, data1);
+  seqf_t data = flatten_reuse(r, args.data);
   int ok = 1;
   m_str(&ok, &data, "Mkfs");
   m_end(&ok, &data);
-  if(ok && caps.size == 1 && fds.count == 0) {
-    *r_data = mk_string(r, "Okay");
+  if(ok && args.caps.size == 1 && args.fds.count == 0) {
+    result->data = mk_string(r, "Okay");
     obj->shared->refcount++;
-    *r_caps = mk_caps1(r, make_fs_op_server(obj->shared, caps.caps[0], 0 /* cwd */));
-    *r_fds = fds_empty;
+    result->caps = mk_caps1(r, make_fs_op_server(obj->shared, args.caps.caps[0], 0 /* cwd */));
+    result->fds = fds_empty;
   }
   else {
-    caps_free(caps);
-    close_fds(fds);
-    *r_data = mk_string(r, "RMsg");
-    *r_caps = caps_empty;
-    *r_fds = fds_empty;
+    caps_free(args.caps);
+    close_fds(args.fds);
+    result->data = mk_string(r, "RMsg");
+    result->caps = caps_empty;
+    result->fds = fds_empty;
   }
 }
 
@@ -1196,41 +1216,155 @@ void conn_maker_free(struct filesys_obj *obj)
 }
 
 void conn_maker_call(struct filesys_obj *obj1, region_t r,
-		     seqt_t data1, cap_seq_t caps, fds_t fds,
-		     seqt_t *r_data, cap_seq_t *r_caps, fds_t *r_fds)
+		     struct cap_args args, struct cap_args *result)
 {
-  seqf_t data = flatten_reuse(r, data1);
+  seqf_t data = flatten_reuse(r, args.data);
   int ok = 1;
   int import_count;
   m_str(&ok, &data, "Mkco");
   m_int(&ok, &data, &import_count);
   m_end(&ok, &data);
-  if(ok) {
+  if(ok && args.fds.count == 0) {
     cap_t *import;
     int socks[2];
     if(socketpair(AF_LOCAL, SOCK_STREAM, 0, socks) < 0) {
-      caps_free(caps);
-      close_fds(fds);
-      *r_data = cat2(r, mk_string(r, "Fail"), mk_int(r, errno));
-      *r_caps = caps_empty;
-      *r_fds = fds_empty;
+      caps_free(args.caps);
+      close_fds(args.fds);
+      result->data = cat2(r, mk_string(r, "Fail"), mk_int(r, errno));
+      result->caps = caps_empty;
+      result->fds = fds_empty;
     }
     set_close_on_exec_flag(socks[0], 1);
     set_close_on_exec_flag(socks[1], 1);
-    *r_data = mk_string(r, "Okay");
-    import = cap_make_connection(r, socks[1], caps, import_count, "to-client");
-    r_caps->caps = import;
-    r_caps->size = import_count;
-    *r_fds = mk_fds1(r, socks[0]);
-    close_fds(fds);
+    result->data = mk_string(r, "Okay");
+    import = cap_make_connection(r, socks[1], args.caps, import_count,
+				 "to-client");
+    result->caps.caps = import;
+    result->caps.size = import_count;
+    result->fds = mk_fds1(r, socks[0]);
   }
   else {
-    caps_free(caps);
-    close_fds(fds);
-    *r_data = mk_string(r, "RMsg");
-    *r_caps = caps_empty;
-    *r_fds = fds_empty;
+    caps_free(args.caps);
+    close_fds(args.fds);
+    result->data = mk_string(r, "RMsg");
+    result->caps = caps_empty;
+    result->fds = fds_empty;
   }
 }
 
 OBJECT_VTABLE(conn_maker_vtable, conn_maker_free, conn_maker_call);
+
+
+void generic_free(struct filesys_obj *obj)
+{
+}
+
+
+DECLARE_VTABLE(fab_dir_maker_vtable);
+
+cap_t fab_dir_maker_make()
+{
+  struct filesys_obj *obj = amalloc(sizeof(struct filesys_obj));
+  obj->refcount = 1;
+  obj->vtable = &fab_dir_maker_vtable;
+  return obj;
+}
+
+extern int next_inode;
+
+void fab_dir_maker_call(struct filesys_obj *obj1, region_t r,
+			struct cap_args args, struct cap_args *result)
+{
+  seqf_t data = flatten_reuse(r, args.data);
+  bufref_t entries;
+  int ok = 1;
+  m_str(&ok, &data, "Mkfb");
+  m_int(&ok, &data, &entries);
+  if(ok) {
+    struct arg_m_buf argbuf = { data, args.caps, args.fds };
+    struct obj_list *list = 0;
+    int i;
+    int size;
+    const bufref_t *a;
+    argm_array(&argbuf, entries, &size, &a);
+    /* Check arguments first. */
+    for(i = 0; i < size; i++) {
+      bufref_t name_ref, obj_ref;
+      seqf_t name;
+      cap_t obj;
+      if(argm_pair(&argbuf, a[i], &name_ref, &obj_ref)) goto error;
+      if(argm_str(&argbuf, name_ref, &name)) goto error;
+      if(argm_cap(&argbuf, obj_ref, &obj)) goto error;
+    }
+    for(i = 0; i < size; i++) {
+      struct obj_list *node = amalloc(sizeof(struct obj_list));
+      bufref_t name_ref, obj_ref;
+      seqf_t name;
+      cap_t obj;
+      argm_pair(&argbuf, a[i], &name_ref, &obj_ref);
+      argm_str(&argbuf, name_ref, &name);
+      argm_cap(&argbuf, obj_ref, &obj);
+      node->name = strdup_seqf(name);
+      node->obj = inc_ref(obj);
+      node->next = list;
+      list = node;
+    }
+    {
+      struct fab_dir *dir = amalloc(sizeof(struct fab_dir));
+      dir->hdr.refcount = 1;
+      dir->hdr.vtable = &fab_dir_vtable;
+      dir->entries = list;
+      dir->inode = next_inode++;
+      result->data = mk_string(r, "Okay");
+      result->caps = mk_caps1(r, (struct filesys_obj *) dir);
+      result->fds = fds_empty;
+    }
+    return;
+  }
+ error:
+  caps_free(args.caps);
+  close_fds(args.fds);
+  result->data = mk_string(r, "RMsg");
+  result->caps = caps_empty;
+  result->fds = fds_empty;
+}
+
+OBJECT_VTABLE(fab_dir_maker_vtable, generic_free, fab_dir_maker_call);
+
+
+DECLARE_VTABLE(union_dir_maker_vtable);
+struct union_dir_maker {
+  struct filesys_obj hdr;
+};
+
+cap_t union_dir_maker_make()
+{
+  struct union_dir_maker *obj = amalloc(sizeof(struct union_dir_maker));
+  obj->hdr.refcount = 1;
+  obj->hdr.vtable = &union_dir_maker_vtable;
+  return (struct filesys_obj *) obj;
+}
+
+void union_dir_maker_call(struct filesys_obj *obj1, region_t r,
+			  struct cap_args args, struct cap_args *result)
+{
+  seqf_t data = flatten_reuse(r, args.data);
+  int ok = 1;
+  m_str(&ok, &data, "Mkud");
+  m_end(&ok, &data);
+  if(ok && args.fds.count == 0 && args.caps.size == 2) {
+    result->data = mk_string(r, "Okay");
+    result->caps = mk_caps1(r, make_union_dir(args.caps.caps[0],
+					      args.caps.caps[1]));
+    result->fds = fds_empty;
+  }
+  else {
+    caps_free(args.caps);
+    close_fds(args.fds);
+    result->data = mk_string(r, "RMsg");
+    result->caps = caps_empty;
+    result->fds = fds_empty;
+  }
+}
+
+OBJECT_VTABLE(union_dir_maker_vtable, generic_free, union_dir_maker_call);

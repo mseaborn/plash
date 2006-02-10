@@ -33,12 +33,22 @@ void cap_run_server(void);
 int cap_run_server_step(void);
 void cap_close_all_connections(void);
 
-void local_obj_invoke(struct filesys_obj *obj,
-		      seqt_t data1, cap_seq_t cap_args, fds_t fd_args);
+
+/* For cap-call-return.c: */
+
+void local_obj_invoke(struct filesys_obj *obj, struct cap_args args);
 
 void generic_obj_call(struct filesys_obj *obj, region_t r,
-		      seqt_t data, cap_seq_t cap_args, fds_t fd_args,
-		      seqt_t *r_data, cap_seq_t *r_cap_args, fds_t *r_fd_args);
+		      struct cap_args args, struct cap_args *result);
+
+struct return_state {
+  region_t r;
+  int returned;
+  /* When `returned' is set, the struct this points to is filled out: */
+  struct cap_args *result;
+};
+
+cap_t make_return_cont(struct return_state *s);
 
 
 #endif

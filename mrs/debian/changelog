@@ -1,3 +1,33 @@
+plash (1.6) unstable; urgency=low
+
+  * Added the "pathname=expr" syntax to the shell.  Added "F pathname"
+    expression syntax for resolving pathnames.  Binding a pathname uses
+    an addition to build-fs.c, attach_at_pathname().
+  * shell.c:  factored a lot of code into separate functions.
+    Added "def x = EXPR" binding command, and added a "capcmd" expression.
+    Extended `server_desc' so that the server can import capabilities
+    from one connection, and export the imported capabilities on another
+    connection.  This is used for the return continuation that cap_cmd
+    passes from the shell to the client (via the forked server).
+  * Added marshalling for the `type' and `stat' methods.
+  * Added gcc-object.c/exec-object.c.
+  * Added filesysobj-union.c:  provides recursive union directories.
+  * Change the directory `list' method to return number of entries.
+    Change `list' in filesysobj-real.c to use cbuf to return data (much
+    more space efficient).
+  * Fixed fork() so that libc's connection info is properly reinitialised.
+  * Add object version of `exec':  modified fs-operations.c and
+    libc-fork-exec.c.
+  * Add serialise.[ch].  The exec call has been partially changed to
+    use these.
+  * Change cap_invoke and cap_call so that they take (and return) values
+    in `struct cap_args', rather than taking loads of arguments.
+    Added cap-utils.c.
+  * fs-operations.c: add warning to exec call about setuid bit not being
+    honoured.
+
+ -- Mark Seaborn <mseaborn@jhu.edu>  Tue, 18 Jan 2005 13:45:18 +0000
+
 plash (1.5) unstable; urgency=low
 
   * Updated protocols.txt to cover object-capability protocol,

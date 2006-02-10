@@ -36,7 +36,7 @@ binary-arch:	checkroot
 		-d debian/tmp/usr/bin
 	cp debian/copyright debian/tmp/usr/share/doc/$(package)/
 	cp debian/changelog debian/tmp/usr/share/doc/$(package)/changelog.Debian
-	cp README protocols.txt debian/tmp/usr/share/doc/$(package)/
+	cp README NOTES protocols.txt debian/tmp/usr/share/doc/$(package)/
 	# Could use "cp -a A B" instead of "strip A -o B"
 	strip ../mrs/shell -o debian/tmp/usr/bin/plash
 	strip ../mrs/shell-nogtk -o debian/tmp/usr/bin/plash-nogtk

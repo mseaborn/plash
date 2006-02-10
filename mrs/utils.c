@@ -17,10 +17,12 @@
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
    USA.  */
 
+#include <unistd.h>
 #include <stdio.h>
 #include <stdarg.h>
 
 #include "region.h"
+#include "serialise.h"
 
 
 void print_data(seqf_t b)
@@ -67,4 +69,64 @@ seqt_t mk_printf(region_t r, const char *fmt, ...)
   x = region_alloc(r, got);
   memcpy(x, buf, got);
   return mk_leaf2(r, x, got);
+}
+
+
+void arg_print_aux(FILE *fp, int indent, argmbuf_t buf, bufref_t x)
+{
+  {
+    int i;
+    if(!argm_int(buf, x, &i)) {
+      fprintf(fp, "%i", i);
+      return;
+    }
+  }
+  {
+    seqf_t str;
+    if(!argm_str(buf, x, &str)) {
+      fputc('"', fp);
+      fprint_d(fp, str);
+      fputc('"', fp);
+      return;
+    }
+  }
+  {
+    cap_t c;
+    if(!argm_cap(buf, x, &c)) {
+      fprintf(fp, "cap");
+      return;
+    }
+  }
+  {
+    int fd;
+    if(!argm_fd(buf, x, &fd)) {
+      fprintf(fp, "FD");
+      return;
+    }
+  }
+  {
+    int size;
+    const bufref_t *arr;
+    if(!argm_array(buf, x, &size, &arr)) {
+      int i;
+      fprintf(fp, "[");
+      for(i = 0; i < size; i++) {
+	arg_print_aux(fp, indent + 1, buf, arr[i]);
+	if(i < size-1) {
+	  int j;
+	  fprintf(fp, ",\n");
+	  for(j = 0; j < indent+1; j++) fputc(' ', fp);
+	}
+      }
+      fprintf(fp, "]");
+      return;
+    }
+  }
+  fprintf(fp, "??");
+}
+
+void arg_print(FILE *fp, argmbuf_t buf, bufref_t x)
+{
+  arg_print_aux(fp, 0 /* indent */, buf, x);
+  fputc('\n', fp);
 }

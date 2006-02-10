@@ -32,6 +32,8 @@ int new_open(const char *filename, int flags, ...);
 
 extern int comm_sock;
 extern struct comm *comm;
+extern cap_seq_t process_caps;
+extern char *process_caps_names;
 extern cap_t fs_server, conn_maker, fs_op_maker;
 
 int plash_init(void);

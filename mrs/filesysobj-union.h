@@ -17,23 +17,9 @@
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
    USA.  */
 
-#ifndef build_fs_h
-#define build_fs_h
+#ifndef filesysobj_union_h
+#define filesysobj_union_h
 
-#include "filesysobj.h"
-#include "filesysslot.h"
-
-struct node;
-
-struct node *make_empty_node();
-void free_node(struct node *node);
-void print_tree(int indent, struct node *node);
-int attach_at_pathname(struct node *root_node, struct dir_stack *cwd_ds,
-		       seqf_t pathname, cap_t obj, int *err);
-int resolve_populate
-  (struct filesys_obj *root_obj, struct node *root_node,
-   struct dir_stack *cwd_ds,
-   seqf_t filename, int create, int *err);
-struct filesys_slot *build_fs(struct node *node);
+struct filesys_obj *make_union_dir(struct filesys_obj *x, struct filesys_obj *y);
 
 #endif

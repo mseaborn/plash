@@ -88,8 +88,16 @@ let fresh_name =
 type extra_arg = { decl : string; name : string }
 type options = {
   extra_args : extra_arg list;
-  inhibit_actions : bool; (* If true, don't include value-constructing action code; ie. just produce a recogniser *)
+  (* inhibit_actions:  If true, don't include value-constructing action
+     code; ie. just produce a recogniser *)
+  inhibit_actions : bool;
+  track_fail_pos : bool;
 }
+
+let add_err ~opts ~pos =
+  if opts.track_fail_pos then
+    T_stmt (Printf.sprintf "if(*err_pos < %s) *err_pos = %s;" pos pos)
+  else T_list []
 
 let rec generate ~opts ~env ~pos_in ~pos_out ~ok_val ~ok ~fail = function
   | P_fail ->
@@ -100,9 +108,11 @@ let rec generate ~opts ~env ~pos_in ~pos_out ~ok_val ~ok ~fail = function
         T_stmt (Printf.sprintf "%s = 0;" ok_val);
         T_stmt (Printf.sprintf "goto %s;" ok)]
   | P_end ->
-      T_stmt (Printf.sprintf
-                "if(%s < end) goto fail; else { %s = %s; %s = 0; goto %s; }"
-                pos_in pos_out pos_in ok_val ok)
+     T_list
+      [add_err ~opts ~pos:pos_in;
+       T_stmt (Printf.sprintf
+                 "if(%s < end) goto fail; else { %s = %s; %s = 0; goto %s; }"
+                 pos_in pos_out pos_in ok_val ok)]
   | P_seq(list, map_expr) ->
       let rec f ~env ~pos_in = function
         | (exp, bind_var)::rest ->
@@ -142,34 +152,40 @@ let rec generate ~opts ~env ~pos_in ~pos_out ~ok_val ~ok ~fail = function
         T_label label;
 	generate ~opts ~env ~pos_in ~pos_out ~ok_val ~ok ~fail exp2]
   | P_char(c) ->
-      T_stmt
-      (Printf.sprintf
-         "if(%s < end && *%s == '%s') { %s = %s + 1; %s = 0; goto %s; } \
-          else goto %s;"
-         pos_in pos_in (Char.escaped c)
-         pos_out pos_in ok_val ok
-         fail)
+     T_list
+      [add_err ~opts ~pos:pos_in;
+       T_stmt
+        (Printf.sprintf
+          "if(%s < end && *%s == '%s') { %s = %s + 1; %s = 0; goto %s; } \
+           else goto %s;"
+          pos_in pos_in (Char.escaped c)
+          pos_out pos_in ok_val ok
+          fail)]
   | P_char_any ->
-      T_stmt
-      (Printf.sprintf
-         "if(%s < end) { %s = %s + 1; %s = (void*) *%s; goto %s; } else goto %s;"
-         pos_in
-         pos_out pos_in ok_val pos_in ok
-         fail)
+     T_list
+      [add_err ~opts ~pos:pos_in;
+       T_stmt
+        (Printf.sprintf
+          "if(%s < end) { %s = %s + 1; %s = (void*) (int) *%s; goto %s; } else goto %s;"
+          pos_in
+          pos_out pos_in ok_val pos_in ok
+          fail)]
   | P_char_class(list) ->
-      T_stmt
-      (Printf.sprintf
-         "if(%s < end && (%s)) { %s = %s + 1; %s = (void*) *%s; goto %s; } else goto %s;"
-         pos_in
-         (String.concat ~sep:" || "
-           (List.map list
+     T_list
+      [add_err ~opts ~pos:pos_in;
+       T_stmt
+        (Printf.sprintf
+          "if(%s < end && (%s)) { %s = %s + 1; %s = (void*) (int) *%s; goto %s; } else goto %s;"
+          pos_in
+          (String.concat ~sep:" || "
+            (List.map list
               ~f:(fun (c1, c2) ->
                     if c1 = c2
                     then Printf.sprintf "*%s == '%s'" pos_in (Char.escaped c1)
                     else Printf.sprintf "('%s' <= *%s && *%s <= '%s')"
                            (Char.escaped c1) pos_in pos_in (Char.escaped c2))))
-         pos_out pos_in ok_val pos_in ok
-         fail)
+          pos_out pos_in ok_val pos_in ok
+          fail)]
   | P_string(s) ->
       let rec f k =
         if k < String.length s then
@@ -177,13 +193,15 @@ let rec generate ~opts ~env ~pos_in ~pos_out ~ok_val ~ok ~fail = function
 	  (f (k+1))
 	else []
       in
-      T_stmt
-      (Printf.sprintf
-         "if(%s + %i <= end && %s) { %s = %s + %i; %s = 0; goto %s; } else goto %s;"
-	 pos_in (String.length s)
-	 (String.concat ~sep:" && " (f 0))
-	 pos_out pos_in (String.length s) ok_val ok
-	 fail)
+      T_list
+       [add_err ~opts ~pos:pos_in;
+        T_stmt
+        (Printf.sprintf
+           "if(%s + %i <= end && %s) { %s = %s + %i; %s = 0; goto %s; } else goto %s;"
+	   pos_in (String.length s)
+	   (String.concat ~sep:" && " (f 0))
+	   pos_out pos_in (String.length s) ok_val ok
+	   fail)]
   | P_var(var) ->
       T_stmt
       (Printf.sprintf

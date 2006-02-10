@@ -67,6 +67,7 @@ my $defs =
        ['arg_filename', ['f char_cons']],
        ['arg_glob_filename', ['f glob_path']],
        ['arg_redirection', ['fd char_cons', 'type T int', 'd redir_dest']],
+       ['arg_fs_binding', ['filename char_cons', 'e shell_expr']],
       ]
   },
   { Name => 'command',
@@ -75,6 +76,7 @@ my $defs =
        ['chdir', ['f char_cons']],
        ['command_fg', ['job char_cons']],
        ['command_bg', ['job char_cons']],
+       ['def_binding', ['c char_cons', 'e shell_expr']],
       ]
   },
   { Name => 'pipeline',
@@ -108,6 +110,13 @@ my $defs =
     Variants =>
       [['dest_fd', ['number char_cons']],
        ['dest_file', ['path char_cons']],
+      ]
+  },
+  { Name => 'shell_expr',
+    Variants =>
+      [['expr_var', ['c char_cons']],
+       ['cap_cmd', ['c char_cons', 'a arg_list']],
+       ['expr_filename', ['filename char_cons']],
       ]
   },
 ];

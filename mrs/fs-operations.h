@@ -20,6 +20,7 @@
 #ifndef fs_operations_h
 #define fs_operations_h
 
+
 void handle_fs_op_message(region_t r, struct process *proc,
 			  seqf_t msg_orig, fds_t fds_orig,
 			  seqt_t *reply, fds_t *reply_fds,
@@ -47,5 +48,8 @@ cap_t make_fs_op_server(struct server_shared *shared,
 cap_t fs_op_maker_make(struct server_shared *shared);
 
 cap_t conn_maker_make(void);
+cap_t union_dir_maker_make(void);
+cap_t fab_dir_maker_make(void);
+
 
 #endif

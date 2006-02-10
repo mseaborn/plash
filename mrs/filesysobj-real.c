@@ -37,7 +37,9 @@
 #include <sys/time.h>
 
 #include "region.h"
+#include "serialise.h"
 #include "filesysobj.h"
+#include "cap-protocol.h"
 
 
 #define MOD_DEBUG 0
@@ -279,7 +281,8 @@ int real_dir_list(struct filesys_obj *obj, region_t r, seqt_t *result, int *err)
   DIR *dh;
   /* dietlibc's struct dirent doesn't include d_type */
   struct dirent64 *ent;
-  seqt_t got = seqt_empty;
+  cbuf_t buf = cbuf_make(r, 100);
+  int count = 0;
 
   /* Couldn't open the directory; we don't have an FD for it. */
   if(!dir->fd) { *err = EIO; return -1; }
@@ -295,20 +298,17 @@ int real_dir_list(struct filesys_obj *obj, region_t r, seqt_t *result, int *err)
        we don't want to give the inode number here. */
     if(!(ent->d_name[0] == '.' &&
 	 (!ent->d_name[1] || (ent->d_name[1] == '.' && !ent->d_name[2])))) {
-      /* FIXME: this is extremely wasteful of space: */
-      int len = strlen(ent->d_name);
-      char *str = region_alloc(r, len);
-      memcpy(str, ent->d_name, len);
-      got = cat5(r, got,
-		 mk_int(r, ent->d_ino),
-		 mk_int(r, ent->d_type),
-		 mk_int(r, len),
-		 mk_leaf2(r, str, len));
+      seqf_t name = seqf_string(ent->d_name);
+      cbuf_put_int(buf, ent->d_ino);
+      cbuf_put_int(buf, ent->d_type);
+      cbuf_put_int(buf, name.size);
+      cbuf_put_seqf(buf, name);
+      count++;
     }
   }
   closedir(dh);
-  *result = got;
-  return 0;
+  *result = seqt_of_cbuf(buf);
+  return count;
 }
 
 int real_dir_mkdir(struct filesys_obj *obj, const char *leaf, int mode, int *err)
@@ -613,8 +613,8 @@ int real_symlink_readlink(struct filesys_obj *obj, region_t r, seqf_t *result, i
 
 struct filesys_obj_vtable real_dir_vtable = {
   /* .free = */ real_dir_free,
-  /* .cap_invoke = */ 0,
-  /* .cap_call = */ 0,
+  /* .cap_invoke = */ local_obj_invoke,
+  /* .cap_call = */ marshall_cap_call,
   /* .single_use = */ 0,
   /* .type = */ objt_dir,
   /* .stat = */ real_dir_stat,
@@ -638,8 +638,8 @@ struct filesys_obj_vtable real_dir_vtable = {
 
 struct filesys_obj_vtable real_file_vtable = {
   /* .free = */ real_file_free,
-  /* .cap_invoke = */ 0,
-  /* .cap_call = */ 0,
+  /* .cap_invoke = */ local_obj_invoke,
+  /* .cap_call = */ marshall_cap_call,
   /* .single_use = */ 0,
   /* .type = */ objt_file,
   /* .stat = */ real_file_stat,
@@ -663,8 +663,8 @@ struct filesys_obj_vtable real_file_vtable = {
 
 struct filesys_obj_vtable real_symlink_vtable = {
   /* .free = */ real_symlink_free,
-  /* .cap_invoke = */ 0,
-  /* .cap_call = */ 0,
+  /* .cap_invoke = */ local_obj_invoke,
+  /* .cap_call = */ marshall_cap_call,
   /* .single_use = */ 0,
   /* .type = */ objt_symlink,
   /* .stat = */ real_symlink_stat,

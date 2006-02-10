@@ -21,6 +21,7 @@
 
 #include "region.h"
 #include "filesysobj-fab.h"
+#include "cap-protocol.h"
 
 
 struct list *assoc(struct list *list, const char *name)
@@ -145,6 +146,7 @@ int fab_dir_list(struct filesys_obj *obj, region_t r, seqt_t *result, int *err)
   struct fab_dir *dir = (void *) obj;
   struct obj_list *l;
   seqt_t got = seqt_empty;
+  int count = 0;
   for(l = dir->entries; l; l = l->next) {
     /* FIXME: wasteful of space */
     int len = strlen(l->name);
@@ -155,15 +157,16 @@ int fab_dir_list(struct filesys_obj *obj, region_t r, seqt_t *result, int *err)
 	       mk_int(r, 0), /* d_type: FIXME */
 	       mk_int(r, len),
 	       mk_leaf2(r, str, len));
+    count++;
   }
   *result = got;
-  return 0;
+  return count;
 }
 
 struct filesys_obj_vtable fab_dir_vtable = {
   /* .free = */ fab_dir_free,
-  /* .cap_invoke = */ 0,
-  /* .cap_call = */ 0,
+  /* .cap_invoke = */ local_obj_invoke,
+  /* .cap_call = */ marshall_cap_call,
   /* .single_use = */ 0,
   /* .type = */ objt_dir,
   /* .stat = */ fab_dir_stat,
@@ -220,8 +223,8 @@ int fab_symlink_readlink(struct filesys_obj *obj, region_t r, seqf_t *result, in
 
 struct filesys_obj_vtable fab_symlink_vtable = {
   /* .free = */ fab_symlink_free,
-  /* .cap_invoke = */ 0,
-  /* .cap_call = */ 0,
+  /* .cap_invoke = */ local_obj_invoke,
+  /* .cap_call = */ marshall_cap_call,
   /* .single_use = */ 0,
   /* .type = */ objt_symlink,
   /* .stat = */ fab_symlink_stat,
@@ -290,6 +293,7 @@ int s_fab_dir_list(struct filesys_obj *obj, region_t r, seqt_t *result, int *err
   struct s_fab_dir *dir = (void *) obj;
   struct slot_list *l;
   seqt_t got = seqt_empty;
+  int count = 0;
   for(l = dir->entries; l; l = l->next) {
     struct filesys_obj *obj = l->slot->vtable->get(l->slot);
     if(obj) {
@@ -304,9 +308,10 @@ int s_fab_dir_list(struct filesys_obj *obj, region_t r, seqt_t *result, int *err
 		 mk_leaf2(r, str, len));
       filesys_obj_free(obj);
     }
+    count++;
   }
   *result = got;
-  return 0;
+  return count;
 }
 
 int s_fab_dir_create_file(struct filesys_obj *obj, const char *leaf,
@@ -393,8 +398,8 @@ int s_fab_dir_socket_bind(struct filesys_obj *obj, const char *leaf,
 
 struct filesys_obj_vtable s_fab_dir_vtable = {
   /* .free = */ s_fab_dir_free,
-  /* .cap_invoke = */ 0,
-  /* .cap_call = */ 0,
+  /* .cap_invoke = */ local_obj_invoke,
+  /* .cap_call = */ marshall_cap_call,
   /* .single_use = */ 0,
   /* .type = */ objt_dir,
   /* .stat = */ s_fab_dir_stat,

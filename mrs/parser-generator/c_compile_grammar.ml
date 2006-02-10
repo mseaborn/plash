@@ -50,5 +50,8 @@ let _ =
                         [{ Gen.name=name; Gen.decl=decl }] } rest
     | [file] -> compile opts file
     | _ -> Printf.printf "Usage: %s input_file\n" prog_name
-  in f { Gen.extra_args = [];
-         Gen.inhibit_actions = false; } args
+  in f { Gen.extra_args =
+           [{ Gen.name="err_pos"; Gen.decl="const char **err_pos" }];
+         Gen.inhibit_actions = false;
+         Gen.track_fail_pos = true;
+       } args

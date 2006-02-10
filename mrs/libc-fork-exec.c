@@ -29,9 +29,12 @@
 #include <sys/un.h>
 
 #include "region.h"
+#include "serialise.h"
 #include "comms.h"
 #include "libc-comms.h"
+#include "plash-libc.h"
 #include "cap-protocol.h"
+#include "cap-utils.h"
 
 
 /* EXPORT: new_fork => WEAK:fork WEAK:__fork WEAK:vfork WEAK:__vfork __libc_fork __GI___fork __GI___vfork */
@@ -45,68 +48,49 @@ pid_t new_fork(void)
   region_t r;
 
   cap_t new_fs_server;
-  cap_seq_t caps;
-  seqt_t reply;
-  cap_seq_t reply_caps;
-  fds_t reply_fds;
-
   int fd;
+  struct cap_args result;
   
   if(plash_init() < 0) return -1;
-  if(!fs_server || !conn_maker || !fs_op_maker) { __set_errno(ENOSYS); return -1; }
+  if(!fs_server) { __set_errno(ENOSYS); return -1; }
 
   r = region_make();
-  fs_server->vtable->cap_call(fs_server, r,
-			      mk_string(r, "Copy"), caps_empty, fds_empty,
-			      &reply, &reply_caps, &reply_fds);
-  {
-    seqf_t msg = flatten_reuse(r, reply);
-    int ok = 1;
-    m_str(&ok, &msg, "Okay");
-    m_end(&ok, &msg);
-    if(ok && reply_caps.size == 1 && reply_fds.count == 0) {
-      new_fs_server = reply_caps.caps[0];
-    }
-    else {
-      caps_free(reply_caps);
-      close_fds(reply_fds);
-      region_free(r);
-      __set_errno(ENOSYS);
-      return -1;
-    }
+  cap_call(fs_server, r,
+	   cap_args_make(mk_string(r, "Copy"), caps_empty, fds_empty),
+	   &result);
+  if(expect_cap1(result, &new_fs_server) < 0) {
+    region_free(r);
+    __set_errno(ENOSYS);
+    return -1;
   }
 
   {
-    int count = 3;
-    cap_t *a = region_alloc(r, count * sizeof(cap_t));
-    a[0] = new_fs_server;
-    a[0]->refcount++;
-    a[1] = conn_maker;
-    a[1]->refcount++;
-    a[2] = fs_op_maker;
-    a[2]->refcount++;
-    caps.caps = a;
-    caps.size = count;
+    cap_t *a = region_alloc(r, process_caps.size * sizeof(cap_t));
+    seqf_t list = seqf_string(process_caps_names);
+    seqf_t elt;
+    int i = 0;
+    while(parse_cap_list(list, &elt, &list)) {
+      assert(i < process_caps.size);
+      if(seqf_equal(elt, seqf_string("fs_op"))) {
+	a[i] = inc_ref(new_fs_server);
+      }
+      else {
+	a[i] = inc_ref(process_caps.caps[i]);
+      }
+      i++;
+    }
+    assert(i == process_caps.size);
+    filesys_obj_free(new_fs_server);
+    cap_call(conn_maker, r,
+	     cap_args_make(cat2(r, mk_string(r, "Mkco"), mk_int(r, 0)),
+			   cap_seq_make(a, process_caps.size),
+			   fds_empty),
+	     &result);
   }
-  conn_maker->vtable->cap_call(conn_maker, r,
-			       cat2(r, mk_string(r, "Mkco"), mk_int(r, 0)),
-			       caps, fds_empty,
-			       &reply, &reply_caps, &reply_fds);
-  {
-    seqf_t msg = flatten_reuse(r, reply);
-    int ok = 1;
-    m_str(&ok, &msg, "Okay");
-    m_end(&ok, &msg);
-    if(ok && reply_caps.size == 0 && reply_fds.count == 1) {
-      fd = reply_fds.fds[0];
-    }
-    else {
-      caps_free(reply_caps);
-      close_fds(reply_fds);
-      region_free(r);
-      __set_errno(ENOSYS);
-      return -1;
-    }
+  if(expect_fd1(result, &fd) < 0) {
+    region_free(r);
+    __set_errno(ENOSYS);
+    return -1;
   }
 
   {
@@ -114,17 +98,16 @@ pid_t new_fork(void)
     region_free(r);
     pid = fork();
     if(pid == 0) {
-      cap_close_all_connections();
-      if(fs_server) filesys_obj_free(fs_server);
-      if(conn_maker) filesys_obj_free(conn_maker);
-      fs_server = 0;
-      conn_maker = 0;
+      plash_libc_reset_connection();
       if(dup2(fd, comm_sock) < 0) {
 	/* Fail quietly at this point. */
 	unsetenv("PLASH_COMM_FD");
       }
       close(fd);
-      setenv("PLASH_CAPS", "fs_op;conn_maker;fs_op_maker", 1);
+      /* This may not work in some cases, if a program empties
+	 out the environment */
+      /* However, it's not needed as we keep the indexes the same */
+      /* setenv("PLASH_CAPS", "fs_op;conn_maker;fs_op_maker", 1); */
       return 0;
     }
     else if(pid < 0) {
@@ -203,6 +186,159 @@ pid_t new_fork(void)
 #endif
 }
 
+static int exec_object(cap_t obj, int argc, const char **argv,
+		       const char **envp)
+{
+  region_t r = region_make();
+  argmkbuf_t argbuf = argbuf_make(r);
+  struct cap_args result;
+  bufref_t argv_arg, env_arg, root_arg, cwd_arg, fds_arg, args;
+  int got_cwd;
+
+  /* Pack main argv arguments. */
+  {
+    bufref_t *a;
+    int i;
+    argv_arg = argmk_array(argbuf, argc, &a);
+    for(i = 0; i < argc; i++) {
+      a[i] = argmk_str(argbuf, mk_string(r, argv[i]));
+    }
+  }
+
+  /* Pack the environment arguments. */
+  {
+    bufref_t *a;
+    int i, count;
+    for(count = 0; envp[count]; count++) /* nothing */;
+    env_arg = argmk_array(argbuf, count, &a);
+    for(i = 0; i < count; i++) {
+      a[i] = argmk_str(argbuf, mk_string(r, envp[i]));
+    }
+  }
+
+  /* Get the root directory object. */
+  {
+    cap_t root_dir;
+    cap_call(fs_server, r,
+	     cap_args_make(mk_string(r, "Grtd"),
+			   caps_empty, fds_empty),
+	     &result);
+    if(expect_cap1(result, &root_dir) < 0) {
+      filesys_obj_free(obj);
+      region_free(r);
+      __set_errno(ENOSYS);
+      return -1;
+    }
+    root_arg = argmk_cap(argbuf, root_dir);
+  }
+
+  /* Get current working directory. */
+  {
+    char *cwd = getcwd(0, 0);
+    if(cwd) {
+      cwd_arg = argmk_str(argbuf,
+			  mk_leaf(r, region_dup_seqf(r, seqf_string(cwd))));
+      free(cwd);
+      got_cwd = 1;
+    }
+    else got_cwd = 0;
+  }
+
+  /* Work out what file descriptors the process has.  The kernel
+     doesn't offer a way to list them (except using /proc, but we don't
+     have access to that), so we just try using dup() on each
+     low-numbered FD in turn. */
+  {
+    /* fds[i] gives the FD number that FD i has been copied to.
+       If FD i was not present, fds[i] = -1.
+       If a FD was copied to FD x, fds[x] = -2. */
+    int limit = 100;
+    bufref_t *a;
+    int i, j, got_fds = 0;
+    int *fds = region_alloc(r, limit * sizeof(int));
+    for(i = 0; i < limit; i++) fds[i] = -1;
+
+    /* Also make sure that we don't pass on the socket that's connected
+       to the server. */
+    if(0 <= comm_sock && comm_sock < limit) fds[comm_sock] = -2;
+    
+    for(i = 0; i < limit; i++) {
+      if(fds[i] == -1) {
+	int fd = dup(i);
+	if(fd < 0 && errno != EBADF) {
+	  for(i = 0; i < limit; i++) if(fds[i] >= 0) close(fds[i]);
+	  filesys_obj_free(obj);
+	  argbuf_free_refs(argbuf);
+	  region_free(r); /* must come after free_refs */
+	  return -1;
+	}
+	if(fd >= 0) {
+	  fds[i] = fd;
+	  fds[fd] = -2;
+	  got_fds++;
+	}
+      }
+    }
+    fds_arg = argmk_array(argbuf, got_fds, &a);
+    for(i = 0, j = 0; i < limit; i++) {
+      if(fds[i] >= 0) {
+	assert(j < got_fds);
+	a[j] = argmk_pair(argbuf, argmk_int(argbuf, i),
+			  argmk_fd(argbuf, fds[i]));
+	j++;
+      }
+    }
+    assert(j == got_fds);
+  }
+
+  {
+    bufref_t *a;
+    args = argmk_array(argbuf, 4 + (got_cwd ? 1:0), &a);
+    a[0] = argmk_pair(argbuf,
+		      argmk_str(argbuf, mk_string(r, "Argv")),
+		      argv_arg);
+    a[1] = argmk_pair(argbuf,
+		      argmk_str(argbuf, mk_string(r, "Env.")),
+		      env_arg);
+    a[2] = argmk_pair(argbuf,
+		      argmk_str(argbuf, mk_string(r, "Fds.")),
+		      fds_arg);
+    a[3] = argmk_pair(argbuf,
+		      argmk_str(argbuf, mk_string(r, "Root")),
+		      root_arg);
+    if(got_cwd) {
+      a[4] = argmk_pair(argbuf,
+			argmk_str(argbuf, mk_string(r, "Cwd.")),
+			cwd_arg);
+    }
+  }
+  cap_call(obj, r,
+	   cap_args_make(cat3(r, mk_string(r, "Exeo"),
+			      mk_int(r, args),
+			      argbuf_data(argbuf)),
+			 argbuf_caps(argbuf),
+			 argbuf_fds(argbuf)),
+	   &result);
+  {
+    seqf_t msg = flatten_reuse(r, result.data);
+    int rc;
+    int ok = 1;
+    m_str(&ok, &msg, "Okay");
+    m_int(&ok, &msg, &rc);
+    m_end(&ok, &msg);
+    if(ok && result.caps.size == 0 && result.fds.count == 0) {
+      /* FIXME: should notify when process is running.
+	 Then we can close all FDs here. */
+      exit(rc);
+    }
+  }
+  caps_free(result.caps);
+  close_fds(result.fds);
+  region_free(r);
+  __set_errno(EIO);
+  return -1;
+}
+
 /* EXPORT: new_execve => WEAK:execve __execve */
 /* This execs an executable using a particular dynamic linker.
    Won't work for shell scripts (using "#!") or for setuid executables. */
@@ -219,10 +355,24 @@ weak_extern (__pthread_kill_other_threads_np)
 int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
 {
   region_t r = region_make();
-  seqf_t reply;
-  fds_t fds;
+  struct cap_args result;
   int exec_fd = -1;
 
+  /* Pack the arguments. */
+  argmkbuf_t argbuf = argbuf_make(r);
+  bufref_t args;
+  int argc, i;
+  /* Count the arguments. */
+  for(argc = 0; argv[argc]; argc++) /* nothing */;
+  {
+    bufref_t *a;
+    args = argmk_array(argbuf, argc, &a);
+    for(i = 0; i < argc; i++) {
+      a[i] = argmk_str(argbuf, mk_string(r, argv[i]));
+    }
+  }
+
+  /*
   seqt_t got = seqt_empty;
   int i, argc;
   for(i = 0; argv[i]; i++) {
@@ -231,31 +381,38 @@ int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
 	       mk_string(r, argv[i]));
   }
   argc = i;
+  */
 
   /* Allocate an FD number which we will copy an FD into later. */
   /* NB. FD 0 might have been closed by the program, in which case this
      will fail. */
   exec_fd = dup(0);
   if(exec_fd < 0) goto error;
-  
-  if(req_and_reply_with_fds(r, cat6(r, mk_string(r, "Exec"),
-				    mk_int(r, exec_fd),
-				    mk_int(r, strlen(cmd_filename)),
-				    mk_string(r, cmd_filename),
-				    mk_int(r, argc),
-				    got),
-			    &reply, &fds) < 0) goto error;
+
+  if(plash_init() < 0) return -1;
+  if(!fs_server) { __set_errno(ENOSYS); return -1; }
+
+  cap_call(fs_server, r,
+	   cap_args_make(cat6(r, mk_string(r, "Exec"),
+			      mk_int(r, exec_fd),
+			      mk_int(r, strlen(cmd_filename)),
+			      mk_string(r, cmd_filename),
+			      /*mk_int(r, argc),
+				got*/
+			      mk_int(r, args),
+			      argbuf_data(argbuf)),
+			 caps_empty, fds_empty),
+	   &result);
   {
-    seqf_t msg = reply;
+    seqf_t msg = flatten_reuse(r, result.data);
     seqf_t cmd_filename2;
     int argc;
-    int exec_fd2;
     int ok = 1;
     m_str(&ok, &msg, "RExe");
     m_lenblock(&ok, &msg, &cmd_filename2);
     m_int(&ok, &msg, &argc);
-    m_fd(&ok, &fds, &exec_fd2);
-    if(ok) {
+    if(ok && result.fds.count == 1 && result.caps.size == 0) {
+      int exec_fd2 = result.fds.fds[0];
       int i;
       char **argv2 = alloca((argc + 1) * sizeof(char *));
       for(i = 0; i < argc; i++) {
@@ -274,13 +431,24 @@ int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
     }
   }
   {
-    seqf_t msg = reply;
+    seqf_t msg = flatten_reuse(r, result.data);
+    int ok = 1;
+    m_str(&ok, &msg, "RExo");
+    m_end(&ok, &msg);
+    if(ok && result.fds.count == 0 && result.caps.size == 1) {
+      cap_t exec_obj = result.caps.caps[0];
+      region_free(r);
+      return exec_object(exec_obj, argc, argv, envp);
+    }
+  }
+  {
+    seqf_t msg = flatten_reuse(r, result.data);
     int err;
     int ok = 1;
     m_str(&ok, &msg, "Fail");
     m_int(&ok, &msg, &err);
     m_end(&ok, &msg);
-    if(ok) {
+    if(ok && result.caps.size == 0 && result.fds.count == 0) {
       __set_errno(err);
       goto error;
     }

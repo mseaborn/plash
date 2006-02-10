@@ -29,14 +29,13 @@ struct hellow_obj {
 };
 
 void hellow_obj_call(struct filesys_obj *obj, region_t r,
-		     seqt_t data, cap_seq_t cap_args, fds_t fd_args,
-		     seqt_t *r_data, cap_seq_t *r_cap_args, fds_t *r_fd_args)
+		     struct cap_args args, struct cap_args *result)
 {
   printf("hellow was invoked\n");
 
-  *r_data = mk_string(r, "hellow's reply");
-  *r_cap_args = caps_empty;
-  *r_fd_args = fds_empty;
+  result->data = mk_string(r, "hellow's reply");
+  result->caps = caps_empty;
+  result->fds = fds_empty;
 }
 
 void hellow_obj_free(struct filesys_obj *obj)
@@ -86,9 +85,7 @@ int main()
   if(pid == 0) {
     region_t r = region_make();
     cap_t *caps, hello;
-    seqt_t rmsg;
-    cap_seq_t rcaps;
-    fds_t rfds;
+    struct cap_args result;
     
     close(socks[0]);
     caps = cap_make_connection(r, socks[1], caps_empty, 1, "a");
@@ -96,8 +93,9 @@ int main()
 
     printf("1: calling\n");
     hello->vtable->cap_call(hello, r,
-			    mk_string(r, "hello world"), caps_empty, fds_empty,
-			    &rmsg, &rcaps, &rfds);
+			    cap_args_make(mk_string(r, "hello world"),
+					  caps_empty, fds_empty),
+			    &result);
     printf("1: returned\n");
     exit(0);
   }

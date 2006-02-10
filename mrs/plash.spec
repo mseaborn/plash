@@ -1,6 +1,6 @@
 Summary: Principle of Least Authority Shell (Plash)
 Name: plash
-Version: 1.5
+Version: 1.6
 Release: 1
 Packager: Mark Seaborn <mseaborn@jhu.edu>
 Copyright: GPL and LGPL
@@ -36,6 +36,7 @@ install -d %{buildroot}/usr/bin
 
 cp -v glibc/mrs/COPYRIGHT %{buildroot}/usr/share/doc/plash-%{version}/
 cp -v glibc/mrs/README %{buildroot}/usr/share/doc/plash-%{version}/
+cp -v glibc/mrs/NOTES %{buildroot}/usr/share/doc/plash-%{version}/
 cp -v glibc/mrs/protocols.txt %{buildroot}/usr/share/doc/plash-%{version}/
 cp -v glibc/mrs/debian/changelog %{buildroot}/usr/share/doc/plash-%{version}/
 cp -v glibc/mrs/inst_stripped/lib/* %{buildroot}/usr/lib/plash/lib/

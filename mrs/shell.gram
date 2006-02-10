@@ -23,18 +23,20 @@ command =
   / "cd" ws {{ mk_chdir(r, char_cons(r, '~', 0)) }}
   / "fg" ws n:number ws {{ mk_command_fg(r, n) }}
   / "bg" ws n:number ws {{ mk_command_bg(r, n) }}
-  / cmd:pipeline bg_flag:(ampersand {{ 1 }} / null {{ 0 }})
-	{{ mk_command(r, cmd, bg_flag) }};
+  / "def" ![a-zA-Z0-9_] ws var:var_name equals e:expr1
+	{{ mk_def_binding(r, var, e) }}
+  / cmd:pipeline bg_flag:(ampersand {{ (void *) 1 }} / null {{ 0 }})
+	{{ mk_command(r, cmd, (int) bg_flag) }};
 
 pipeline =
     inv:invocation pipe_bar pl:pipeline {{ mk_pipeline_cons(r, inv, pl) }}
   / inv:invocation {{ mk_pipeline_inv(r, inv) }};
 
 invocation =
-  no_sec:(bang_bang {{ 1 }} / null {{ 0 }})
+  no_sec:(bang_bang {{ (void *) 1 }} / null {{ 0 }})
   cmd:pathname
   args:arglist1
-    {{ mk_invocation(r, no_sec, cmd, args) }};
+    {{ mk_invocation(r, (int) no_sec, cmd, args) }};
 
 arglist1 = a1:arglist2 arrow a2:arglist2
              {{ mk_arg_cat(r, mk_arg_read(r, a1), mk_arg_write(r, a2)) }}
@@ -55,22 +57,23 @@ arglist4 = c_open l:arglist1 c_close {{ l }}
 arg = s:option {{ mk_arg_string(r, s) }}
     / s:string_literal {{ mk_arg_string(r, s) }}
     / redirection
+    / f:pathname equals e:expr2 {{ mk_arg_fs_binding(r, f, e) }}
 #    / f:pathname {{ mk_arg_filename(r, f) }};
     / f:glob_pathname {{ mk_arg_glob_filename(r, f) }};
 
 redirection =
   fd:(n:number ws {{ n }} / null {{ 0 }})
-  type:(">>" {{ REDIR_OUT_APPEND }}
-        / ">" {{ REDIR_OUT_TRUNC }}
-        / "<>" {{ REDIR_IN_OUT }}
-        / "<" {{ REDIR_IN }}) ws
+  type:(">>" {{ (void *) REDIR_OUT_APPEND }}
+        / ">" {{ (void *) REDIR_OUT_TRUNC }}
+        / "<>" {{ (void *) REDIR_IN_OUT }}
+        / "<" {{ (void *) REDIR_IN }}) ws
   dest:('&' n:number ws {{ mk_dest_fd(r, n) }}
         / p:pathname {{ mk_dest_file(r, p) }})
-  {{ mk_arg_redirection(r, fd, type, dest) }};
+  {{ mk_arg_redirection(r, fd, (int) type, dest) }};
 
 # pathname = s:(!wschar c:char {{ (void*) c }})+ ws;
 pathname = !(![a-zA-Z0-9_/.~]) s:pathname_aux ws {{ s }};
-pathname_aux = c:(!(wschar / [&|*]) c:char {{ (void*) c }})
+pathname_aux = c:(!(wschar / [&|*={}()]) c:char {{ (void*) c }})
                rest:(pathname_aux / null {{ 0 }})
                {{ char_cons(r, (int) c, rest) }};
 
@@ -90,11 +93,11 @@ glob_pathname_aux2 = '/'+ x:glob_pathname_aux3 {{ x }}
 glob_pathname_aux3 = glob_pathname_aux1 / null
 			{{ mk_glob_path_end(r, 1 /* slash */) }};
 glob_leafname =
-	c:(!(wschar / [&|/*]) c:char {{ (void*) c }}
+	c:(!(wschar / [&|/*={}()]) c:char {{ (void*) c }}
 	   / '*' {{ (void*) GLOB_STAR }})
 	rest:(glob_leafname / null {{ 0 }})
 	{{ char_cons(r, (int) c, rest) }};
-user_name = !(wschar / [&|*/]) c:char rest:(user_name / null {{ 0 }})
+user_name = !(wschar / [&|*/={}()]) c:char rest:(user_name / null {{ 0 }})
 		{{ char_cons(r, (int) c, rest) }};
 
 
@@ -113,20 +116,35 @@ char = '\\' '\\' {{ (void*) '\\' }}
      / '\\' ' ' {{ (void*) ' ' }}
      / '\\' 'n' {{ (void*) '\n' }}
      / '\\' 't' {{ (void*) '\t' }}
-     / '\\' c:[&|*+{}] {{ (void*) c }}
+     / '\\' c:[&|*+={}()] {{ (void*) c }}
      / !('\\' .) c:. {{ (void*) c }};
 
 number = c:[0-9] rest:(number / null {{ 0 }}) {{ char_cons(r, (int) c, rest) }};
+
+var_name = c:[a-zA-Z_] rest:var_name_aux {{ char_cons(r, (int) c, rest) }};
+var_name_aux =
+    ws {{ 0 }}
+  / c:[a-zA-Z0-9_] rest:var_name_aux {{ char_cons(r, (int) c, rest) }};
+
+expr1 = "capcmd" ![a-zA-Z0-9_] ws cmd:pathname args:arglist1
+          {{ mk_cap_cmd(r, cmd, args) }}
+      / "F" ![a-zA-Z0-9_] ws f:pathname {{ mk_expr_filename(r, f) }}
+      / expr2;
+expr2 = v:var_name {{ mk_expr_var(r, v) }}
+      / b_open e:expr1 b_close {{ e }};
 
 
 # Lexical
 
 c_open = '{' ws;
 c_close = '}' ws;
+b_open = '(' ws;
+b_close = ')' ws;
 arrow = "=>" ws;
 plus = '+' ws;
 ampersand = '&' ws;
 pipe_bar = '|' ws;
 bang_bang = "!!" ws;
+equals = '=' ws;
 ws = (wschar / '#' (!'\n' .)* '\n')*;
 wschar = ' ' / '\t' / '\n';

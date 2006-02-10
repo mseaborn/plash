@@ -25,6 +25,7 @@
 #include <fcntl.h>
 
 #include "filesysobj.h"
+#include "cap-protocol.h"
 
 
 extern struct filesys_obj_vtable readonly_obj_vtable;
@@ -104,8 +105,8 @@ int readonly_readlink(struct filesys_obj *obj1, region_t r, seqf_t *result, int 
 
 struct filesys_obj_vtable readonly_obj_vtable = {
   /* .free = */ readonly_free,
-  /* .cap_invoke = */ 0,
-  /* .cap_call = */ 0,
+  /* .cap_invoke = */ local_obj_invoke,
+  /* .cap_call = */ marshall_cap_call,
   /* .single_use = */ 0,
   /* .type = */ readonly_type,
   /* .stat = */ readonly_stat,

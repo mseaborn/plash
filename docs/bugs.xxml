@@ -1,61 +1,10 @@
 
-Programs that don't work:
-
-rm -r:
-needs to open directory FDs and use fchdir() to work without being
-vulnerable to symlink races.  fchdir() isn't implemented.
-
-install:
-uses fchdir() too, it seems.
-
-gcc:
-tries 1000 times to open files in /tmp in a loop (so hangs for a while),
-then aborts (without a descriptive error)
--- really, it should test for EEXIST
-
-mkisofs:
-/usr/bin/mkisofs: Operation not permitted. Panic cannot set back efective uid.
-It does the following:
-setreuid32(0xffffffff, 0x1f6)           = -1 EPERM (Operation not permitted)
-where 0x1f6 = 502 (mrs), the UID it believes it already has
-
-make:
-setresuid32(0xffffffff, 0x1f6, 0xffffffff) = -1 EPERM (Operation not permitted)
-(but this doesn't happen with Debian, even though make is 3.79.1 on both)
-
-mailq:
-masqmail is setuid root, and it tries to close all file descriptors,
-and consequently cuts off its access to the server.
-
-emacs:
-  X-plash$ emacs
-  emacs: Memory exhausted--use M-x save-some-buffers RET
-I'm not sure why this is happening.
-Emacs doesn't like being run like this, from Bash:
-  /lib/ld-linux.so.2 /usr/bin/emacs
-This error is mentioned in:
-http://www.cs.berkeley.edu/~nks/fig/fig.ps
-
-xemacs:
-Running the shell "shell" gives:
-  sendmsg: Bad file descriptor
-  recvmsg: Bad file descriptor
-  [2622] cap-protocol: [fd 5] to-server: connection error, errno 9 (Bad file descriptor)
-  Can't exec program /bin/sh
-  Process shell exited abnormally with code 1
-It would appear that XEmacs is closing the file descriptor that Plash uses.
-
-xemacs: also relies on pseudo-terminals; do this:
-nm /usr/bin/xemacs | egrep 'getpt|grantpt|unlockpt|ptsname|openpty|forkpty'
-
-xemacs:
-Filename completion doesn't seem to work on fabricated directories,
-only real directories.  Is it relying on the object type being included
-in directory listings?
+\chapter id={bugs-and-vulns}: \title- Bugs and vulnerabilities
 
 
-Bugs in Plash:
+{\sect1 id={vulns}: \title- Security vulnerabilities
 
+\pre:
 Race condition:
 connect() on Unix domain sockets presumably follows symlinks, and
 there is no way to switch this off.  This means an adversary could
@@ -122,31 +71,18 @@ chroot() environment can't run run-as-anonymous or gc-uid-locks.
    Solution:  gc-uid-locks should have its own mutual exclusion lock
 Assumptions:  that /proc/ is a reliable, *atomic* way of reading uid/gids
 
-Re-entrancy: run_server_step() is called while waiting for a reply on
-a return continuation object.  It will handle incoming requests --
-these should be queued instead.
- * I don't think this actually causes any bugs, since there are no
-   TOCTTOU problems in the code.  (There aren't really any invariants
-   that are broken during a method call.)
-
 Running as root:  /dev/tty is a writable slot; it should be a writable
 object in a read-only slot
  * The same applies to /tmp/.X11-unix
 
+}
+
+{\sect1 id={bugs}: \title- Bugs
+\ps:
+
 No thread safety in libc
 
-No resource accountability (not really a bug)
-
 stat64() doesn't work properly
-
-Make sure that messages are encoded and decoded properly on 64-bit and
-other-endian machines.
- * Currently I assume sizeof(int) == 4.
-
-Sending on a socket is never queued.  This could lead to DoS of
-servers.  It could potentially lead to deadlocks, if both ends of a
-connection send at the same time (this doesn't happen at the moment
-because all connections are client-server and call-return).
 
 The server processes are included as part of the job with the client
 processes in the job.  The server has the same process group ID, and
@@ -154,6 +90,8 @@ the shell will wait for it.  This is convenient (for printing the exit
 status), but wrong.  If the user presses Ctrl-C, and the client
 handles SIGINT and survives, the server will still be killed, but the
 client will become mostly useless.
+
+libc's object-based execve() ignores the close-on-exec flag
 
 Shell: build-fs.c:
 If you have the command "cmd foo", and `foo' is a symlink, the symlink
@@ -164,17 +102,95 @@ This is inconsistent.
 Actually, I have realised that following the symlink is not good from
 a security point of view.
 
-libc's object-based execve() ignores the close-on-exec flag
+}
+
+{\sect1 id={problems}: \title- Might be problems in future
+\ps:
+
+Re-entrancy: run_server_step() is called while waiting for a reply on
+a return continuation object.  It will handle incoming requests --
+these should be queued instead.
+ * I don't think this actually causes any bugs, since there are no
+   TOCTTOU problems in the code.  (There aren't really any invariants
+   that are broken during a method call.)
+
+No resource accountability (not really a bug)
+
+Make sure that messages are encoded and decoded properly on 64-bit and
+other-endian machines.
+ * Currently I assume sizeof(int) == 4.
+
+Sending on a socket is never queued.  This could lead to DoS of
+servers.  It could potentially lead to deadlocks, if both ends of a
+connection send at the same time (this doesn't happen at the moment
+because all connections are client-server and call-return).
 
 There may be cases where libc calls should preserve errno but don't.
-
-
 
 Behaviour that might need changing:
 
 build-fs.c attaches copies of symlinks into processes' file
 namespaces, so the process won't see them change when they change in
-the real filesystem.  This may not be expected.
+the real filesystem.  This may not be expected.  Actually, symlinks
+are immutable and the inode would change if you replaced one.
+
+}
+
+
+{\sect1 id={compatibility}: \title- Programs that don't work under Plash
+
+\pre:
+rm -r:
+needs to open directory FDs and use fchdir() to work without being
+vulnerable to symlink races.  fchdir() isn't implemented.
+
+install:
+uses fchdir() too, it seems.
+
+gcc:
+tries 1000 times to open files in /tmp in a loop (so hangs for a while),
+then aborts (without a descriptive error)
+-- really, it should test for EEXIST
+
+mkisofs:
+/usr/bin/mkisofs: Operation not permitted. Panic cannot set back efective uid.
+It does the following:
+setreuid32(0xffffffff, 0x1f6)           = -1 EPERM (Operation not permitted)
+where 0x1f6 = 502 (mrs), the UID it believes it already has
+
+make:
+setresuid32(0xffffffff, 0x1f6, 0xffffffff) = -1 EPERM (Operation not permitted)
+(but this doesn't happen with Debian, even though make is 3.79.1 on both)
+
+mailq:
+masqmail is setuid root, and it tries to close all file descriptors,
+and consequently cuts off its access to the server.
+
+emacs:
+  X-plash$ emacs
+  emacs: Memory exhausted--use M-x save-some-buffers RET
+I'm not sure why this is happening.
+Emacs doesn't like being run like this, from Bash:
+  /lib/ld-linux.so.2 /usr/bin/emacs
+This error is mentioned in:
+http://www.cs.berkeley.edu/~nks/fig/fig.ps
+
+xemacs:
+Running the shell "shell" gives:
+  sendmsg: Bad file descriptor
+  recvmsg: Bad file descriptor
+  [2622] cap-protocol: [fd 5] to-server: connection error, errno 9 (Bad file descriptor)
+  Can't exec program /bin/sh
+  Process shell exited abnormally with code 1
+It would appear that XEmacs is closing the file descriptor that Plash uses.
+
+xemacs: also relies on pseudo-terminals; do this:
+nm /usr/bin/xemacs | egrep 'getpt|grantpt|unlockpt|ptsname|openpty|forkpty'
+
+xemacs:
+Filename completion doesn't seem to work on fabricated directories,
+only real directories.  Is it relying on the object type being included
+in directory listings?
 
 
 
@@ -184,3 +200,5 @@ Now works:
 
 xemacs
 (uses open() on directories)
+
+}

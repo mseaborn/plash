@@ -323,11 +323,12 @@ int flatten_args(region_t r, struct flatten_params *p,
       int err;
 
       if(p->tree) {
-	if(fs_resolve_populate(p->root_dir, p->tree, p->cwd,
-			       filename, rw /* create */, &err) < 0) {
+	if(fs_resolve_populate(p->root_dir, p->tree, p->cwd, filename,
+			       (rw ? FS_SLOT_RWC : 0) | FS_FOLLOW_SYMLINKS,
+			       &err) < 0) {
 	  printf("plash: error in resolving filename `");
 	  fprint_d(stdout, filename);
-	  printf("'\n");
+	  printf("': %s\n", strerror(err));
 	}
       }
       if(!ambient) {
@@ -349,11 +350,12 @@ int flatten_args(region_t r, struct flatten_params *p,
 	int err;
 
 	if(p->tree) {
-	  if(fs_resolve_populate(p->root_dir, p->tree, p->cwd,
-				 filename, rw /* create */, &err) < 0) {
+	  if(fs_resolve_populate(p->root_dir, p->tree, p->cwd, filename,
+				 (rw ? FS_SLOT_RWC : 0) | FS_FOLLOW_SYMLINKS,
+				 &err) < 0) {
 	    printf("plash: error in resolving filename `");
 	    fprint_d(stdout, filename);
-	    printf("'\n");
+	    printf("': %s\n", strerror(err));
 	  }
 	}
 	if(!ambient) {
@@ -376,10 +378,13 @@ int flatten_args(region_t r, struct flatten_params *p,
 	if(p->tree) {
 	  for(l = args_got; l; l = l->next) {
 	    if(fs_resolve_populate(p->root_dir, p->tree, p->cwd,
-				   seqf_string(l->str), rw /* create */, &err) < 0) {
+				   seqf_string(l->str),
+				   (rw ? FS_SLOT_RWC : 0) | FS_FOLLOW_SYMLINKS,
+				   &err) < 0) {
 	      /* This error shouldn't happen unless the filesystem changes
 		 underneath us. */
-	      printf("plash: error in resolving globbed filename `%s'\n", l->str);
+	      printf("plash: error in resolving globbed filename `%s': %s\n",
+		     l->str, strerror(err));
 	    }
 	  }
 	}
@@ -672,13 +677,15 @@ void wait_for_job(struct shell_state *state, struct job *job)
   poll_for_processes();
   job->last_state = job_state(job);
 
-  /* Grab control of the terminal. */
-  if(tcsetpgrp(STDIN_FILENO, getpid()) < 0) { perror("plash: tcsetpgrp"); }
-  /* Save the terminal state. */
-  if(tcgetattr(STDIN_FILENO, &job->tmodes) < 0) { perror("plash: tcgetattr"); }
-  /* Restore the terminal state. */
-  if(tcsetattr(STDIN_FILENO, TCSADRAIN, &state->tmodes) < 0) {
-    perror("plash: tcsetattr");
+  if(state->interactive) {
+    /* Grab control of the terminal. */
+    if(tcsetpgrp(STDIN_FILENO, getpid()) < 0) { perror("plash: tcsetpgrp"); }
+    /* Save the terminal state. */
+    if(tcgetattr(STDIN_FILENO, &job->tmodes) < 0) { perror("plash: tcgetattr"); }
+    /* Restore the terminal state. */
+    if(tcsetattr(STDIN_FILENO, TCSADRAIN, &state->tmodes) < 0) {
+      perror("plash: tcsetattr");
+    }
   }
 
   if(job->last_state == ST_STOPPED) {
@@ -1081,7 +1088,7 @@ struct job *spawn_job(region_t sock_r,
       job->processes = p;
       w_add_process(pid_server, shell_handle_process_status, p);
 
-      if(job->pgid == 0) {
+      if(job->pgid == 0 && state->interactive) {
 	job->pgid = pid_server;
 	f.pgid = pid_server;
       }
@@ -1097,7 +1104,7 @@ struct job *spawn_job(region_t sock_r,
     job->processes = p;
     procs->spawn_f(procs->spawn_h, &f, p);
 
-    if(job->pgid == 0 && p->pid > 0) {
+    if(job->pgid == 0 && p->pid > 0 && state->interactive) {
       job->pgid = p->pid;
       f.pgid = p->pid;
     }
@@ -1249,10 +1256,13 @@ void proc_return_invoke(struct filesys_obj *obj1, struct cap_args args)
 }
 
 struct inv_process {
+  /* Uses borrowed references. */
   cap_t exec_obj;
   cap_t root_dir;
   struct str_list *args_got;
   struct fd_array fds;
+  int got_cwd;
+  seqf_t cwd;
 };
 void spawn_inv_process(void *spawn_h, struct process_desc_fork *f,
 		       struct shell_process *p)
@@ -1261,8 +1271,7 @@ void spawn_inv_process(void *spawn_h, struct process_desc_fork *f,
 
   region_t r = region_make();
   argmkbuf_t argbuf = argbuf_make(r);
-  bufref_t argv_arg, env_arg, root_arg, cwd_arg, fds_arg, spawn_args;
-  int got_cwd;
+  bufref_t argv_arg, env_arg, root_arg, fds_arg, spawn_args;
   
   cap_t return_cont;
   {
@@ -1293,7 +1302,6 @@ void spawn_inv_process(void *spawn_h, struct process_desc_fork *f,
   }
 
   root_arg = argmk_cap(argbuf, inc_ref(obj->root_dir));
-  got_cwd = 0;
 
   {
     bufref_t *a;
@@ -1322,7 +1330,7 @@ void spawn_inv_process(void *spawn_h, struct process_desc_fork *f,
   {
     int i;
     bufref_t *a;
-    spawn_args = argmk_array(argbuf, 4 + (got_cwd ? 1:0)
+    spawn_args = argmk_array(argbuf, 4 + (obj->got_cwd ? 1:0)
 			               + (f->pgid > 0 ? 1:0), &a);
     a[0] = argmk_pair(argbuf,
 		      argmk_str(argbuf, mk_string(r, "Argv")),
@@ -1337,10 +1345,10 @@ void spawn_inv_process(void *spawn_h, struct process_desc_fork *f,
 		      argmk_str(argbuf, mk_string(r, "Root")),
 		      root_arg);
     i = 4;
-    if(got_cwd) {
+    if(obj->got_cwd) {
       a[i++] = argmk_pair(argbuf,
 			  argmk_str(argbuf, mk_string(r, "Cwd.")),
-			  cwd_arg);
+			  argmk_str(argbuf, mk_leaf(r, obj->cwd)));
     }
     if(f->pgid > 0) {
       a[i++] = argmk_pair(argbuf,
@@ -1367,6 +1375,8 @@ int command_invocation_object(region_t r, struct shell_state *state,
   struct flatten_params p;
   struct str_list *args_got;
   struct filesys_obj *root, *root_ref2;
+  int got_cwd;
+  seqf_t cwd;
 
   /* Process the arguments. */
   p.state = state;
@@ -1392,6 +1402,23 @@ int command_invocation_object(region_t r, struct shell_state *state,
   root = fs_make_root(p.tree);
   assert(root);
   free_node(p.tree);
+
+  /* Set the current working directory. */
+  got_cwd = 0;
+  if(state->cwd) {
+    struct dir_stack *ds;
+    int err;
+    cwd = flatten(r, string_of_cwd(r, state->cwd));
+    ds = resolve_dir(r, root, 0 /* cwd */, cwd, SYMLINK_LIMIT, &err);
+    if(state->print_fs_tree) {
+      if(ds) printf("plash: cwd set successfully\n");
+      else printf("plash: cwd left undefined for this process\n");
+    }
+    if(ds) {
+      got_cwd = 1;
+      dir_stack_free(ds);
+    }
+  }
 
   /* Make a connection between the forked server and the central server.
      We need to get a reference to the root directory that does not go
@@ -1432,6 +1459,8 @@ int command_invocation_object(region_t r, struct shell_state *state,
     proc->root_dir = root_ref2;
     proc->args_got = args_got;
     proc->fds = p.fds;
+    proc->got_cwd = got_cwd;
+    proc->cwd = cwd;
 
     proc_list = region_alloc(r, sizeof(struct process_spawn_list));
     proc_list->spawn_f = spawn_inv_process;
@@ -1470,6 +1499,19 @@ void set_up_sec_process(struct process_desc *desc1) {
      might not be reachable from the root directory. */
   /* Not necessary for run-as-nobody+chroot. */
   if(chdir("/") < 0) { perror("plash: chdir"); exit(1); }
+}
+
+static void sh_resolve_populate(struct shell_state *state,
+				struct flatten_params *p,
+				seqf_t pathname, int flags)
+{
+  int err;
+  if(fs_resolve_populate(state->root, p->tree, p->cwd, pathname,
+			 flags, &err) < 0) {
+    printf("plash: error resolving `");
+    fprint_d(stdout, pathname);
+    printf("' (part of default installation endowment): %s\n", strerror(err));
+  }
 }
 
 /* Constructs a filesystem for the process being created for the command
@@ -1512,22 +1554,23 @@ int command_invocation_sec
   p.fds.fds[2] = STDERR_FILENO;
 
   /* The default installation endowment. */
-  /* FIXME: check for errors */
-  fs_resolve_populate(state->root, p.tree, p.cwd, seqf_string("/etc"), 0 /* create */, &err);
-  fs_resolve_populate(state->root, p.tree, p.cwd, seqf_string("/bin"), 0 /* create */, &err);
-  fs_resolve_populate(state->root, p.tree, p.cwd, seqf_string("/lib"), 0 /* create */, &err);
-  fs_resolve_populate(state->root, p.tree, p.cwd, seqf_string("/usr"), 0 /* create */, &err);
-  fs_resolve_populate(state->root, p.tree, p.cwd, seqf_string("/dev/tty"), 1 /* create */, &err);
-  fs_resolve_populate(state->root, p.tree, p.cwd, seqf_string("/dev/null"), 1 /* create */, &err);
+  sh_resolve_populate(state, &p, seqf_string("/etc"), FS_READ_ONLY | FS_FOLLOW_SYMLINKS);
+  sh_resolve_populate(state, &p, seqf_string("/bin"), FS_READ_ONLY | FS_FOLLOW_SYMLINKS);
+  sh_resolve_populate(state, &p, seqf_string("/lib"), FS_READ_ONLY | FS_FOLLOW_SYMLINKS);
+  sh_resolve_populate(state, &p, seqf_string("/usr"), FS_READ_ONLY | FS_FOLLOW_SYMLINKS);
+  sh_resolve_populate(state, &p, seqf_string("/dev/tty"), FS_OBJECT_RW | FS_FOLLOW_SYMLINKS);
+  sh_resolve_populate(state, &p, seqf_string("/dev/null"), FS_OBJECT_RW | FS_FOLLOW_SYMLINKS);
   if(state->enable_x11) {
+    /* FIXME: check XAUTHORITY env var */
     seqf_t filename = tilde_expansion(r, seqf_string("~/.Xauthority"));
-    fs_resolve_populate(state->root, p.tree, p.cwd, filename, 0 /* create */, &err);
-    fs_resolve_populate(state->root, p.tree, p.cwd, seqf_string("/tmp/.X11-unix/"), 1 /* create */, &err);
+    sh_resolve_populate(state, &p, filename, FS_READ_ONLY | FS_FOLLOW_SYMLINKS);
+    /* FIXME: should restrict this to "X0" or whatever is named in DISPLAY. */
+    sh_resolve_populate(state, &p, seqf_string("/tmp/.X11-unix/"), FS_OBJECT_RW | FS_FOLLOW_SYMLINKS);
   }
 
   /* Add the executable:  This is necessary for scripts (using the
      `#!' syntax).  It doesn't hurt for other executables. */
-  fs_resolve_populate(state->root, p.tree, p.cwd, cmd_filename, 0 /* create */, &err);
+  fs_resolve_populate(state->root, p.tree, p.cwd, cmd_filename, FS_READ_ONLY | FS_FOLLOW_SYMLINKS, &err);
 
   if(flatten_args(r, &p, 0 /* rw */, 0 /* ambient */, args)) {
     free_node(p.tree);
@@ -2030,11 +2073,13 @@ cap_t eval_expr(struct shell_state *state, struct shell_expr *expr)
       if(!cap_run_server_step()) assert(0);
     }
 
-    /* Grab control of the terminal. */
-    if(tcsetpgrp(STDIN_FILENO, getpid()) < 0) { perror("plash: tcsetpgrp"); }
-    /* Restore the terminal state. */
-    if(tcsetattr(STDIN_FILENO, TCSADRAIN, &state->tmodes) < 0) {
-      perror("plash: tcsetattr");
+    if(state->interactive) {
+      /* Grab control of the terminal. */
+      if(tcsetpgrp(STDIN_FILENO, getpid()) < 0) { perror("plash: tcsetpgrp"); }
+      /* Restore the terminal state. */
+      if(tcsetattr(STDIN_FILENO, TCSADRAIN, &state->tmodes) < 0) {
+	perror("plash: tcsetattr");
+      }
     }
 
     {
@@ -2540,6 +2585,7 @@ int main(int argc, char *argv[])
       /* Put this process into its own process group, so that if the
 	 user presses Ctrl-C while the shell is waiting for input and
 	 is in the current process group, the server isn't killed. */
+      /* Should this check for interactive mode? */
       setpgid(0, 0);
       
       caps = region_alloc(r, export_count * sizeof(cap_t));
@@ -2614,6 +2660,7 @@ int main(int argc, char *argv[])
       /* Put this process into its own process group, so that if the
 	 user presses Ctrl-C while the shell is waiting for input and
 	 is in the current process group, the server isn't killed. */
+      /* Should this check for interactive mode? */
       setpgid(0, 0);
 
       caps = region_alloc(r, export_count * sizeof(cap_t));

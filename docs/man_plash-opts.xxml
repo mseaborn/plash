@@ -1,0 +1,81 @@
+
+\refentry id={plash-opts}:
+
+\refmeta~
+\refentrytitle- plash-opts
+\manvolnum- 1
+
+\refnamediv~
+\refname- plash-opts, plash-opts-gtk
+\refpurpose- Set options in the Plash shell
+
+{\refsynopsisdiv:
+
+\para- From the Plash shell:
+
+\synopsis- plash-opts /x=options {\optional: {\r:option-name} {\r:value}}
+
+\synopsis- plash-opts-gtk /x=options
+}
+
+{\refsect1: \title- Description
+\ps:
+
+The Plash shell has a few options you can set.  There is an object
+bound to the variable "options" for setting the options.  These
+programs will invoke that object.
+
+{\command:plash-opts-gtk} opens a window using Gtk for setting the
+options.  {\command:plash-opts} works just via the command line.
+
+}
+
+{\refsect1: \title- Options
+
+\dl:
+
+\dt- enable_x11 on/off
+
+   {\dd\ps: When this is on, the shell will automatically grant programs
+   access to the X11 Window System.  Enabling it is equivalent to
+   adding the argument list "+ ~/.Xauthority => /tmp/.X11-unix" every
+   command invocation.
+
+   This option is switched off by default because X11 is not secure!
+   X servers provide no isolation between the clients connected to
+   them.  One client can read keyboard input that goes to other
+   clients, grab the screen's contents, and feed events to other
+   clients, including keypress events.  So {\emphasis:potentially}, an
+   X client can gain the full authority of the user.}
+
+\dt- log_summary on/off
+\dt- log_messages on/off
+\dt- log_into_xterm on/off
+
+\dt- print_fs_tree on/off
+
+   \dd\ps~ When this is enabled, the shell prints the contents of the
+   file namespace of each process that it starts.  This is a tree
+   showing pathnames at which objects and slots have been attached.
+
+}
+
+{\refsect1: \title- Examples
+
+\pre:
+plash-opts /x=options 'enable_x11' 'on'
+}
+
+{\refsect1: \title- See also
+\ps:
+
+plash(1)
+
+/usr/share/doc/plash
+}
+
+{\refsect1: \title- Author
+\ps:
+
+Mark Seaborn <mseaborn@onetel.com>
+}

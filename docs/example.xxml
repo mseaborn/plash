@@ -1,0 +1,27 @@
+{\ps:
+ Para1
+
+ 
+ Para2
+
+ Para3}
+\body:
+
+\foo- Line1
+\bar- Line2
+{\qux: Line3}
+\more:
+
+\para~
+  some
+  text
+
+\baz;
+stuff
+this {\strong:not} that
+here \Elt;\Egt;
+backslash \\ \{curly\}
+<text> & more
+
+\a href={blah.html}- link2
+{\a href={index.html}: link}

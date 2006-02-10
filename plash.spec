@@ -1,6 +1,6 @@
 Summary: Principle of Least Authority shell (Plash)
 Name: plash
-Version: 1.10
+Version: 1.11
 Release: 1
 Packager: Mark Seaborn <mseaborn@onetel.com>
 Copyright: GPL and LGPL
@@ -52,26 +52,33 @@ affected.
 # Could do "rm -rv %{buildroot}" at the start, but that seems really dangerous
 
 mkdir -p %{buildroot}/usr/share/doc/plash-%{version}
+mkdir -p %{buildroot}/usr/share/doc/plash-%{version}/html
 mkdir -p %{buildroot}/usr/share/man/man1
 mkdir -p %{buildroot}/usr/lib/plash/lib
 mkdir -p %{buildroot}/var/lib/plash-chroot-jail/special
 mkdir -p %{buildroot}/var/lib/plash-chroot-jail/plash-uid-locks
 mkdir -p %{buildroot}/usr/bin
+mkdir -p %{buildroot}/usr/share/emacs/site-lisp/plash/
 
 # Install docs
-cp -v plash/COPYRIGHT     %{buildroot}/usr/share/doc/plash-%{version}/
-cp -v plash/README        %{buildroot}/usr/share/doc/plash-%{version}/
-cp -v plash/NOTES         %{buildroot}/usr/share/doc/plash-%{version}/
-cp -v plash/NOTES.exec    %{buildroot}/usr/share/doc/plash-%{version}/
-cp -v plash/BUGS          %{buildroot}/usr/share/doc/plash-%{version}/
-cp -v plash/protocols.txt %{buildroot}/usr/share/doc/plash-%{version}/
+cp -v plash/COPYRIGHT        %{buildroot}/usr/share/doc/plash-%{version}/
+cp -v plash/README           %{buildroot}/usr/share/doc/plash-%{version}/
+cp -v plash/NOTES            %{buildroot}/usr/share/doc/plash-%{version}/
+cp -v plash/NOTES.exec       %{buildroot}/usr/share/doc/plash-%{version}/
+cp -v plash/BUGS             %{buildroot}/usr/share/doc/plash-%{version}/
+cp -v plash/protocols.txt    %{buildroot}/usr/share/doc/plash-%{version}/
 cp -v plash/debian/changelog %{buildroot}/usr/share/doc/plash-%{version}/
+cp -v plash/docs/out-html/*  %{buildroot}/usr/share/doc/plash-%{version}/html/
 
 # Install man pages
-cp -v plash/docs/plash.1        %{buildroot}/usr/share/man/man1/
-cp -v plash/docs/exec-object.1  %{buildroot}/usr/share/man/man1/
-cp -v plash/docs/plash-opts.1   %{buildroot}/usr/share/man/man1/
-cp -v plash/docs/plash-chroot.1 %{buildroot}/usr/share/man/man1/
+cp -v plash/docs/out-man/plash.1 \
+      plash/docs/out-man/exec-object.1 \
+      plash/docs/out-man/plash-opts.1 \
+      plash/docs/out-man/plash-chroot.1 \
+      plash/docs/out-man/plash-run-emacs.1 \
+      plash/docs/out-man/plash-socket-connect.1 \
+      plash/docs/out-man/plash-socket-publish.1 \
+      %{buildroot}/usr/share/man/man1/
 gzip -9 %{buildroot}/usr/share/man/man1/*.1
 ( cd %{buildroot}/usr/share/man/man1 && ln -s plash-opts.1.gz plash-opts-gtk.1.gz )
 
@@ -92,11 +99,17 @@ strip $STRIP_ARGS plash/bin/plash-chroot    -o %{buildroot}/usr/bin/plash-chroot
 strip $STRIP_ARGS plash/bin/plash-opts      -o %{buildroot}/usr/bin/plash-opts
 strip $STRIP_ARGS plash/bin/plash-opts-gtk  -o %{buildroot}/usr/bin/plash-opts-gtk
 strip $STRIP_ARGS plash/bin/exec-object     -o %{buildroot}/usr/bin/exec-object
+strip $STRIP_ARGS plash/bin/socket-connect  -o %{buildroot}/usr/bin/plash-socket-connect
+strip $STRIP_ARGS plash/bin/socket-publish  -o %{buildroot}/usr/bin/plash-socket-publish
+strip $STRIP_ARGS plash/bin/run-emacs       -o %{buildroot}/usr/bin/plash-run-emacs
 
 # cp -v plash/mrs/run-as-nobody %{buildroot}/usr/lib/plash/
 # cp -v plash/mrs/run-as-nobody+chroot %{buildroot}/usr/lib/plash/
 cp -v plash/setuid/run-as-anonymous %{buildroot}/usr/lib/plash/
 cp -v plash/setuid/gc-uid-locks %{buildroot}/usr/lib/plash/
+
+# Install Emacs Lisp file
+cp -v plash/src/plash-gnuserv.el %{buildroot}/usr/share/emacs/site-lisp/plash/
 
 %clean
 
@@ -111,6 +124,7 @@ cp -v plash/setuid/gc-uid-locks %{buildroot}/usr/lib/plash/
 /var/lib/plash-chroot-jail
 /usr/share/man
 /usr/share/doc/plash-%{version}
+/usr/share/emacs
 
 # %attr(06755,root,root) /usr/lib/plash/run-as-nobody
 # %attr(06755,root,root) /usr/lib/plash/run-as-nobody+chroot

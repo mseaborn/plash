@@ -1,0 +1,87 @@
+
+\refentry id={exec-object}:
+
+\refmeta~
+\refentrytitle- exec-object
+\manvolnum- 1
+
+\refnamediv~
+\refname- exec-object
+\refpurpose- Creates executable objects for use under Plash
+
+{\refsynopsisdiv:
+
+{\synopsis: exec-object \r+executable-pathname \r+root-directory}
+
+{\synopsis:
+  {\command:def} \r+var =
+    {\command:capcmd} {\command:exec-object} /bin/foo
+      /x=({\command:mkfs} /bin/foo /usr ...)
+}
+}
+
+{\refsect1: \title- Description
+\ps:
+
+This is a command that is only useful when called using a
+{\command:capcmd} expression from Plash.
+
+This command returns an executable object E.  When E is invoked with a
+root directory {\r:dir2} as an argument, it forks a new process whose
+root directory is set to be a union of {\r:root-directory} and
+{\r:dir2}, and that new process {\f:execve()}s
+{\r:executable-pathname}.
+
+This is commonly used with the shell's {\command:mkfs} expression,
+which will construct the root directory.
+
+}
+
+{\refsect1: \title- Return value
+\ps:
+
+The return value given by {\function:exit()} isn't used.  This program
+returns an object reference using the {\varname:return_cont}
+mechanism.  It doesn't exit until all the references to the object
+have been dropped.
+
+}
+
+{\refsect1: \title- Examples
+
+\pre:{}
+  def my_oggenc =
+    capcmd exec-object '/usr/bin/oggenc'
+      /x=(mkfs /usr/bin/oggenc /usr/lib /lib)
+
+  def my_oggenc =
+    capcmd exec-object '/usr/bin/oggenc'
+      /x=(mkfs
+            /usr/bin/oggenc=(F /debian/usr/bin/oggenc)
+            /usr/lib=(F /debian/usr/lib)
+            /lib=(F /debian/lib))
+
+  def my_oggenc =
+    capcmd exec-object '/usr/bin/oggenc'
+      /x=(mkfs
+            /usr/bin/oggenc
+            /usr/lib/libvorbisenc.so.0
+            /usr/lib/libvorbis.so.0
+            /lib/i686/libm.so.6
+            /usr/lib/libogg.so.0
+            /usr/lib/plash/lib/libc.so.6)
+}
+
+{\refsect1: \title- See also
+\ps:
+
+plash(1)
+
+/usr/share/doc/plash
+}
+
+{\refsect1: \title- Author
+\ps:
+
+Mark Seaborn <mseaborn@onetel.com>
+}

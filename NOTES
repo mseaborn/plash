@@ -1,4 +1,122 @@
 
+Version 1.11:
+
+The major new feature in this version is the "plash-run-emacs"
+program.  This lets you start an XEmacs process and then grant it
+access to individual files and directories, as you need to edit them.
+
+You can start XEmacs from the Plash shell with the following commands:
+
+  plash-opts /x=options 'enable_x11' 'on'
+  def edit_file = capcmd plash-run-emacs
+
+Then edit the file "foo.txt" with:
+
+  edit_file => foo.txt &
+
+This works like gnuserv (in fact, it calls some of gnuserv's Elisp
+code).  It grants access to foo.txt to plash-run-emacs, which adds it
+to XEmacs' file namespace.  Then it asks XEmacs to open a window to
+edit the file.
+
+"edit_file" is a shell variable which is bound to an executable
+object.  I have introduced two tools for exporting Plash object
+references to other instances of the shell.  In the shell where you
+bound the "edit_file" variable, do:
+
+  plash-socket-publish => /tmp/emacs /x=edit_file
+
+Then you can use the following command in another instance of the
+shell to make the object available there:
+
+  def edit_file = capcmd plash-socket-connect => /tmp/emacs
+
+(You can use plash's "--rcfile" switch to execute this on startup.)
+
+This only works with XEmacs at present, not GNU Emacs.  GNU Emacs has
+problems running under the Plash environment.  It doesn't like being
+started using "/lib/ld-linux.so.2 /usr/bin/emacs": it fails with a
+"Memory exhausted" error.  This needs more investigation.
+
+This functionality is fairly awkward.  One major improvement will be
+to implement a "powerbox".  XEmacs would be able to request a "File
+Open" dialogue box, through which the user would grant it access to
+files.
+
+Running the shell as root
+-------------------------
+
+It's now safer to run the Plash shell as root.
+
+Before, the default installation endowment included "/dev/null" and
+"/dev/tty" as read/write slots.  A malicious program could delete or
+replace "/dev/null" and "/dev/tty" if the shell had that authority.
+Now they are attached as files, not slots.  Programs are not passed on
+the authority to delete them or create objects in their place.
+
+However, it's not yet completely safe to set the "enable_x11" option
+when running the shell as root.  In this case, the shell grants
+read-write access to the "/tmp/.X11-unix" directory.
+
+Following symlinks
+------------------
+
+Suppose "link.txt" is a symbolic link to "file.txt".  If you run the
+command:
+
+  cat link.txt
+
+then the shell follows the symlink and includes both "link.txt" and
+"file.txt", as read-only, in cat's file namespace.
+
+Previously, if you did "cat => link.txt", the shell would grant
+read/write/create access to the "link.txt" slot, but it would *not*
+follow the symlink.  This part was not fully implemented.  Now it is:
+The shell will follow the symlink and grant read/write/create access
+to the "file.txt" slot.
+
+This was necessary for making the "edit_file" command follow symlinks.
+
+However, I've come to realise that having the shell follow symlinks is
+more dangerous than I originally thought.  A command that is run
+multiple times with the same arguments, and granted read/write/create
+access to a slot, could get the shell to give it write access to the
+root directory.  The shell's security would be rendered useless.
+
+Part of this problem is inherent in symbolic links: they store a
+string, not an object reference.
+
+We could fix this by providing alternatives to symlinks, such as hard
+links that work with directories and across partitions.  An ideal
+solution would involve persistence.  But this would be difficult and
+complex to do under Unix.  It would be hard to integrate with existing
+filesystems.
+
+Furthermore, it doesn't address the problem of how to deal with
+symlinks that exist on your system already.  A simpler but not ideal
+solution would be for the shell to indicate when an argument is a
+symlink, and to provide a quick way of replacing or augmenting it with
+the object it points to.  This at least provides some form of review.
+For this to be usable, the shell will have to use GUI features.
+
+Documentation overhaul
+----------------------
+
+I have mostly converted the documentation to DocBook format, including
+the man pages (which were in POD format before).  I couldn't face
+writing XML by hand, so I have created an alternative surface syntax
+for XML.
+
+However, the documentation still needs work.
+
+Other changes
+-------------
+
+Fixed a bug when using the shell's non-interactive mode (its "-c"
+option).
+
+
+
 Version 1.10:
 
 New in this version is an implementation of fchdir().
@@ -23,12 +141,13 @@ kernel-level file descriptor for the device /dev/null (a "dummy" file
 descriptor), but it stores the dir_stack object in a table maintained
 by libc.  Plash's fchdir() function in libc consults this table; it
 can only work if there is an entry for the given file descriptor
-number in the table.  Creating a "dummy" kernel-level file descriptor
-ensures that the file descriptor number stays allocated from the
-kernel's point of view, and it ensures that passing the file
-descriptor to functions such as select() or write(), which aren't
-useful for directory file descriptors, give an appropriate error
-rather than EBADF.
+number in the table.
+
+Creating a "dummy" kernel-level file descriptor ensures that the file
+descriptor number stays allocated from the kernel's point of view, and
+it ensures that passing the file descriptor to functions such as
+select() or write(), which aren't useful for directory file
+descriptors, gives an appropriate error rather than EBADF.
 
 Plash's dir_stack objects are a bit different from its directory
 objects.  Under Plash, a directory object doesn't know what its parent
@@ -50,6 +169,13 @@ with the usual Unix semantics, where the "leafname" directory could
 be moved between the two calls, giving it a different parent directory.
 This is partly why programs like "rm" use fchdir() -- to avoid this
 problem.
+
+Note that dup(), dup2() and fcntl()/F_DUPFD will not copy directory
+file descriptors properly under Plash; only the kernel-level part is
+copied because Plash does not intercept these calls.  Similarly,
+directory file descriptors will not be preserved across execve()
+calls.  This is unlikely to be a problem in practice.  It could be
+fixed if necessary.
 
 
 Version 1.9:
@@ -212,7 +338,7 @@ as:
 
 is equivalent to:
 
-  xpdf foo.pdf + ~/.Xauthority => /tmp/.X11-lock
+  xpdf foo.pdf + ~/.Xauthority => /tmp/.X11-unix
 
 This option is switched off by default because X11 is not secure!  X
 servers provide no isolation between the clients connected to them.

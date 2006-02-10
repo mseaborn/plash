@@ -17,6 +17,7 @@
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
    USA.  */
 
+#include <dirent.h>
 #include <errno.h>
 
 #include "region.h"
@@ -184,9 +185,15 @@ struct filesys_obj *comb_dir_traverse(struct filesys_obj *obj1, const char *name
   }
 }
 
-static int sort_seqf_compare(const void *p1, const void *p2)
+struct dir_entry {
+  int inode, type;
+  seqf_t name;
+};
+
+static int sort_dir_entry_compare(const void *p1, const void *p2)
 {
-  return seqf_compare(*(seqf_t *) p1, *(seqf_t *) p2);
+  return seqf_compare(((struct dir_entry *) p1)->name,
+		      ((struct dir_entry *) p2)->name);
 }
 
 int comb_dir_list(struct filesys_obj *obj1, region_t r, seqt_t *result, int *err)
@@ -195,7 +202,7 @@ int comb_dir_list(struct filesys_obj *obj1, region_t r, seqt_t *result, int *err
   int count1, count2;
   seqt_t got;
   seqf_t buf;
-  seqf_t *array1, *array2;
+  struct dir_entry *array1, *array2;
   int i;
 
   region_t r2 = region_make();
@@ -204,7 +211,7 @@ int comb_dir_list(struct filesys_obj *obj1, region_t r, seqt_t *result, int *err
   if(obj->dir) {
     count1 = obj->dir->vtable->list(obj->dir, r2, &got, err);
     if(count1 < 0) { region_free(r2); return -1; }
-    array1 = region_alloc(r2, count1 * sizeof(seqf_t));
+    array1 = region_alloc(r2, count1 * sizeof(struct dir_entry));
     buf = flatten(r, got);
     for(i = 0; i < count1; i++) {
       int inode, type;
@@ -214,7 +221,9 @@ int comb_dir_list(struct filesys_obj *obj1, region_t r, seqt_t *result, int *err
       m_int(&ok, &buf, &type);
       m_lenblock(&ok, &buf, &name);
       if(ok) {
-	array1[i] = name;
+	array1[i].inode = inode;
+	array1[i].type = type;
+	array1[i].name = name;
       }
       else { region_free(r2); *err = EIO; return -1; }
     }
@@ -230,23 +239,44 @@ int comb_dir_list(struct filesys_obj *obj1, region_t r, seqt_t *result, int *err
     struct node_list *list = obj->node->children;
     while(list) { length++; list = list->next; }
 
-    array2 = region_alloc(r2, length * sizeof(seqf_t));
+    array2 = region_alloc(r2, length * sizeof(struct dir_entry));
     count2 = 0;
     list = obj->node->children;
     while(list) {
+      int inode = 0; /* inode number unknown */
+      int type = DT_UNKNOWN;
+      
       /* Check whether entry is a full slot. */
-      if(list->node->symlink_dest || list->node->children) {}
+      if(list->node->symlink_dest || list->node->children) {
+	/* Filling out these is optional. */
+	inode = list->node->inode;
+	type = list->node->symlink_dest ? DT_LNK : DT_DIR;
+      }
       else if(list->node->attach_slot) {
 	struct filesys_obj *obj =
 	  list->node->attach_slot->vtable->slot_get(list->node->attach_slot);
 	if(!obj) goto empty;
+
+	/* This bit is optional.  Many programs don't need the dt_ino
+	   and dt_type fields.  However, XEmacs does. */
+	{
+	  struct stat st;
+	  int err;
+	  if(obj->vtable->stat(obj, &st, &err) >= 0) {
+	    type = IFTODT(st.st_mode);
+	    inode = st.st_ino;
+	  }
+	}
+	
 	filesys_obj_free(obj);
       }
       else goto empty;
 
       /* Slot is full: include it in directory listing. */
       assert(count2 < length);
-      array2[count2] = seqf_string(list->name);
+      array2[count2].type = type;
+      array2[count2].inode = inode;
+      array2[count2].name = seqf_string(list->name);
       count2++;
 
     empty:
@@ -255,8 +285,8 @@ int comb_dir_list(struct filesys_obj *obj1, region_t r, seqt_t *result, int *err
   }
 
   /* Sort the sequences to make it easy to merge them. */
-  qsort(array1, count1, sizeof(seqf_t), sort_seqf_compare);
-  qsort(array2, count2, sizeof(seqf_t), sort_seqf_compare);
+  qsort(array1, count1, sizeof(struct dir_entry), sort_dir_entry_compare);
+  qsort(array2, count2, sizeof(struct dir_entry), sort_dir_entry_compare);
 
   /* Merge the two sequences. */
   {
@@ -264,32 +294,32 @@ int comb_dir_list(struct filesys_obj *obj1, region_t r, seqt_t *result, int *err
     int count = 0;
     int i1 = 0, i2 = 0;
     while(1) {
+      struct dir_entry *entry;
       int comp;
       if(i1 < count1 && i2 < count2) {
-	comp = seqf_compare(array1[i1], array2[i2]);
+	comp = seqf_compare(array1[i1].name, array2[i2].name);
       }
       else if(i1 < count1) comp = -1;
       else if(i2 < count2) comp = 1;
       else break;
 
-      cbuf_put_int(buf, 0); /* d_ino */
-      cbuf_put_int(buf, 0); /* d_type */
       if(comp < 0) {
-	cbuf_put_int(buf, array1[i1].size);
-	cbuf_put_seqf(buf, array1[i1]);
+	entry = &array1[i1];
 	i1++;
       }
       else if(comp > 0) {
-	cbuf_put_int(buf, array2[i2].size);
-	cbuf_put_seqf(buf, array2[i2]);
+	entry = &array2[i2];
 	i2++;
       }
       else {
-	cbuf_put_int(buf, array1[i1].size);
-	cbuf_put_seqf(buf, array1[i1]);
+	entry = &array1[i1];
 	i1++;
 	i2++;
       }
+      cbuf_put_int(buf, entry->inode); /* d_ino */
+      cbuf_put_int(buf, entry->type); /* d_type */
+      cbuf_put_int(buf, entry->name.size);
+      cbuf_put_seqf(buf, entry->name);
       count++;
     }
     *result = seqt_of_cbuf(buf);

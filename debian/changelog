@@ -1,3 +1,40 @@
+plash (1.11) unstable; urgency=low
+
+  * Add run-emacs.c and plash-gnuserv.el:  major new feature.
+  * Converted man pages and other documentation to DocBook format.
+    Created new surface syntax for XML.
+  * shell.c:  Fixed bugs in non-interactive mode (which is used when
+    plash is invoked with the "-c" option) so that it works.
+  * Add socket-connect.c
+  * Add socket-publish.c.  Changed cap-protocol.[ch] to add a new
+    interface for listening on connections, which allows you to call
+    select() in your own code so that you can wait for events on
+    other file descriptors.
+  * fs-operations.c:  Disable the warning about open()ing directories.
+    Now that fchdir() works it's less relevant.  It generates too many
+    warnings with XEmacs and it gets annoying.
+  * build-fs.c:  Changed the `create' argument of fs_resolve_populate()
+    into a `flags' argument.
+     * You can now control whether to attach the destination as a
+       read-write-create slot, as a read-write object, or as read-only.
+       The second choice was not available before:  this is useful for
+       devices (eg. /dev/null) and sockets (eg. /tmp/.X11-unix/X0) when
+       you want to grant write or connect access, but not unlink/create
+       access.
+     * Following symlinks:  When attaching a read-write-create slot,
+       if the slot contains a symlink it will be followed.
+       Note, however, that symlinks are dangerous and so there is now a
+       flag for choosing whether to follow symlinks.  (However, the shell
+       doesn't give you a choice yet -- it follows symlinks.)
+  * build-fs-dynamic.c:  Changed dir_list method to include dt_ino (inode)
+    and dt_type fields.  XEmacs won't display directory listings for
+    filename completion without these.
+  * shell.c:  Added checks for errors to calls to fs_resolve_populate().
+  * shell.c:  When invoking an executable object, it will now set the
+    cwd argument appropriately (previously, it was always unset).
+
+ -- Mark Seaborn <mseaborn@onetel.com>  Sat, 13 Aug 2005 19:43:19 +0100
+
 plash (1.10) unstable; urgency=low
 
   * Implemented fchdir():

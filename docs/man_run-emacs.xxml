@@ -1,0 +1,167 @@
+
+\refentry id={run-emacs}:
+
+\refmeta~
+\refentrytitle- plash-run-emacs
+\manvolnum- 1
+
+\refnamediv~
+\refname- plash-run-emacs
+\refpurpose- Run XEmacs and then grant it access to individual files
+
+{
+\refsynopsisdiv~
+\synopsis:
+
+def {\r:edit_file} = capcmd plash-run-emacs {\r:options...}
+
+{\r:edit_file} => {\r:file-you-want-to-edit.txt} &
+}
+
+
+{\refsect1: \title- Description
+\ps:
+
+This lets you run XEmacs without initially giving it access to any of
+your personal files.  You can grant the XEmacs process access to
+individual files or directories when you want to edit or view them.
+
+XEmacs is a large and complex system.  It doesn't have any internal
+security, and it gives ELisp programs access to everything that it has
+access to.  You might not want to trust XEmacs with access to all your
+files.  {\r:plash-run-emacs} helps ensure that XEmacs is only doing
+what you expect it to.
+
+This program only works with XEmacs at the moment.  GNU Emacs doesn't
+work under Plash yet.
+
+This program is similar to -- and replaces -- {\command:gnuserv} and
+{\command:gnuclient}.  {\command:gnuclient} is a command that sends a
+message to XEmacs asking it to open a file to edit.  Similarly,
+{\command:plash-run-emacs} returns an object that will ask XEmacs to
+edit a given file -- but it will also give XEmacs a reference to the
+file, giving XEmacs access to it.
+
+The {\r:plash-run-emacs} command is only useful when called using a
+"capcmd" expression from Plash.
+
+}
+
+
+{\refsect1: \title- Return value
+\ps:
+
+Returns an executable object, {\r:edit_file}, using the "return_cont"
+mechanism.  (You can bind this to a variable in the shell using the
+"def" syntax.  {\r:edit_file} can be any variable name.)
+
+You can use {\r:edit_file} to open files in XEmacs.  Give it some
+filenames as arguments.  You need to use "=>" for the shell to grant
+write access to those files.
+
+}
+
+
+{\refsect1: \title- Notes
+\ps:
+
+By default, the Plash shell doesn't grant access to the X Window
+System.  You'll have to enable that with the command:
+
+\pre~
+plash-opts /x=options 'enable_x11' 'on'
+}
+
+
+{\refsect1: \title- Limitations
+\ps:
+
+The X Window System is not secure, so actually the XEmacs process can
+still potentially get all of the user's authority.
+
+XEmacs still has unlimited ability to connect to the Internet.
+
+Doesn't work with GNU Emacs.
+
+You must use a shell command to open a file in XEmacs.  You can't get
+an "Open File" dialogue box directly from XEmacs itself.  This is to
+be implemented in the future.  The "Open File" dialogue box is known
+as a "powerbox" when it grants access to the file in question.
+
+There isn't a good way to review what authority you have granted
+XEmacs, or revoke that authority.
+
+It's best to invoke {\r:edit_file} with "&" to get the shell to put
+the job in the background.  This is a problem with the shell itself:
+for each job, it starts a server process that hosts the file objects
+the job was granted access to.  When a job is run in the foreground,
+the shell waits for the server process to exit.  This is arguably the
+wrong behaviour.  If you press Ctrl-C to stop the {\r:edit_file} job,
+you'll terminate the server process, and the files you granted to
+XEmacs using this job will disappear from its namespace.
+
+When XEmacs tries to save backup files, that won't work.  This
+generates annoying warnings.  XEmacs doesn't have authority to create
+files with names other than the ones it was explicitly granted access
+to.  This could be best fixed in a powerbox design.
+
+}
+
+
+{\refsect1: \title- How it works
+\ps:
+
+{\command:plash-run-emacs} builds a file namespace for XEmacs in a
+way similar to how the Plash shell builds file namespaces.  The
+difference is that in this case, it can add entries to the namespace
+dynamically.  The file namespace that XEmacs sees will typically be a
+subset of the user's file namespace.
+
+{\command:plash-run-emacs} maps an executable object
+{\filename:/bin/plash-gnuserv} into XEmacs's file namespace.  This
+works like {\command:gnuserv}.  It talks to XEmacs via a pseudo-tty or
+a pipe (in this case, a pipe, because XEmacs is not given the ability
+to create pseudo-ttys).  It provides a way for ELisp code to talk to
+the outside world.  It's an executable object and is actually
+implemented by the {\command:plash-run-emacs} process.  It is
+necessary because ELisp doesn't provide enough communications
+primitives.  If you could connect to a Unix domain socket directly
+using ELisp, there would be no need for
+{\filename:/bin/plash-gnuserv}.
+
+{\command:plash-run-emacs} is untrusted.  It has the same authority as
+XEmacs (it runs with the same UID).  In the future, it might implement
+a powerbox.  Then it would need to be trusted.  It would need access
+to the user's namespace (ie. all your files), so it would need to
+start XEmacs under a different UID.
+
+}
+
+
+{\refsect1: \title- Examples
+\ps:
+
+\pre~
+def edit =
+  capcmd ~/projects/plash/bin/run-emacs
+     -iconic
+     -l ~/projects/plash/src/plash-gnuserv.el
+     + ~/config ~/.emacs
+       => ~/Mail ~/.im /tmp);
+
+}
+
+
+{\refsect1: \title- See also
+\ps:
+
+  {\command:plash}, {\command:plash-socket-publish}, {\command:plash-run-emacs}, {\command:xemacs}, {\command:gnuclient}
+
+  /usr/share/doc/plash
+}
+
+{\refsect1: \title- Author
+  \ps:
+
+  Mark Seaborn <mseaborn@onetel.com>
+}

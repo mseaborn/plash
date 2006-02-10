@@ -1,0 +1,63 @@
+
+\book lang=en:
+
+{\bookinfo:
+ \title- Plash: the Principle of Least Authority shell
+ {\author:
+  \firstname- Mark
+  \surname- Seaborn
+ }
+}
+
+{\chapter id={introduction}: \title- Introduction
+\ps:
+
+Plash is a restricted execution environment for running Linux programs
+with minimum privileges necessary.  You can grant a process read-only
+or read-write access to specific files and directories, which can be
+mapped at any point in the filesystem namespace.
+
+The execution environment doesn't require a modified Linux kernel --
+it uses chroot() and UIDs.  It works with existing Linux executables,
+provided they are dynamically linked, because Plash uses a modified
+version of GNU libc.
+
+Plash virtualizes the filesystem.  A process can request to open a
+file by sending a request via a socket.  The server can send a file
+descriptor across the socket in response.  Usually performance is not
+affected, because the most frequently used system calls (such as
+read() and write()) work on kernel-level file descriptors as before.
+
+Plash provides a shell, with a syntax similar to the Bourne shell or
+Bash.  Unlike Bash, it distinguishes string arguments and file
+arguments, because it needs to know which files to grant the program
+access to.  By default, the shell grants only read-only access to
+files and directories, so there is extra syntax for granting
+read-write-create access.
+
+}
+
+\splice name={shell};
+\splice name={environment};
+\splice name={exec-objs};
+
+{\chapter id={interfaces}: \title- Protocols and interfaces
+\splice name={protocols};
+\splice name={methods};
+}
+
+{\chapter id={man-pages}: \title- Man pages
+\splice name={man_plash};
+\splice name={man_plash-opts};
+\splice name={man_exec-object};
+\splice name={man_chroot};
+\splice name={man_socket-publish};
+\splice name={man_socket-connect};
+\splice name={man_run-emacs};
+}
+
+\splice name={internals};
+
+\splice name={bugs};
+
+}

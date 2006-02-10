@@ -1,0 +1,62 @@
+
+\refentry id={chroot}:
+
+\refmeta~
+\refentrytitle- plash-chroot
+\manvolnum- 1
+
+\refnamediv~
+\refname- plash-chroot
+\refpurpose- chroot program, for use under Plash
+
+\refsynopsisdiv~
+\synopsis- plash-chroot \r+root-dir \r+command {\optional:\r:arguments...}
+
+
+{\refsect1: \title- Description
+\ps:
+
+Runs the command with the root directory set to {\r:root-dir}.
+
+This program is a version of {\command:chroot} which works under
+Plash.  Unlike the normal {\command:chroot}, use of
+{\command:plash-chroot} isn't restricted to the superuser.
+
+{\command:exec-object(1)} may be more useful.
+
+}
+
+
+{\refsect1: \title- Discussion
+\ps:
+
+Normally, use of {\command:chroot} is restricted to root under Unix,
+because it's dangerous in the presence of setuid executables.  (You
+can hard link a setuid executable into your chroot directory and
+replace the libraries it uses with your own code.)  But Plash doesn't
+provide setuid executables, so it's safe.  Plash provides executable
+objects as a replacement for setuid.
+
+How it works: The program asks the server to return a reference to the
+directory that it wants to chroot into.  Then it creates a new fs_op
+object (which resides in the server process) for handling filesystem
+requests, using that directory as the root.  It replaces its existing
+fs_op object with the new one, and then it execve()s the given
+command.
+
+}
+
+
+{\refsect1: \title- See also
+\ps:
+
+  {\command:plash}, {\command:exec-object}, {\command:chroot}
+
+  /usr/share/doc/plash
+}
+
+{\refsect1: \title- Author
+  \ps:
+
+  Mark Seaborn <mseaborn@onetel.com>
+}

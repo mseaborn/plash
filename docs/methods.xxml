@@ -1,0 +1,256 @@
+
+{\sect1 id={obj-fs-op}: \title- fs_op object
+\ps:
+
+This object implements all the standard Unix filesystem calls that
+operate on pathnames:  open(), mkdir(), unlink() and so on.  You can
+construct one of these objects given a root directory.
+
+This object has one piece of state: the current working directory
+(cwd).  This is allowed to be unset, in which case any operation that
+it relative to the cwd will return an error.
+
+Notation:
+{\itemizedlist:
+\listitem\para- The request is given before "=>"; possible replies come after.
+\listitem\para- "+ FD" indicates that a message includes a file descriptor argument.
+\listitem\para- "+ foo/obj" indicates that a message includes an object reference.
+}
+
+
+Methods:
+
+\pre:
+// duplicate the connection -- called before the fork() syscall
+// (now obsolete; will be removed)
+"Fork"
+=>
+"RFrk" + FD
+
+"Copy"
+=> "Okay" + fs_op/obj
+
+"Gdir" pathname
+=> "Okay" + dir/obj
+Resolves `pathname' to get a directory, and returns the directory object.
+
+"Grtd"
+=> "Okay" + dir/obj
+Same as <<"Gdir" "/">>.
+
+"Gobj" pathname
+=> "Okay" + obj
+Resolved `pathname' to get any object; will follow symlinks.
+
+// open() call
+"Open" flags/int mode/int filename
+=>
+"ROpn" + FD
+"RDfd" + FD + dir_stack/obj // This is returned when open() is used on a directory.
+                            // FD is for /dev/null, and the object is a dir_stack.
+"Fail" errno/int
+
+// stat() and lstat() calls
+"Stat" nofollow/int pathname
+=>
+"RSta" stat
+"Fail" errno/int
+
+// readlink() call
+"Rdlk" pathname
+=>
+"RRdl" string
+"Fail" errno/int
+
+// chdir() call
+"Chdr" pathname
+=>
+"RSuc"
+"Fail" errno/int
+
+// fchdir() call:  takes a dir_stack object as returned by open()
+"Fchd" + dir_stack/obj
+=>
+"Okay"
+"Fail" errno/int
+
+// getcwd() call
+"Gcwd"
+=>
+"RCwd" pathname
+"Fail" errno/int
+
+// list contents of directories: opendir() + readdir() + closedir()
+"Dlst" pathname
+=>
+// same as `struct dirent' format:
+"RDls" (inode/int type/int name_size/int name)*
+"Fail" errno/int
+
+// access() call
+"Accs" mode/int pathname
+=>
+"RAcc"
+"Fail" errno/int
+
+// mkdir()
+"Mkdr" mode/int pathname
+=>
+"RMkd"
+"Fail" errno/int
+
+// chmod() call
+"Chmd" mode/int pathname
+=>
+"RChm"
+"Fail" errno/int
+
+// utime()/utimes()/lutimes() calls
+"Utim" nofollow/int
+	atime_sec/int atime_usec/int
+	mtime_sec/int mtime_usec/int
+	pathname
+=>
+"RUtm"
+"Fail" errno/int
+
+// rename() call
+"Renm" newpath-length/int newpath oldpath
+=>
+"RRnm"
+"Fail" errno/int
+
+// link() call
+"Link" newpath-length/int newpath oldpath
+=>
+"RLnk"
+"Fail" errno/int
+
+// symlink() call
+"Syml" newpath-length/int newpath oldpath
+=>
+"RSym"
+"Fail" errno/int
+
+// unlink() call
+"Unlk" pathname
+=>
+"RUnl"
+"Fail" errno/int
+
+// rmdir() call
+"Rmdr" pathname
+=>
+"RRmd"
+"Fail" errno/int
+
+// connect() on Unix domain sockets
+"Fcon" pathname + FD
+=>
+"RFco"
+"Fail" errno/int
+
+// bind() on Unix domain sockets
+"Fbnd" pathname + FD
+=>
+"RFbd"
+"Fail" errno/int
+
+// part of execve() call
+// The RExe result tells the client what it should pass to the exec syscall.
+// The client allocates a spare FD slot; it tells the server the number.
+// The server can then use this FD number in the arguments it returns.
+// The client receives an FD; it must copy it into that slot using "dup2".
+// This will be extended so that the server can also carry out the work of
+// the new process.
+// The RExo result returns an executable object which the client must invoke
+// with full arguments, including the root directory.
+"Exec" fd-number/int cmd-len/int cmd argc/int (arg-len/int arg)*
+=>
+"RExe" cmd-len/int cmd argc/int (arg-len/int arg)* + FD
+"RExo" + CAP
+"Fail" errno/int
+
+
+where:
+
+stat = dev ino mode nlink uid gid rdev size blksize blocks atime mtime ctime
+       (all ints)
+
+}
+
+
+{\sect1 id={obj-fsobj}: \title- Filesystem objects: files, directories and symlinks
+\ps:
+
+make-marshal.pl contains the definitions for these methods.
+
+}
+
+
+{\sect1 id={obj-exec}: \title- Executable objects
+\ps:
+
+Executable objects are like files.  They respond to the "fsobj_stat"
+method.  You generally can't open them with the "file_open" method --
+this will give "Permission denied".  They support two methods besides
+the usual file methods.
+
+\pre:
+// Test whether this is an executable object.
+// Executables that are just files will not respond to this.
+"Exep"
+=> "Okay"
+
+"Exeo" ref/int data
+=> "Okay" return_code/int
+The data is an array of pairs:
+ * ("Argv", x):  x is an array of strings representing argv
+ * ("Env.", x):  x is an array of strings representing the environment
+   (usually each string is of the form "X=y")
+ * ("Fds.", x):  x is an array of (i, FD)
+ * ("Root", obj):  obj is the root directory
+ * ("Cwd.", string):  pathname of current working directory
+   (this can be omitted, in which case process will have no defined cwd)
+ * ("Pgid", int):  process group ID to set for the new process
+   (this is optional, but reading from the console won't work without
+   setting it, and neither will Ctrl-C or Ctrl-Z)
+The invocation returns when the process started has exited.  It returns
+the exit code that `wait' returns for the process.
+
+}
+
+
+{\sect1 id={obj-conn-maker}: \title- conn_maker object
+\ps:
+
+This has one method:
+
+\pre~
+"Mkco" M/int + (N objects)
+=> "Okay" + FD + (M objects)
+
+This creates a new connection on which the N objects are exported.
+It returns "Okay" and a file descriptor for the new connection.
+The new connection also imports M objects.  The method call returns
+these M objects.
+
+So far this is only used with M = 0.
+
+}
+
+
+{\sect1 id={obj-fs-op-maker}: \title- fs_op_maker object
+\ps:
+
+This has one method:
+
+\pre~
+"Mkfs" + root_dir/obj
+=> "Okay" + fs_op/obj
+
+This creates an fs_op object (see above) with root_dir as the root
+directory.  The current working directory is initially unset; you can
+set it with the "Chdr" (chdir) method.
+
+}

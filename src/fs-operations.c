@@ -81,10 +81,15 @@ int process_open_d(struct filesys_obj *root, struct dir_stack *cwd,
     *r_obj = dir_stack_downcast(ds);
     *err = EISDIR;
 
-    /* Give a warning about this */
-    fprintf(stderr, "plash: warning: using open() on a directory, `");
-    fprint_d(stderr, pathname);
-    fprintf(stderr, "', is not fully supported\n");
+    /* Warning disabled now that fchdir() works.  This warning is
+       printed too many times, especially with XEmacs, so it gets
+       annoying. */
+    if(0) {
+      /* Give a warning about this */
+      fprintf(stderr, "plash: warning: using open() on a directory, `");
+      fprint_d(stderr, pathname);
+      fprintf(stderr, "', is not fully supported\n");
+    }
 
     *dummy_fd = 1;
     return -1;

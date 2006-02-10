@@ -115,16 +115,13 @@ build_server () {
   # libc.so contains a reference to __libc_stack_end, which ld.so defines.
   # With a newer `ld', I have to link ld.so here too.  With an older one,
   # I could leave ld.so out.
-  $CC $OPTS_S \
-	src/chroot.c $LIBC_LINK \
-	obj/libplash.a -o bin/plash-chroot
-  $CC $OPTS_S \
-	src/exec-object.c $LIBC_LINK \
-	obj/libplash.a -o bin/exec-object
+  $CC $OPTS_S src/chroot.c $LIBC_LINK obj/libplash.a -o bin/plash-chroot
+  $CC $OPTS_S src/exec-object.c $LIBC_LINK obj/libplash.a -o bin/exec-object
 
-  $CC $OPTS_S \
-	src/run-emacs.c $LIBC_LINK \
-	obj/libplash.a -o bin/run-emacs
+  $CC $OPTS_S src/socket-publish.c $LIBC_LINK obj/libplash.a -o bin/socket-publish
+  $CC $OPTS_S src/socket-connect.c $LIBC_LINK obj/libplash.a -o bin/socket-connect
+
+  $CC $OPTS_S src/run-emacs.c $LIBC_LINK obj/libplash.a -o bin/run-emacs
 }
 
 

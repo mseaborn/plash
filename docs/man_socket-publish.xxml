@@ -1,0 +1,78 @@
+
+\refentry id={socket-publish}:
+
+\refmeta~
+\refentrytitle- plash-socket-publish
+\manvolnum- 1
+
+\refnamediv~
+\refname- plash-socket-publish
+\refpurpose- Make a Plash object reference available via a named socket
+
+\refsynopsisdiv~
+\synopsis- plash-socket-publish => \r+socket-pathname /x={\r:variable-name}
+
+
+{\refsect1: \title- Description
+\ps:
+
+This program makes a reference to a single Plash object available via
+a Unix domain socket -- that is, a named socket that appears in the
+filesystem.  This is useful for exporting an object that has been
+bound to a variable in one instance of the Plash shell, so that it can
+be used in other instances of the shell (eg. in a different terminal
+window).
+
+It can be used in conjunction with {\command:plash-socket-connect},
+which connects to a socket and returns a copy of the reference that
+the socket exports.
+
+If a socket already exists at {\r:socket-pathname}, the program
+removes it first.  (However, it will give an error if a file exists
+under that name.)
+
+This command is only useful when used in the Plash shell.
+
+}
+
+{\refsect1: \title- Limitations
+\ps:
+
+The process has to stick around as a proxy to forward method calls.
+
+The program can't tell when it can never receive any more connections
+-- ie. when the socket has been deleted from the filesystem or
+replaced -- so it runs indefinitely.  You have to stop the program
+manually.
+
+}
+
+{\refsect1: \title- Examples
+\ps:
+
+\pre~
+def edit_file = capcmd plash-run-emacs ...
+plash-socket-publish => ~/tmp/emacs /x=edit_file
+
+Then in another shell:
+
+\pre~
+def edit_file = capcmd plash-socket-connect => ~/tmp/emacs
+edit_file => some-file.txt
+
+}
+
+
+{\refsect1: \title- See also
+\ps:
+
+  {\command:plash}, {\command:plash-socket-connect}, {\command:plash-run-emacs}
+
+  /usr/share/doc/plash
+}
+
+{\refsect1: \title- Author
+  \ps:
+
+  Mark Seaborn <mseaborn@onetel.com>
+}

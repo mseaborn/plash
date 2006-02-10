@@ -37,6 +37,17 @@ void cap_close_all_connections(void);
 
 void cap_print_connections_info(FILE *fp);
 
+/* This is a more complex interface for listening on connections for
+   when you need to use select() on some other file descriptors at the
+   same time. */
+void cap_add_select_fds(int *max_fd,
+			fd_set *read_fds,
+			fd_set *write_fds,
+			fd_set *except_fds);
+void cap_handle_select_result(fd_set *read_fds,
+			      fd_set *write_fds,
+			      fd_set *except_fds);
+
 
 /* For cap-call-return.c: */
 

@@ -1,0 +1,289 @@
+
+{\sect1 id={msg-protocol}: \title- Protocol for messages with file descriptors
+\ps:
+
+Implemented by comms.c.
+
+The first protocol is used to send messages over a socket.  It simply
+divides the stream into messages.  Each message may contain data and
+file descriptors.
+
+Each message comprises:
+
+{\itemizedlist:
+\listitem\para- int32: "MSG!"
+\listitem\para- int32: size of data payload in bytes (not necessarily word-aligned)
+\listitem\para- int32: number of file descriptors
+\listitem\para- data payload, padded to word (4 byte) boundary
+}
+
+See the man pages sendmsg(2), recvmsg(2) and cmsg(3) for details about
+how file descriptors are sent across sockets.
+}
+
+
+{\sect1 id={cap-protocol}: \title- Object-capability protocol
+{\ps:
+
+Implemented by cap-protocol.c.
+
+This is layered on top of the message protocol.  It allows references
+to an arbitrary number of objects to be exported across a connection.
+
+Objects can be invoked, passing data, file descriptors and references
+to other objects as arguments.  Object references can be dropped,
+allowing the storage associated with the reference to be reclaimed;
+the storage associated with the object itself can also potentially be
+reclaimed.
+
+There are two endpoints to a connection.  Each may export object
+references to the other.  The protocol is symmetric -- it doesn't
+distinguish between client and server.  For the sake of explanation,
+however, let us call the endpoints A and B.  Everything below would
+still hold true if A and B were swapped.
+
+At any given point, A is exporting a set of object references to B.
+Each reference has an integer ID.  These are typically interpreted as
+indexes into an array (the `export table'), so that when A receives an
+invocation request from B, it can look up the object in the array and
+invoke it.
+
+The set of object references that A exports to B may be extended with
+new references by messages that A sends to B (but not by messages B
+sends to A).  These object references may be removed by messages that
+B sends to A (but not by messages A sends to B).
+
+Messages in the protocol contain object IDs, which contain two parts.
+The lower 8 bits are a `namespace ID'.  This indicates whether the
+reference is to an object exported by A or by B, and whether a
+newly-exported reference is single-use.  The rest of the object ID is
+the reference ID (an index into an export table).
+
+The possible namespace IDs are:
+
+{\programlisting:
+#define CAPP_NAMESPACE_RECEIVER                 0
+#define CAPP_NAMESPACE_SENDER                   1
+#define CAPP_NAMESPACE_SENDER_SINGLE_USE        2
+}
+
+The messages that A may send to B are:
+}
+{\itemizedlist:
+
+  {\listitem\ps:
+
+   "Invk" cap/int no_cap_args/int cap_args data + FDs
+
+   Invokes an object X.  X is denoted by the object ID `cap'.  X must
+   be an object that B exports to A, so `cap' may only use the
+   RECEIVER namespace.  (Since A is sending, B is the receiver.)
+
+   `cap_args' is an array of object IDs of length `no_cap_args'.
+   These denote objects to be passed as arguments to X.  These object
+   IDs may use any of the three namespace IDs:
+
+   {\itemizedlist:
+   {\listitem\ps:
+      For the RECEIVER namespace, this refers to an object that B
+      exports to A.
+   }
+   {\listitem\ps:
+      For the SENDER namespace, this indicates that A has added a new
+      reference to the set of objects it exports to B.  From this
+      point on, B may send A messages referring to this ID (except
+      that B will refer to the object with the RECEIVER namespace
+      instead of SENDER).
+   }
+   {\listitem\ps:
+      The SENDER_SINGLE_USE namespace works the same as SENDER,
+      except that it indicates to B that the reference is single use.
+      B may only invoke this object once.  Once B invokes the object,
+      the reference becomes invalid.  (However, B may pass the object
+      as an argument without this restriction.)
+   }
+   }
+
+   The message may include file descriptors to pass as arguments to X.
+
+   When B receives this message, it invokes X with the specified
+   arguments.  If `cap' is a reference that is exported as single-use,
+   B removes the reference from its export table.
+
+  }
+
+  {\listitem\ps:
+
+   "Drop" cap/int
+
+   Drops a reference.  `cap' is an object ID that B exports to A, so
+   `cap' may only use the RECEIVER namespace.
+
+   When B receives this message, it removes the reference `cap' from
+   its export table.  B may also delete the object X that `cap'
+   denotes if there are no other references to X.
+
+  }
+}
+
+
+{\sect2: \title- Closing the connection
+\ps:
+
+Violations:  If either end receives a message that is illegal, such as
+messages that contain illegal object IDs, it may choose to terminate
+the connection.  This would mean closing the file descriptor for the
+socket.  Assuming there are no other copies of this file descriptor in
+the system (in this or other processes), the other end will get an
+error when it tries to read from its socket, and also regard the
+connection as broken.  Having closed the connection, an endpoint is
+free to delete its export table, and possibly free the objects it
+contained references to.
+
+In general, endpoints are free to close the connection anyway, if they
+want to.
+
+When no references are exported from B to A or A to B, it is
+conventional to close the connection, because it is of no use: no
+messages can legally be sent on it.  Conventionally, A will close the
+connection rather than sending a "Drop" message for the last reference
+that B exports to A, when A exports nothing to B.
+}
+
+{\sect2: \title- Conventions
+
+{\sect3: \title- Initial state of a newly-created connection
+\ps:
+
+A and B start off holding socket file descriptors connected to each
+other (typically created by socketpair()).  A exports M references to
+B; these are given IDs 0 to M-1.  B exports N references to A; these
+are given IDs 0 to N-1.
+
+The numbers M and N must be made known to both A and B by some means
+outside of the protocol, just as the file descriptors are obtained by
+some means outside of the protocol.
+
+If A and B have differing views about what M and N are, one will
+probably send messages that the other sees as a protocol violation,
+and the latter may close the connection.
+
+Of course, M and N and the file descriptors can be sent in invocations
+using the protocol.  See the conn_maker object.
+
+Also see the {\envar:PLASH_CAPS} environment variable.
+}
+
+{\sect3: \title- Call-return
+\ps:
+
+With most invocations, you want to receive a result (even if it's just
+an indication of success or failure).  In these cases, an object X is
+invoked with a message starting with "Call".  The first object
+argument is a `return continuation', C.  When it has finished, X
+invokes C with arguments containing the results.
+
+What happens if C is never invoked?  This might happen if a connection
+is broken.  C will get freed in this case, perhaps as a result of a
+"Drop" message, and this can be used to indicate to the caller that
+the call failed.
+
+What happens if C is invoked more than once?  C should simply ignore
+any invocations after the first one.
+
+A return continuation is typically exported as a single-use
+capability.  This is not so much to stop it being invoked more than
+once (because subsequent invocations can easily be ignored), but more
+to prevent the build-up of exported references:
+
+{\itemizedlist:
+
+{\listitem\ps:
+
+   When A repeatedly calls B, B might fail to drop the references to
+   the return continuations that A passes it after invoking them.
+   This would cause A's export table to fill up with useless
+   references.  A could not legally re-use the IDs for these
+   references according to the protocol.  However, if A passes the
+   return continuations to B as single-use references, B cannot
+   legally use their IDs after invoking them, so A can re-use the IDs
+   and free up space in its export table.  (If B does invoke an
+   already-invoked single-use reference, it is violating the protocol
+   and A might close the connection as a result.)
+
+   However, this was not the immediate motivation for adding
+   single-use references to the protocol.  More importantly:
+
+}
+
+{\listitem\ps:
+
+   libc.so and ld-linux.so (the dynamic linker) both need to make
+   calls to objects in order to open files, etc.  So they both need to
+   pass return continuations, and allocate IDs for them.  If the
+   return continuations' IDs are invalidated after each call, libc.so
+   and ld-linux.so can allocate the IDs without regard to each other.
+   It is much simpler when they don't need to co-ordinate but can
+   still share the same connection.  Each return continuation can be
+   exported with the same ID; these are the only objects exported from
+   this end of the connection.
+
+   The same issue arises when passing control to a new process image
+   using "exec".
+
+   Without single-use references, ld-linux.so might make a call and
+   receive an "Invk" message as a result (but not wait for any further
+   messages).  Then libc.so might make a call, then listen for a
+   result and receive a "Drop" message for a reference it never
+   exported.  libc.so would treat this as a protocol violation and
+   shut down the connection.  With single-use references, the "Drop"
+   message is unnecessary, because it is implied.
+
+}}
+
+}
+}
+
+{\sect2: \title- Future extensions
+\ps:
+
+The protocol does not provide a facility for message pipelining,
+ie. letting A invoke the result of a call to B before the call
+returns (saving the time of a round trip).
+
+Such a facility involves letting A's messages add entries to B's
+export tables.  A would be able to choose IDs for references that B
+exports.  It would no longer be the case that B allocates all the IDs
+that it exports.
+}
+}
+
+
+{\sect1 id={env-vars}: \title- {\envar:PLASH_COMM_FD} and {\envar:PLASH_CAPS}
+\ps:
+
+These environment variables are used to set up the connection and
+objects for standard services, like access to the filesystem.
+
+{\envar:PLASH_COMM_FD} contains the number of a file descriptor for a
+connection to a server.
+
+{\envar:PLASH_CAPS} says how many objects are exported by the server
+over the connection, and what they are.  It is a semicolon-separated
+list of names for services.  The index of a service name in the list
+is the object ID for the service.
+
+For example, "fs_op;conn_maker;;;something_else" says that conn_maker
+has object ID 1 and something_else has object ID 4.
+
+Standard services are:
+{\itemizedlist:
+\listitem\para- fs_op
+\listitem\para- conn_maker
+\listitem\para- fs_op_maker
+\listitem\para- union_dir_maker
+\listitem\para- fab_dir_maker
+\listitem\para- return_cont (this is passed by the "capcmd" expression)
+}
+
+}

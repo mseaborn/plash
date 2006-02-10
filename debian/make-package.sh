@@ -28,23 +28,28 @@ set -e
 
 rm -rf debian/tmp
 install -d debian/tmp/DEBIAN \
-	-d debian/tmp/usr/share/doc/$PACKAGE \
+	-d debian/tmp/usr/share/doc/$PACKAGE/html \
 	-d debian/tmp/usr/share/man/man1 \
 	-d $CHROOT_JAIL/special \
 	-d $CHROOT_JAIL/plash-uid-locks \
 	-d $LIBDIR \
-	-d debian/tmp/usr/bin
+	-d debian/tmp/usr/bin \
+	-d debian/tmp/usr/share/emacs/site-lisp/plash/
 
 cp -pv debian/copyright debian/tmp/usr/share/doc/$PACKAGE/
 cp -pv debian/changelog debian/tmp/usr/share/doc/$PACKAGE/changelog
 gzip -9 debian/tmp/usr/share/doc/$PACKAGE/changelog
 cp -pv README NOTES NOTES.exec BUGS protocols.txt \
 	debian/tmp/usr/share/doc/$PACKAGE/
+cp -pv docs/out-html/* debian/tmp/usr/share/doc/$PACKAGE/html/
 # Install man pages
-cp -pv docs/plash.1 \
-	docs/exec-object.1 \
-	docs/plash-opts.1 \
-	docs/plash-chroot.1 \
+cp -pv  docs/out-man/plash.1 \
+	docs/out-man/exec-object.1 \
+	docs/out-man/plash-opts.1 \
+	docs/out-man/plash-chroot.1 \
+	docs/out-man/plash-run-emacs.1 \
+	docs/out-man/plash-socket-connect.1 \
+	docs/out-man/plash-socket-publish.1 \
 	debian/tmp/usr/share/man/man1/
 gzip -9 debian/tmp/usr/share/man/man1/*.1
 ( cd debian/tmp/usr/share/man/man1 &&
@@ -66,7 +71,21 @@ strip $STRIP_ARGS bin/plash-chroot   -o debian/tmp/usr/bin/plash-chroot
 strip $STRIP_ARGS bin/plash-opts     -o debian/tmp/usr/bin/plash-opts
 strip $STRIP_ARGS bin/plash-opts-gtk -o debian/tmp/usr/bin/plash-opts-gtk
 strip $STRIP_ARGS bin/exec-object    -o debian/tmp/usr/bin/exec-object
-dpkg-shlibdeps bin/plash bin/plash-chroot bin/plash-opts bin/plash-opts-gtk bin/exec-object
+strip $STRIP_ARGS bin/socket-connect -o debian/tmp/usr/bin/plash-socket-connect
+strip $STRIP_ARGS bin/socket-publish -o debian/tmp/usr/bin/plash-socket-publish
+strip $STRIP_ARGS bin/run-emacs      -o debian/tmp/usr/bin/plash-run-emacs
+dpkg-shlibdeps \
+	bin/plash \
+	bin/plash-chroot \
+	bin/plash-opts \
+	bin/plash-opts-gtk \
+	bin/exec-object \
+	bin/socket-connect \
+	bin/socket-publish \
+	bin/run-emacs
+
+# Install Emacs Lisp file
+cp -pv src/plash-gnuserv.el debian/tmp/usr/share/emacs/site-lisp/plash/
 
 dpkg-gencontrol -isp
 

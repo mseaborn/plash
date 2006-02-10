@@ -27,6 +27,11 @@
 #include "build-fs.h"
 
 
+#define MOD_DEBUG 0
+#define MOD_MSG "build_fs: "
+#define LOG stderr
+
+
 int next_inode = 1;
 
 struct node *fs_make_empty_node()
@@ -79,14 +84,14 @@ void fs_print_tree(int indent, struct node *node)
   int i;
   struct node_list *list;
   
-  for(i = 0; i < indent; i++) putchar(' ');
+  /* for(i = 0; i < indent; i++) putchar(' '); */
   printf("obj: symlink=%s, attach=%s\n",
 	 node->symlink_dest ? node->symlink_dest : "none",
 	 node->attach_slot ? "slot" : "none");
   for(list = node->children; list; list = list->next) {
     for(i = 0; i < indent+2; i++) putchar(' ');
-    printf("%s =>\n", list->name);
-    fs_print_tree(indent + 4, list->node);
+    printf("\"%s\" => ", list->name);
+    fs_print_tree(indent + 2, list->node);
   }
 }
 
@@ -233,18 +238,22 @@ int fs_attach_at_pathname(struct node *root_node, struct dir_stack *cwd_ds,
        filesystem tree.
      * This is used in the first call, and to resolve any symlinks in
        the "tail" position.  Other symlinks are in directory position.
-     * "create" has a meaning.
+     * The FS_SLOT_RWC/FS_OBJECT_RW flags have a meaning.
      * Will either return ATTACHED or 0 and an error.
    Otherwise:
    If it reached a directory, returns REACHED_DIR, and fills out "result"
    with a dirstack.  This is used for following symlinks.
    If it reached a file, returns REACHED_FILE.
    If it got an error, returns 0. */
+/* The purpose of the `dir_only' argument is to ensure that the function
+   will not attach a file object when the pathname ends with a slash,
+   including when the last element is a symlink.  This doesn't apply
+   when the flag FS_SLOT_RWC is given, however. */
 int fs_resolve_populate_aux
   (region_t r,
    struct dirnode_stack *root, struct dirnode_stack *cwd,
    seqf_t filename, int symlink_limit,
-   int attach, int create, int dir_only,
+   int attach, int flags, int dir_only,
    struct dirnode_stack **result, int *err)
 {
   struct dirnode_stack *dirstack;  
@@ -282,20 +291,54 @@ int fs_resolve_populate_aux
       char *name1 = strdup_seqf(name);
       struct filesys_obj *obj;
       int obj_type;
+      if(MOD_DEBUG) fprintf(LOG, MOD_MSG "fs_resolve_populate_aux: \"%s\": ", name1);
 
       /* Attach as a writable slot.  NB. This code will attach "foo" as
 	 a writable slot but not do the same for "foo/bar/..".  It won't
 	 check that an object is a directory when the pathname has a
 	 trailing slash.  FIXME! */
-      if(end && attach && create) {
+      if(end && attach && (flags & FS_SLOT_RWC)) {
 	struct node *next_node = tree_traverse(dirstack->node, name1);
+	if(MOD_DEBUG) fprintf(LOG, "attach writable slot\n");
 	attach_rw_slot(next_node,
 		       make_generic_slot(inc_ref(dirstack->dir), name1));
+	
+	/* If following symlinks is enabled, don't stop here at attaching
+	   the slot.  We need to look at what's in the slot.  Rather than
+	   dropping through to the usual symlink case, the code is
+	   duplicated here because it's slightly different:
+	    * There is no error if the slot is empty.
+	    * There is no error if the slot contains a dangling symlink,
+	      and if it contains a file or dir, no further action is
+	      taken.
+	    * In this case, we don't attach a symlink into the tree
+	      (as we're attaching the slot that contains it). */
+	if((flags & FS_FOLLOW_SYMLINKS) && symlink_limit > 0) {
+	  /* NB. Carry on using name1 -- should be live. */
+	  obj = dirstack->dir->vtable->traverse(dirstack->dir, name1);
+	  if(obj) {
+	    obj_type = obj->vtable->type(obj);
+	    if(obj_type == OBJT_SYMLINK) {
+	      seqf_t link_dest;
+	      if(obj->vtable->readlink(obj, r, &link_dest, err) >= 0) {
+		/* Ignore any errors this produces.  Maybe they should be
+		   given as warnings instead. */
+		fs_resolve_populate_aux(r, root, dirstack, link_dest,
+					symlink_limit-1, attach, flags,
+					trailing_slash, result, err);
+	      }
+	    }
+	    filesys_obj_free(obj);
+	  }
+	}
+	
 	dirnode_stack_free(dirstack);
 	return ATTACHED_OBJ;
       }
+      
       obj = dirstack->dir->vtable->traverse(dirstack->dir, name1);
       if(!obj) {
+	if(MOD_DEBUG) fprintf(LOG, "not found\n");
 	free(name1);
 	dirnode_stack_free(dirstack);
 	*err = ENOENT;
@@ -313,9 +356,12 @@ int fs_resolve_populate_aux
 	new_d->parent = dirstack;
 	new_d->name = name1;
 	dirstack = new_d;
+	if(MOD_DEBUG) fprintf(LOG, "dir\n");
+	/* Drop through to loop */
       }
       else if(obj_type == OBJT_SYMLINK) {
 	seqf_t link_dest;
+	if(MOD_DEBUG) fprintf(LOG, "symlink\n");
 	free(name1);
 	if(symlink_limit <= 0) {
 	  filesys_obj_free(obj);
@@ -332,22 +378,22 @@ int fs_resolve_populate_aux
 
 	/* Attaches the symlink into the filesystem tree.  NB. This is a
 	   copy.  If the underlying filesystem changes, this won't change.
-	   Furthermore, a client can't modify/delete the symlink.
-	   Should give different behaviour if "create" is set. */
+	   Furthermore, a client can't modify/delete the symlink. */
 	if(next_node->symlink_dest) free(next_node->symlink_dest);
 	next_node->symlink_dest = strdup_seqf(link_dest);
 	
-	{
+	if(flags & FS_FOLLOW_SYMLINKS) {
 	  int rc = fs_resolve_populate_aux(r, root, dirstack,
 					   link_dest, symlink_limit-1,
 					   end ? attach : 0,
-					   end ? create : 0,
-					   trailing_slash || dir_only,
+					   flags,
+					   (end && trailing_slash) || dir_only,
 					   result, err);
 	  dirnode_stack_free(dirstack);
 	  if(end) return rc;
 	  else if(rc == REACHED_DIR) {
 	    dirstack = *result;
+	    /* Drop through to loop */
 	  }
 	  else if(rc == REACHED_FILE) {
 	    *err = ENOTDIR;
@@ -356,13 +402,31 @@ int fs_resolve_populate_aux
 	  else if(rc == 0) return 0;
 	  else { assert(0); *err = EIO; return 0; }
 	}
+	else {
+	  dirnode_stack_free(dirstack);
+	  if(end) return ATTACHED_OBJ;
+	  else {
+	    /* We want to say that we reached a symlink but we're not
+	       following them.  This errno is vaguely appropriate:
+	       open() gives it when using O_NOFOLLOW. */
+	    *err = ELOOP;
+	    return 0; /* Error */
+	  }
+	}
       }
-      else if(obj_type == OBJT_FILE) {
+      /* Treat remaining objects as files. */
+      else /* if(obj_type == OBJT_FILE) */ {
+	if(MOD_DEBUG) fprintf(LOG, "file\n");
 	free(name1);
 	dirnode_stack_free(dirstack);
 	if(end && !(trailing_slash || dir_only)) {
 	  if(attach) {
-	    attach_ro_obj(next_node, obj);
+	    if(flags & FS_OBJECT_RW) {
+	      attach_rw_slot(next_node, make_read_only_slot(obj));
+	    }
+	    else {
+	      attach_ro_obj(next_node, obj);
+	    }
 	    return ATTACHED_OBJ;
 	  }
 	  else {
@@ -376,20 +440,25 @@ int fs_resolve_populate_aux
 	  return 0; /* Error */
 	}
       }
+#if 0
+      else {
+	*err = ENOTDIR; /* anything more appropriate? */
+	return 0; /* Error */
+      }
+#endif
     }
   }
 
   /* Reached a directory */
-  /* This case is used for attaching the pathnames "." and "/".
-     They can be attached as writable, but not as writable slots. */
   if(attach) {
-    inc_ref(dirstack->dir);
-    if(create) {
-      attach_rw_slot(dirstack->node, make_read_only_slot(dirstack->dir));
+    /* This case is used for attaching the pathnames "." and "/".
+       They can be attached as writable, but not as writable slots. */
+    if(flags & (FS_SLOT_RWC | FS_OBJECT_RW)) {
+      attach_rw_slot(dirstack->node, make_read_only_slot(inc_ref(dirstack->dir)));
     }
     else {
       /* FIXME: produce warning for overwriting? */
-      attach_ro_obj(dirstack->node, dirstack->dir);
+      attach_ro_obj(dirstack->node, inc_ref(dirstack->dir));
     }
     dirnode_stack_free(dirstack);
     return ATTACHED_OBJ;
@@ -404,7 +473,7 @@ int fs_resolve_populate_aux
 int fs_resolve_populate
   (struct filesys_obj *root_obj, struct node *root_node,
    struct dir_stack *cwd_ds,
-   seqf_t filename, int create, int *err)
+   seqf_t filename, int flags, int *err)
 {
   struct dirnode_stack *root, *cwd;
   int end;
@@ -433,7 +502,7 @@ int fs_resolve_populate
     region_t r = region_make();
     struct dirnode_stack *result_junk; /* Result not used or filled out */
     int rc = fs_resolve_populate_aux(r, root, cwd, filename, SYMLINK_LIMIT,
-				     1 /* attach */, create, 0 /* dir_only */,
+				     1 /* attach */, flags, 0 /* dir_only */,
 				     &result_junk, err);
     region_free(r);
     dirnode_stack_free(root);

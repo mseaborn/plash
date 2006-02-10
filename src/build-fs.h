@@ -35,10 +35,30 @@ int attach_ro_obj(fs_node_t node, cap_t obj);
 int attach_rw_slot(fs_node_t node, struct filesys_obj *obj);
 int fs_attach_at_pathname(fs_node_t root_node, struct dir_stack *cwd_ds,
 			  seqf_t pathname, cap_t obj, int *err);
+
+/* Flags for use with fs_resolve_populate().
+   If neither FS_SLOT_RW nor FS_OBJECT_RW are both set, it will attach
+   a read-only version of the object in a read-only slot.
+   If FS_SLOT_RW is set, the slot is attached, with read-write-create
+   access (and FS_OBJECT_RW is ignored).
+   Otherwise, if FS_OBJECT_RW is set, the writable version of the object
+   is attached in a read-only slot -- this is useful for devices and
+   sockets (such as /dev/null and /tmp/.X11-unix/X0) where you want to
+   grant the ability to open with write access or connect to a socket,
+   without granting the ability to delete the object from the slot and
+   replace it.
+   If FS_FOLLOW_SYMLINKS is set, the function will follow symlinks in
+   all parts of the pathname, and potentially grant access to multiple
+   objects or slots as a result. */
+#define FS_READ_ONLY        0x0
+#define FS_SLOT_RWC         0x1
+#define FS_OBJECT_RW        0x2
+#define FS_FOLLOW_SYMLINKS  0x4
+
 int fs_resolve_populate
   (struct filesys_obj *root_obj, fs_node_t root_node,
    struct dir_stack *cwd_ds,
-   seqf_t filename, int create, int *err);
+   seqf_t filename, int flags, int *err);
 
 struct filesys_obj *fs_make_root(fs_node_t node);
 

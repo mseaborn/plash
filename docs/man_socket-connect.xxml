@@ -1,0 +1,77 @@
+
+\refentry id={socket-connect}:
+
+\refmeta~
+\refentrytitle- plash-socket-connect
+\manvolnum- 1
+
+\refnamediv~
+\refname- plash-socket-connect
+\refpurpose- Get a reference to a Plash object that was exported to a socket
+
+\refsynopsisdiv~
+\synopsis- def {\r:variable-name} = capcmd plash-socket-connect => \r+socket-pathname
+
+
+{\refsect1: \title- Description
+\ps:
+
+The program {\r:plash-socket-publish} will make a Plash object
+reference available via a socket.  {\r:plash-socket-connect} is its
+counterpart: it gets a copy of the reference from the socket, and
+returns it.  These programs can be used to share object references
+between different instances of the Plash shell.
+
+This is a command that is only useful when called using a "capcmd"
+expression from Plash.
+
+You must grant the program write access to the socket for it to be
+able to connect to the socket (hence the use of "=>" in the synopsis).
+
+}
+
+{\refsect1: \title- Return value
+\ps:
+
+The return value given by exit() isn't used.  This program returns an
+object reference using the "return_cont" mechanism.  It doesn't exit
+until all the references to the object have been dropped.
+
+}
+
+{\refsect1: \title- Limitations
+\ps:
+
+The process has to stick around as a proxy to forward method calls.
+
+}
+
+{\refsect1: \title- Examples
+\ps:
+
+\pre~
+def edit_file = capcmd plash-run-emacs ...
+plash-socket-publish => ~/tmp/emacs /x=edit_file
+
+Then in another shell:
+
+\pre~
+def edit_file = capcmd plash-socket-connect => ~/tmp/emacs
+edit_file => some-file.txt
+
+}
+
+
+{\refsect1: \title- See also
+\ps:
+
+  {\command:plash}, {\command:plash-socket-publish}, {\command:plash-run-emacs}
+
+  /usr/share/doc/plash
+}
+
+{\refsect1: \title- Author
+  \ps:
+
+  Mark Seaborn <mseaborn@onetel.com>
+}

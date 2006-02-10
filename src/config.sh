@@ -18,7 +18,7 @@
 # USA.
 
 
-PLASH_VERSION=1.10
+PLASH_VERSION=1.11
 
 JAIL_DIR=/var/lib/plash-chroot-jail
 JAIL_INSTALL=$JAIL_DIR/special

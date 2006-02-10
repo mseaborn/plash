@@ -715,12 +715,6 @@ cap_t *cap_make_connection(region_t r, int sock_fd,
   conn->sock_fd = sock_fd;
   conn->ready_to_read = 0;
 
-  /*
-  conn->export = 0;
-  conn->export_size = 0;
-  conn->export_count = 0;
-  conn->export_next = 0;
-  */
   conn->export_size = export.size;
   conn->export_count = export.size;
   conn->export_next = export.size;
@@ -929,6 +923,60 @@ void cap_run_server()
     if(!cap_run_server_step()) break;
   }
 }
+
+
+
+/* Very similar to init_fd_set(). */
+void cap_add_select_fds(int *max_fd,
+			fd_set *read_fds,
+			fd_set *write_fds,
+			fd_set *except_fds)
+{
+  struct c_server_state *state = &server_state;
+  struct connection *node;
+  for(node = state->list.next; !node->l.head; node = node->l.next) {
+    int fd = node->comm->sock;
+    if(*max_fd < fd+1) *max_fd = fd+1;
+    FD_SET(fd, read_fds);
+  }
+}
+
+void cap_handle_select_result(fd_set *read_fds,
+			      fd_set *write_fds,
+			      fd_set *except_fds)
+{
+  struct c_server_state *state = &server_state;
+  struct connection *conn;
+  for(conn = state->list.next;
+      !conn->l.head;
+      conn = conn->l.next) {
+    if(FD_ISSET(conn->comm->sock, read_fds)) {
+      state->total_ready_to_read += 1 - conn->ready_to_read;
+      conn->ready_to_read = 1;
+    }
+  }
+  if(state->total_ready_to_read > 0) {
+    for(conn = state->list.next; !conn->l.head; conn = conn->l.next) {
+      if(conn->ready_to_read) {
+	/* Move this connection to the end of the list to ensure fairness. */
+	/* Remove from the list. */
+	conn->l.prev->l.next = conn->l.next;
+	conn->l.next->l.prev = conn->l.prev;
+	/* Insert at the end. */
+	conn->l.prev = state->list.prev;
+	conn->l.next = (struct connection *) &state->list;
+	state->list.prev->l.next = conn;
+	state->list.prev = conn;
+
+	listen_on_connection(conn);
+	return;
+      }
+    }
+    assert(0); /* Could happen if select() is returning inconsistent info */
+  }
+}
+
+
 
 /* For debugging: */
 #ifndef IN_RTLD

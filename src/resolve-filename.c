@@ -477,6 +477,8 @@ int resolve_obj(region_t r, struct filesys_obj *root, struct dir_stack *cwd,
 	  }
 	}
       }
+      /* If the object type is not recognised, it is treated as a file,
+	 allowing for putting arbitrary objects into the filesystem. */
       else /* if(obj_type == OBJT_FILE) */ {
 	if(MOD_DEBUG) fprintf(LOG, "file\n");
 	free(name1);

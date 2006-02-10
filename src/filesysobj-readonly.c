@@ -103,31 +103,4 @@ int readonly_readlink(struct filesys_obj *obj1, region_t r, seqf_t *result, int 
 }
 
 
-#if 0
-struct filesys_obj_vtable readonly_obj_vtable = {
-  /* .free = */ readonly_free,
-  /* .cap_invoke = */ local_obj_invoke,
-  /* .cap_call = */ marshal_cap_call,
-  /* .single_use = */ 0,
-  /* .type = */ readonly_type,
-  /* .stat = */ readonly_stat,
-  /* .utimes = */ refuse_utimes,
-  /* .chmod = */ refuse_chmod,
-  /* .open = */ readonly_open,
-  /* .socket_connect = */ refuse_socket_connect,
-  /* .traverse = */ readonly_traverse,
-  /* .list = */ readonly_list,
-  /* .create_file = */ refuse_create_file,
-  /* .mkdir = */ refuse_mkdir,
-  /* .symlink = */ refuse_symlink,
-  /* .rename = */ refuse_rename_or_link,
-  /* .link = */ refuse_rename_or_link,
-  /* .unlink = */ refuse_unlink,
-  /* .rmdir = */ refuse_rmdir,
-  /* .socket_bind = */ refuse_socket_bind,
-  /* .readlink = */ readonly_readlink,
-  1
-};
-#endif
-
 #include "out-vtable-filesysobj-readonly.h"

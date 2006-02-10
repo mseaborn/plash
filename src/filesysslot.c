@@ -22,20 +22,6 @@
 #include "filesysslot.h"
 
 
-/*
-void filesys_slot_free(struct filesys_slot *slot)
-{
-  assert(slot);
-  assert(slot->refcount > 0);
-  slot->refcount--;
-  if(slot->refcount <= 0) {
-    slot->vtable->free(slot);
-    free(slot);
-  }
-}
-*/
-
-
 DECLARE_VTABLE(gen_slot_vtable);
 DECLARE_VTABLE(ro_slot_vtable);
 
@@ -163,31 +149,5 @@ struct filesys_obj *make_read_only_slot(struct filesys_obj *obj)
   return (void *) slot;
 }
 
-
-#if 0
-static struct filesys_slot_vtable gen_slot_vtable = {
-  /* .free = */ gen_slot_free,
-  /* .get = */ gen_slot_get,
-  /* .slot_create_file = */ gen_slot_create_file,
-  /* .slot_mkdir = */ gen_slot_mkdir,
-  /* .slot_symlink = */ gen_slot_symlink,
-  /* .slot_unlink = */ gen_slot_unlink,
-  /* .slot_rmdir = */ gen_slot_rmdir,
-  /* .slot_socket_bind = */ gen_slot_socket_bind,
-  1
-};
-
-static struct filesys_slot_vtable ro_slot_vtable = {
-  /* .free = */ ro_slot_free,
-  /* .get = */ ro_slot_get,
-  /* .slot_create_file = */ ro_slot_create_file,
-  /* .slot_mkdir = */ ro_slot_mkdir,
-  /* .slot_symlink = */ ro_slot_symlink,
-  /* .slot_unlink = */ ro_slot_unlink,
-  /* .slot_rmdir = */ ro_slot_rmdir,
-  /* .slot_socket_bind = */ ro_slot_socket_bind,
-  1
-};
-#endif
 
 #include "out-vtable-filesysslot.h"

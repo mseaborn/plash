@@ -23,11 +23,6 @@
 # This program installs the libc libraries (not including ld.so/ld-linux.so).
 # They come from different places and are given different version numbers.
 
-if(!(scalar(@ARGV) == 2 && $ARGV[0] eq '--dest-dir')) {
-  die "Usage: install.pl --dest-dir DIR"
-}
-my $dest_dir = $ARGV[1];
-
 my $libs = [
   ['shobj/libc.so', 'libc.so.6'],
   ['shobj/libpthread.so', 'libpthread.so.0'],
@@ -44,16 +39,41 @@ my $libs = [
   ['glibc/login/libutil.so', 'libutil.so.1'],
 ];
 
-foreach my $x (@$libs) {
-  do_cmd('strip',
-	 '--remove-section=.comment',
-	 '--remove-section=.note',
-	 $x->[0], '-o', "$dest_dir/$x->[1]");
+if(scalar(@ARGV) == 2 && $ARGV[0] eq '--dest-dir') {
+  my $dest_dir = $ARGV[1];
+
+  foreach my $x (@$libs) {
+    do_cmd('strip',
+	   '--remove-section=.comment',
+	   '--remove-section=.note',
+	   $x->[0], '-o', "$dest_dir/$x->[1]");
+  }
+
+  # do_cmd('strip', 'mrs/ld.so', '-o', "$dir/ld-linux.so.2");
+  # do_cmd('chmod', '+x', "$dir/ld-linux.so.2");
 }
+elsif(scalar(@ARGV) == 1 && $ARGV[0] eq '--local-cp') {
+  my $dest_dir = `. src/config.sh && echo \$LIB_INSTALL`;
+  chomp($dest_dir);
+  if($dest_dir eq '') { die }
+  print "Installing into `$dest_dir'\n";
 
-# do_cmd('strip', 'mrs/ld.so', '-o', "$dir/ld-linux.so.2");
-# do_cmd('chmod', '+x', "$dir/ld-linux.so.2");
-
+  # If you just copy to the destination file, it overwrites the
+  # destination file which keeps the same inode, and is likely being
+  # used by other processes, which will crash.  If you rename a file
+  # on top of the destination file, the destination file is unlinked
+  # but can still exist; the new file has a new inode.
+  foreach my $x (@$libs) {
+    do_cmd('cp', $x->[0], "$dest_dir/$x->[1].new");
+    rename("$dest_dir/$x->[1].new", "$dest_dir/$x->[1]") || die "Can't rename";
+  }
+  print "done\n";
+}
+else {
+  print "Usage: install.pl --dest-dir DIR\n";
+  print "or:    install.pl --local-cp\n";
+  die;
+}
 
 
 sub do_cmd {

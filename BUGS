@@ -1,16 +1,71 @@
 
 Programs that don't work:
 
+gcc:
+tries 1000 times to open files in /tmp in a loop (so hangs for a while),
+then aborts (without a descriptive error)
+-- really, it should test for EEXIST
+
 mkisofs:
 /usr/bin/mkisofs: Operation not permitted. Panic cannot set back efective uid.
 It does the following:
 setreuid32(0xffffffff, 0x1f6)           = -1 EPERM (Operation not permitted)
 where 0x1f6 = 502 (mrs), the UID it believes it already has
 
-mailq
+make:
+setresuid32(0xffffffff, 0x1f6, 0xffffffff) = -1 EPERM (Operation not permitted)
+(but this doesn't happen with Debian, even though make is 3.79.1 on both)
+
+mailq:
+masqmail is setuid root, and it tries to close all file descriptors,
+and consequently cuts off its access to the server.
+
+emacs:
+  X-plash$ emacs
+  emacs: Memory exhausted--use M-x save-some-buffers RET
+I'm not sure why this is happening.
+
+xemacs:
+Running the shell "shell" gives:
+  sendmsg: Bad file descriptor
+  recvmsg: Bad file descriptor
+  [2622] cap-protocol: [fd 5] to-server: connection error, errno 9 (Bad file descriptor)
+  Can't exec program /bin/sh
+  Process shell exited abnormally with code 1
+It would appear that XEmacs is closing the file descriptor that Plash uses.
+
+xemacs: also relies on pseudo-terminals; do this:
+nm /usr/bin/xemacs | egrep 'getpt|grantpt|unlockpt|ptsname|openpty|forkpty'
+
+xemacs:
+Filename completion doesn't seem to work on fabricated directories,
+only real directories.  Is it relying on the object type being included
+in directory listings?
 
 
 Bugs in Plash:
+
+Race condition:
+connect() on Unix domain sockets presumably follows symlinks, and
+there is no way to switch this off.  This means an adversary could
+replace a domain socket with a symlink to exploit the race condition
+and open sockets in the server's namespace.
+(bind() probably doesn't follow symlinks; it probably behaves like
+open() with O_CREAT|O_EXCL.)
+Note that this is a race condition between servers.  If there was only
+one server process providing real filesystem objects, there would be
+no race condition, because socket_connect() would be atomic.
+Possible solution:
+ * The server has a private directory in which no server will create
+   symlinks on behalf of a client.
+   The server's socket_connect() method hardlinks the socket file into
+   the private directory, checks that the object that got hardlinked
+   is not a symlink, and then calls connect() on it.
+    * Problem: this doesn't work across devices.  We could try creating
+      a hard link in the same directory, but that doesn't work if the
+      server doesn't have write access to the directory.
+      (But then, if the server doesn't have write access *and other
+      servers don't either* the symlink attack cannot be carried out.)
 
 Race conditions in gc-uid-locks:
 This race means that run-as-anonymous could assign a process a UID that
@@ -50,10 +105,30 @@ No thread safety in libc
 
 No resource accountability (not really a bug)
 
-stat64 doesn't work
+stat64() doesn't work
 
 Sending on a socket is never queued.  This could lead to DoS of
-servers.  It could potentially lead to deadlocks.
+servers.  It could potentially lead to deadlocks, if both ends of a
+connection send at the same time (this doesn't happen at the moment
+because all connections are client-server and call-return).
+
+The server processes are included as part of the job with the client
+processes in the job.  The server has the same process group ID, and
+the shell will wait for it.  This is convenient (for printing the exit
+status), but wrong.  If the user presses Ctrl-C, and the client
+handles SIGINT and survives, the server will still be killed, but the
+client will become mostly useless.
+
+Shell: build-fs.c:
+If you have the command "cmd foo", and `foo' is a symlink, the symlink
+will be followed and the shell will also grant access to the
+destination of the link.
+If you have the command "cmd => foo", the symlink is not followed.
+This is inconsistent.
+Actually, I have realised that following the symlink is not good from
+a security point of view.
+
+libc's object-based execve() ignores the close-on-exec flag
 
 
 

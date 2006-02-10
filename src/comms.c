@@ -201,7 +201,7 @@ void comm_free(struct comm *comm)
 /* Reallocate or rearrange the buffer so that no more than `wastage' bytes
    are wasted (ie. storing consumed bytes), and so that at least `avail'
    bytes are available for the current message (including already received
-   data).  Never shrinks the buffer. */
+   data). */
 static void comm_resize(struct comm *comm, int wastage, int avail)
 {
   assert(comm);
@@ -214,6 +214,7 @@ static void comm_resize(struct comm *comm, int wastage, int avail)
     else {
       char *b;
       if(MOD_DEBUG) printf(MOD_MSG "data resize: realloc\n");
+      if(avail < comm->got) avail = comm->got;
       b = amalloc(avail);
       memcpy(b, comm->buf + comm->pos, comm->got);
       free(comm->buf);

@@ -26,6 +26,32 @@ my $methods =
   [['Okay', 'okay'],
    ['Fail', 'fail', Args => 'errno_val/int'],
 
+   ['Fork', 'fsop_fork'], # scheduled for removal
+   ['Copy', 'fsop_copy'],
+   ['Gdir', 'fsop_get_dir'],
+   ['Grtd', 'fsop_get_root_dir'],
+   ['Gobj', 'fsop_get_obj'],
+   # These correspond to Unix system calls:
+   ['Open', 'fsop_open'],
+   ['Stat', 'fsop_stat'],
+   ['Rdlk', 'fsop_readlink'],
+   ['Chdr', 'fsop_chdir'],
+   ['Gcwd', 'fsop_getcwd'],
+   ['Dlst', 'fsop_dirlist'],
+   ['Accs', 'fsop_access'],
+   ['Mkdr', 'fsop_mkdir'],
+   ['Chmd', 'fsop_chmod'],
+   ['Utim', 'fsop_utime'],
+   ['Renm', 'fsop_rename'],
+   ['Link', 'fsop_link'],
+   ['Syml', 'fsop_symlink'],
+   ['Unlk', 'fsop_unlink'],
+   ['Rmdr', 'fsop_rmdir'],
+   ['Fcon', 'fsop_connect'],
+   ['Fbnd', 'fsop_bind'],
+   ['Exec', 'fsop_exec'],
+
+   # File, directory and symlink objects:
    ['Otyp', 'fsobj_type',
        Args => '',
        Result => 'type/int'],
@@ -35,12 +61,14 @@ my $methods =
    ['Ochm', 'fsobj_chmod',
        Args => 'mode/int',
        Result => ''],
+   # File objects:
    ['Oopn', 'file_open',
        Args => 'flags/int',
        Result => 'fd'],
    ['Ocon', 'file_socket_connect',
        Args => 'sock/fd',
        Result => ''],
+   # Directory objects:
    ['Otra', 'dir_traverse',
        Args => 'leaf/string',
        Result => 'obj'],
@@ -71,6 +99,7 @@ my $methods =
    ['Obnd', 'dir_socket_bind',
        Args => 'leaf/string sock/fd',
        Result => ''],
+   # Symlink objects:
    ['Ordl', 'symlink_readlink',
        Args => '',
        Result => 'dest/string'],
@@ -82,6 +111,10 @@ my $methods =
    ['Mkud', 'make_union_dir',
        Args => 'dir1/obj dir2/obj',
        Result => 'dir/obj'],
+
+   # Executable objects
+   ['Exep', 'eo_is_executable'],
+   ['Exeo', 'eo_exec'],
 
    # Used by shell
    ['Sopt', 'set_option'],

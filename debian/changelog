@@ -1,3 +1,42 @@
+plash (1.9) unstable; urgency=low
+
+  * Use /var/lib/plash-chroot-jail rather than /usr/lib/plash-chroot-jail.
+    It contains plash-uid-locks which needs to be writable.  For FHS
+    compliance, this needs to go into /var.
+  * fs-operations.c:  Convert main dispatch function to use a switch
+    statement rather than a long series of tests.  List method IDs in
+    make-marshal.pl and use macros to refer to them.
+  * chroot.c, exec-object.c:  simplify by making them use get_process_caps()
+    (which was introduced for plash-opts)
+  * build-fs.c:
+    New code: having constructed the node filesystem structure, there is a
+    new way of turning it into a usable directory structure.  The old way
+    was to copy it to create fabricated directories.  Now there is a new
+    kind of fabricated directory which references the original node
+    structure.  This has two useful properties over the old way:
+     * New stuff can be added into the directory tree dynamically.
+     * There are "combined" fabricated directories, which are like a union
+       with a real directory.  Hence you can attach objects below other
+       attached directories.  This provides functionality similar to
+       mount points in Linux or Plan 9.
+       (The difference is that Linux mount points are implemented in terms
+       of the identity of directories -- their inode numbers -- whereas
+       combined fab dirs follow the structure.  And mount points only work
+       with directories and can only replace existing directories.
+       Combined fab dirs can provide their own structure.)
+    Split code out into build-fs-static.c (old) and build-fs-dynamic.c (new).
+    Merge attach_ro_obj and attach_rw_slot fields of node.
+    Fix potential leak when symlink_dest is overwritten (similar fix
+    for the attach_slot field).
+  * libc-getuid.c:  Add no-ops: set{,e,re,res}{u,g}id, which always return
+    a success result.  This is necessary to run programs like `mkisofs' and
+    `make' which do pointless UID operations.
+  * comms.c:  Fixed bug in comm_resize that could lead to buffer overruns.
+  * shell.c:  Add default installation endowment to namespace first, so
+    that it can be overridden.
+
+ -- Mark Seaborn <mseaborn@onetel.com>  Sat, 09 Jul 2005 19:37:09 -0400
+
 plash (1.8) unstable; urgency=low
 
   * Add man pages (using Perl's POD format).

@@ -78,4 +78,55 @@ int new_getegid()
 }
 
 
+/* These functions simply report success.  I don't see much point in
+   having them check the process's faked UIDs and GIDs.
+   When I add logging facilities, these should output a log message
+   to indicate what the process is doing.  It's not reasonable to
+   output anything to stderr. */
+
+/* EXPORT: new_setuid => WEAK:setuid __setuid */
+int new_setuid(uid_t uid)
+{
+  return 0;
+}
+/* EXPORT: new_setgid => WEAK:setgid __setgid */
+int new_setgid(gid_t gid)
+{
+  return 0;
+}
+
+/* EXPORT: new_seteuid => seteuid __GI_seteuid */
+int new_seteuid(uid_t euid)
+{
+  return 0;
+}
+/* EXPORT: new_setegid => setegid __GI_setegid */
+int new_setegid(gid_t egid)
+{
+  return 0;
+}
+
+/* EXPORT: new_setreuid => WEAK:setreuid __setreuid */
+int new_setreuid(uid_t ruid, uid_t euid)
+{
+  return 0;
+}
+/* EXPORT: new_setregid => WEAK:setregid __setregid */
+int new_setregid(gid_t rgid, gid_t egid)
+{
+  return 0;
+}
+
+/* EXPORT: new_setresuid => WEAK:setresuid __setresuid __GI___setresuid */
+int new_setresuid(uid_t ruid, uid_t euid, uid_t suid)
+{
+  return 0;
+}
+/* EXPORT: new_setresgid => WEAK:setresgid __setresgid __GI___setresgid */
+int new_setresgid(gid_t rgid, gid_t egid, gid_t sgid)
+{
+  return 0;
+}
+
+
 #include "out-aliases_libc-getuid.h"

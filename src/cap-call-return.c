@@ -145,33 +145,4 @@ void return_cont_free(struct filesys_obj *obj1)
 }
 
 
-#if 0
-struct filesys_obj_vtable return_cont_vtable = {
-  /* .free = */ return_cont_free,
-
-  /* .cap_invoke = */ return_cont_invoke,
-  /* .cap_call = */ generic_obj_call,
-  /* .single_use = */ 1,
-  
-  /* .type = */ objt_unknown,
-  /* .stat = */ dummy_stat,
-  /* .utimes = */ dummy_utimes,
-  /* .chmod = */ dummy_chmod,
-  /* .open = */ dummy_open,
-  /* .connect = */ dummy_socket_connect,
-  /* .traverse = */ dummy_traverse,
-  /* .list = */ dummy_list,
-  /* .create_file = */ dummy_create_file,
-  /* .mkdir = */ dummy_mkdir,
-  /* .symlink = */ dummy_symlink,
-  /* .rename = */ dummy_rename_or_link,
-  /* .link = */ dummy_rename_or_link,
-  /* .unlink = */ dummy_unlink,
-  /* .rmdir = */ dummy_rmdir,
-  /* .socket_bind = */ dummy_socket_bind,
-  /* .readlink = */ dummy_readlink,
-  1
-};
-#endif
-
 #include "out-vtable-cap-call-return.h"

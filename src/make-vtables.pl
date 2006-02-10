@@ -405,6 +405,36 @@ put('src/out-vtable-reconnectable-obj.h',
      }
     ]);
 
+put('src/out-vtable-build-fs.h',
+    [{ Name => 'node_vtable',
+       Interfaces => [],
+       Contents =>
+         [['free', 'node_free']]
+     }
+    ]);
+put('src/out-vtable-build-fs-dynamic.h',
+    [{ Name => 'comb_dir_vtable',
+       Interfaces => [@i_dir],
+       Contents =>
+         [['free', 'comb_dir_free'],
+	  ['type', 'objt_dir'],
+	  ['stat', 'comb_dir_stat'],
+	  ['utimes', 'refuse_utimes'],
+	  ['chmod', 'refuse_chmod'],
+	  ['traverse', 'comb_dir_traverse'],
+	  ['list', 'comb_dir_list'],
+	  ['create_file', 'comb_dir_create_file'],
+	  ['mkdir', 'comb_dir_mkdir'],
+	  ['symlink', 'comb_dir_symlink'],
+	  ['rename', 'refuse_rename_or_link'],
+	  ['link', 'refuse_rename_or_link'],
+	  ['unlink', 'comb_dir_unlink'],
+	  ['rmdir', 'comb_dir_rmdir'],
+	  ['socket_bind', 'comb_dir_socket_bind'],
+	 ]
+     }
+    ]);
+
 put('src/out-vtable-exec-object.h',
     [{ Name => 'exec_obj_vtable',
        Interfaces => [@i_file],
@@ -414,6 +444,22 @@ put('src/out-vtable-exec-object.h',
 	  ['cap_call', 'exec_obj_call'], # deals with `exec'
 	  ['type', 'objt_file'],
 	  ['stat', 'exec_obj_stat'],
+	  ['utimes', 'refuse_utimes'],
+	  ['chmod', 'refuse_chmod'],
+	  ['open', 'refuse_open'],
+	  ['socket_connect', 'refuse_socket_connect'],
+	 ]
+     }
+    ]);
+put('src/out-vtable-run-emacs.h',
+    [{ Name => 'edit_obj_vtable',
+       Interfaces => [@i_file],
+       Contents =>
+         [['free', 'edit_obj_free'],
+	  ['cap_invoke', 'edit_obj_invoke'],
+	  ['cap_call', 'edit_obj_call'], # deals with `exec'
+	  ['type', 'objt_file'],
+	  ['stat', 'edit_obj_stat'],
 	  ['utimes', 'refuse_utimes'],
 	  ['chmod', 'refuse_chmod'],
 	  ['open', 'refuse_open'],

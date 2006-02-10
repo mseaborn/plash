@@ -34,6 +34,7 @@
 #include "plash-libc.h"
 #include "shell-fds.h"
 #include "shell-wait.h"
+#include "marshal.h"
 
 
 DECLARE_VTABLE(exec_obj_vtable);
@@ -79,18 +80,13 @@ int refuse_open(struct filesys_obj *obj, int flags, int *err)
   return -1;
 }
 
-struct fd_mapping {
-  int fd_no;
-  int fd;
-};
-
 void handle_process_status(void *x, int status)
 {
   if(!WIFSTOPPED(status)) {
     cap_t return_cont = x;
     region_t r = region_make();
     cap_invoke(return_cont,
-	       cap_args_make(cat2(r, mk_string(r, "Okay"), mk_int(r, status)),
+	       cap_args_make(cat2(r, mk_int(r, METHOD_OKAY), mk_int(r, status)),
 			     caps_empty,
 			     fds_empty));
     filesys_obj_free(return_cont);
@@ -108,87 +104,18 @@ void exec_obj_invoke(struct filesys_obj *obj1, struct cap_args args)
     bufref_t args_ref;
     int ok = 1;
     m_str(&ok, &data, "Call");
-    m_str(&ok, &data, "Exeo");
+    m_int_const(&ok, &data, METHOD_EO_EXEC);
     m_int(&ok, &data, &args_ref);
     if(ok && args.caps.size >= 1) {
-      int err;
-      char **argv = 0, **env = 0;
-      struct fd_mapping *fds = 0;
-      int fds_count;
-      cap_t root_dir = 0;
-      seqf_t cwd;
-      int got_cwd = 0;
-      int pgid = 0;
+      int err, i;
 
       cap_t return_cont = args.caps.caps[0];
       
       struct arg_m_buf argbuf =
 	{ data, { args.caps.caps+1, args.caps.size-1 }, args.fds };
-      int i;
-      int size;
-      const bufref_t *a;
-
-      // arg_print(stderr, &argbuf, args_ref);
-
-      if(argm_array(&argbuf, args_ref, &size, &a)) goto error;
-      for(i = 0; i < size; i++) {
-	bufref_t tag_ref, arg_ref;
-	seqf_t tag;
-	if(argm_pair(&argbuf, a[i], &tag_ref, &arg_ref) ||
-	   argm_str(&argbuf, tag_ref, &tag)) goto error;
-	
-	if(seqf_equal(tag, seqf_string("Argv"))) {
-	  int i;
-	  int count;
-	  const bufref_t *a;
-	  if(argm_array(&argbuf, arg_ref, &count, &a)) goto error;
-	  argv = region_alloc(r, (count + 1) * sizeof(char *));
-	  for(i = 0; i < count; i++) {
-	    seqf_t str;
-	    if(argm_str(&argbuf, a[i], &str)) goto error;
-	    argv[i] = region_strdup_seqf(r, str);
-	  }
-	  argv[count] = 0;
-	}
-	else if(seqf_equal(tag, seqf_string("Env."))) {
-	  int i;
-	  int count;
-	  const bufref_t *a;
-	  if(argm_array(&argbuf, arg_ref, &count, &a)) goto error;
-	  env = region_alloc(r, (count + 1) * sizeof(char *));
-	  for(i = 0; i < count; i++) {
-	    seqf_t str;
-	    if(argm_str(&argbuf, a[i], &str)) goto error;
-	    env[i] = region_strdup_seqf(r, str);
-	  }
-	  env[count] = 0;
-	}
-	else if(seqf_equal(tag, seqf_string("Fds."))) {
-	  int i;
-	  const bufref_t *a;
-	  if(argm_array(&argbuf, arg_ref, &fds_count, &a)) goto error;
-	  fds = region_alloc(r, fds_count * sizeof(struct fd_mapping));
-	  for(i = 0; i < fds_count; i++) {
-	    bufref_t no_ref, fd_ref;
-	    if(argm_pair(&argbuf, a[i], &no_ref, &fd_ref) ||
-	       argm_int(&argbuf, no_ref, &fds[i].fd_no) ||
-	       argm_fd(&argbuf, fd_ref, &fds[i].fd)) goto error;
-	  }
-	}
-	else if(seqf_equal(tag, seqf_string("Root"))) {
-	  if(argm_cap(&argbuf, arg_ref, &root_dir)) goto error;
-	}
-	else if(seqf_equal(tag, seqf_string("Cwd."))) {
-	  if(argm_str(&argbuf, arg_ref, &cwd)) goto error;
-	  got_cwd = 1;
-	}
-	else if(seqf_equal(tag, seqf_string("Pgid"))) {
-	  if(argm_int(&argbuf, arg_ref, &pgid)) goto error;
-	}
-	else goto error;
-      }
-
-      if(!argv || !env || !fds || !root_dir) goto error;
+      struct exec_args ea;
+      if(unpack_exec_args(r, argbuf, args_ref, &ea) < 0) goto error;
+      if(!ea.argv || !ea.env || !ea.fds || !ea.root_dir) goto error;
 
       {
 	struct fd_array fds2 = { 0, 0 };
@@ -199,11 +126,11 @@ void exec_obj_invoke(struct filesys_obj *obj1, struct cap_args args)
 	int cap_count;
 	int pid;
       
-	for(i = 0; i < fds_count; i++) {
-	  array_set_fd(r, &fds2, fds[i].fd_no, fds[i].fd);
+	for(i = 0; i < ea.fds_count; i++) {
+	  array_set_fd(r, &fds2, ea.fds[i].fd_no, ea.fds[i].fd);
 	}
 
-	new_root_dir = obj->union_dir_maker->vtable->make_union_dir(obj->union_dir_maker, obj->root_dir, root_dir);
+	new_root_dir = obj->union_dir_maker->vtable->make_union_dir(obj->union_dir_maker, obj->root_dir, ea.root_dir);
 	if(!new_root_dir) {
 	  err = EIO;
 	  goto exec_error;
@@ -249,11 +176,11 @@ void exec_obj_invoke(struct filesys_obj *obj1, struct cap_args args)
 	  
 	  install_fds(inst_fds);
 
-	  if(pgid > 0) {
-	    if(setpgid(0, pgid) < 0) perror("exec-object: setpgid");
+	  if(ea.pgid > 0) {
+	    if(setpgid(0, ea.pgid) < 0) perror("exec-object: setpgid");
 	  }
 	  
-	  execve(obj->cmd, argv, environ /* FIXME */);
+	  execve(obj->cmd, ea.argv, environ /* FIXME */);
 	  fprintf(stderr, "exec-object: %s: %s\n", obj->cmd, strerror(errno));
 	  exit(1);
 	}
@@ -288,11 +215,11 @@ void exec_obj_invoke(struct filesys_obj *obj1, struct cap_args args)
 void exec_obj_call(struct filesys_obj *obj1, region_t r,
 		   struct cap_args args, struct cap_args *result)
 {
-  struct exec_obj *obj = (void *) obj1;
+  // struct exec_obj *obj = (void *) obj1;
   {
     seqf_t data = flatten_reuse(r, args.data);
     int ok = 1;
-    m_str(&ok, &data, "Exep");
+    m_int_const(&ok, &data, METHOD_EO_IS_EXECUTABLE);
     m_end(&ok, &data);
     if(ok) {
       result->data = mk_string(r, "Okay");
@@ -301,40 +228,16 @@ void exec_obj_call(struct filesys_obj *obj1, region_t r,
       return;
     }
   }
- error:
   marshal_cap_call(obj1, r, args, result);
-  
-  /*caps_free(args.caps);
-  close_fds(args.fds);
-  result->data = mk_string(r, "RMsg");
-  result->caps = caps_empty;
-  result->fds = fds_empty;*/
 }
 
 #include "out-vtable-exec-object.h"
 
 
-int get_cap(seqf_t elt, cap_t x, const char *name, cap_t *store)
-{
-  if(seqf_equal(elt, seqf_string(name))) {
-    if(*store) filesys_obj_free(*store);
-    *store = inc_ref(x);
-    return 1;
-  }
-  return 0;
-}
-
 int main(int argc, const char *argv[])
 {
-  region_t r;
-  cap_t *caps;
-  char *var;
-  int sock_fd;
-  int count, i;
-  seqf_t cap_list, elt, list;
-  cap_t fs_server = 0, fs_op_maker = 0, conn_maker = 0, union_dir_maker = 0,
-    // fab_dir_maker = 0,
-    return_cont = 0;
+  region_t r = region_make();
+  cap_t fs_server, fs_op_maker, conn_maker, union_dir_maker, return_cont;
 
   if(argc != 3) {
     printf("exec-object is only useful when run from Plash using the "
@@ -342,49 +245,17 @@ int main(int argc, const char *argv[])
     printf("Usage: %s <executable-pathname> <root-dir>\n", argv[0]);
     return 1;
   }
-  
-  var = getenv("PLASH_CAPS");
-  if(!var) { fprintf(stderr, "exec-object: no caps\n"); return 1; }
-  sock_fd = plash_libc_duplicate_connection();
-  if(sock_fd < 0) { fprintf(stderr, "exec-object: can't dup\n"); return 1; }
 
-  cap_list = seqf_string(var);
-  list = cap_list;
-  count = 0;
-  /* Count the number of capabilities listed */
-  while(parse_cap_list(list, &elt, &list)) count++;
-  
-  r = region_make();
-  caps = cap_make_connection(r, sock_fd, caps_empty, count, "to-server");
+  if(get_process_caps("fs_op", &fs_server,
+		      "fs_op_maker", &fs_op_maker,
+		      "conn_maker", &conn_maker,
+		      "union_dir_maker", &union_dir_maker,
+		      "return_cont", &return_cont,
+		      0) < 0) return 1;
 
-  /* Unpack the capabilities */
-  list = cap_list;
-  i = 0;
-  while(parse_cap_list(list, &elt, &list)) {
-    assert(i < count);
-    get_cap(elt, caps[i], "fs_op", &fs_server) ||
-    get_cap(elt, caps[i], "fs_op_maker", &fs_op_maker) ||
-    get_cap(elt, caps[i], "conn_maker", &conn_maker) ||
-    // get_cap(elt, caps[i], "fab_dir_maker", &fab_dir_maker) ||
-    get_cap(elt, caps[i], "union_dir_maker", &union_dir_maker) ||
-    get_cap(elt, caps[i], "return_cont", &return_cont);
-
-    filesys_obj_free(caps[i]);
-    i++;
-  }
-
-  assert(fs_server);
-  assert(fs_op_maker);
-  assert(conn_maker);
-  assert(union_dir_maker);
-  // assert(fab_dir_maker);
-  assert(return_cont);
   {
     cap_t exec_obj;
     cap_t root_dir;
-    cap_t extra_dir;
-    cap_t new_root_dir;
-    cap_t new_fs_server;
     struct cap_args result;
 
     cap_call(fs_server, r,
@@ -411,7 +282,7 @@ int main(int argc, const char *argv[])
     }
 
     cap_invoke(return_cont,
-	       cap_args_make(mk_string(r, "Okay"),
+	       cap_args_make(mk_int(r, METHOD_OKAY),
 			     mk_caps1(r, exec_obj),
 			     fds_empty));
     filesys_obj_free(return_cont);

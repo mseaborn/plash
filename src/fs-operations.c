@@ -30,8 +30,8 @@
 #include <sys/socket.h>
 
 #include "region.h"
-#include "server.h"
 #include "parse-filename.h"
+#include "resolve-filename.h"
 #include "comms.h"
 #include "config.h"
 #include "serialise.h"
@@ -425,10 +425,14 @@ void handle_fs_op_message1(region_t r, struct process *proc,
 			   cap_seq_t *r_caps,
 			   seqt_t *log_msg, seqt_t *log_reply)
 {
+  seqf_t msg = msg_orig;
+  int ok = 1;
+  int method_id;
+  m_int(&ok, &msg, &method_id);
+  if(ok) switch(method_id) {
+  case METHOD_FSOP_FORK: /* scheduled for removal */
   {
-    seqf_t msg = msg_orig;
-    int ok = 1;
-    m_str(&ok, &msg, "Fork");
+    // m_str(&ok, &msg, "Fork");
     m_end(&ok, &msg);
     if(ok) {
       int socks[2];
@@ -458,10 +462,9 @@ void handle_fs_op_message1(region_t r, struct process *proc,
       return;
     }
   }
+  case METHOD_FSOP_COPY:
   {
-    seqf_t msg = msg_orig;
-    int ok = 1;
-    m_str(&ok, &msg, "Copy");
+    // m_str(&ok, &msg, "Copy");
     m_end(&ok, &msg);
     if(ok) {
       cap_t new_server;
@@ -477,11 +480,10 @@ void handle_fs_op_message1(region_t r, struct process *proc,
       return;
     }
   }
+  case METHOD_FSOP_GET_ROOT_DIR:
   {
     /* Return a reference to the root directory */
-    seqf_t msg = msg_orig;
-    int ok = 1;
-    m_str(&ok, &msg, "Grtd");
+    // m_str(&ok, &msg, "Grtd");
     m_end(&ok, &msg);
     if(ok) {
       *log_msg = mk_string(r, "get root dir");
@@ -492,11 +494,10 @@ void handle_fs_op_message1(region_t r, struct process *proc,
       return;
     }
   }
+  case METHOD_FSOP_GET_DIR:
   {
     /* Look up a pathname to a directory and return a reference to it */
-    seqf_t msg = msg_orig;
-    int ok = 1;
-    m_str(&ok, &msg, "Gdir");
+    // m_str(&ok, &msg, "Gdir");
     if(ok) {
       seqf_t pathname = msg;
       struct dir_stack *ds;
@@ -519,12 +520,11 @@ void handle_fs_op_message1(region_t r, struct process *proc,
       return;
     }
   }
+  case METHOD_FSOP_GET_OBJ:
   {
     /* Look up a pathname to any object and return a reference to the object */
     /* Will follow symlinks */
-    seqf_t msg = msg_orig;
-    int ok = 1;
-    m_str(&ok, &msg, "Gobj");
+    // m_str(&ok, &msg, "Gobj");
     if(ok) {
       seqf_t pathname = msg;
       int err;
@@ -546,14 +546,13 @@ void handle_fs_op_message1(region_t r, struct process *proc,
       return;
     }
   }
+  case METHOD_FSOP_EXEC:
   {
-    seqf_t msg = msg_orig;
-    int ok = 1;
     int fd_number;
     seqf_t cmd_filename;
     int argc;
     bufref_t argv_ref;
-    m_str(&ok, &msg, "Exec");
+    // m_str(&ok, &msg, "Exec");
     m_int(&ok, &msg, &fd_number);
     m_lenblock(&ok, &msg, &cmd_filename);
     //m_int(&ok, &msg, &argc);
@@ -658,6 +657,7 @@ void handle_fs_op_message1(region_t r, struct process *proc,
       return;
     }
   }
+  }
   handle_fs_op_message(r, proc, msg_orig, fds_orig, reply, reply_fds,
 		       log_msg, log_reply);
 }
@@ -667,11 +667,15 @@ void handle_fs_op_message(region_t r, struct process *proc,
 			  seqt_t *reply, fds_t *reply_fds,
 			  seqt_t *log_msg, seqt_t *log_reply)
 {
+  seqf_t msg = msg_orig;
+  int ok = 1;
+  int method_id;
+  m_int(&ok, &msg, &method_id);
+  if(ok) switch(method_id) {
+  case METHOD_FSOP_OPEN:
   {
-    seqf_t msg = msg_orig;
     int flags, mode;
-    int ok = 1;
-    m_str(&ok, &msg, "Open");
+    // m_str(&ok, &msg, "Open");
     m_int(&ok, &msg, &flags);
     m_int(&ok, &msg, &mode);
     if(ok) {
@@ -696,16 +700,15 @@ void handle_fs_op_message(region_t r, struct process *proc,
       else {
 	*reply = cat2(r, mk_int(r, METHOD_FAIL),
 		      mk_int(r, err));
-	*log_reply = mk_string(r, "fail");
+	*log_reply = mk_printf(r, "fail: %s", strerror(err));
       }
       return;
     }
   }
+  case METHOD_FSOP_STAT:
   {
-    seqf_t msg = msg_orig;
     int nofollow;
-    int ok = 1;
-    m_str(&ok, &msg, "Stat");
+    // m_str(&ok, &msg, "Stat");
     m_int(&ok, &msg, &nofollow);
     if(ok) {
       seqf_t pathname = msg;
@@ -751,10 +754,9 @@ void handle_fs_op_message(region_t r, struct process *proc,
       return;
     }
   }
+  case METHOD_FSOP_READLINK:
   {
-    seqf_t msg = msg_orig;
-    int ok = 1;
-    m_str(&ok, &msg, "Rdlk");
+    // m_str(&ok, &msg, "Rdlk");
     if(ok) {
       seqf_t pathname = msg;
       seqf_t link_dest;
@@ -774,10 +776,9 @@ void handle_fs_op_message(region_t r, struct process *proc,
       return;
     }
   }
+  case METHOD_FSOP_GETCWD:
   {
-    seqf_t msg = msg_orig;
-    int ok = 1;
-    m_str(&ok, &msg, "Gcwd");
+    // m_str(&ok, &msg, "Gcwd");
     m_end(&ok, &msg);
     if(ok) {
       *log_msg = mk_string(r, "getcwd");
@@ -793,10 +794,9 @@ void handle_fs_op_message(region_t r, struct process *proc,
       return;
     }
   }
+  case METHOD_FSOP_DIRLIST:
   {
-    seqf_t msg = msg_orig;
-    int ok = 1;
-    m_str(&ok, &msg, "Dlst");
+    // m_str(&ok, &msg, "Dlst");
     if(ok) {
       seqf_t pathname = msg;
       int err = 0;
@@ -831,6 +831,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
       return;
     }
   }
+  case METHOD_FSOP_ACCESS:
   {
     /* access() call.  This isn't very useful for secure programming in
        Unix, because of the race condition (TOCTTOU problem).
@@ -842,10 +843,8 @@ void handle_fs_op_message(region_t r, struct process *proc,
        all! */
     /* This implementation is incomplete.  It doesn't check permissions.
        It returns successfully simply if the object exists. */
-    seqf_t msg = msg_orig;
     int mode;
-    int ok = 1;
-    m_str(&ok, &msg, "Accs");
+    // m_str(&ok, &msg, "Accs");
     m_int(&ok, &msg, &mode);
     if(ok) {
       seqf_t pathname = msg;
@@ -868,12 +867,11 @@ void handle_fs_op_message(region_t r, struct process *proc,
       return;
     }
   }
+  case METHOD_FSOP_MKDIR:
   {
     /* mkdir() call */
-    seqf_t msg = msg_orig;
     int mode;
-    int ok = 1;
-    m_str(&ok, &msg, "Mkdr");
+    // m_str(&ok, &msg, "Mkdr");
     m_int(&ok, &msg, &mode);
     if(ok) {
       seqf_t pathname = msg;
@@ -889,12 +887,11 @@ void handle_fs_op_message(region_t r, struct process *proc,
       return;
     }
   }
+  case METHOD_FSOP_SYMLINK:
   {
     /* symlink() call */
-    seqf_t msg = msg_orig;
     seqf_t newpath;
-    int ok = 1;
-    m_str(&ok, &msg, "Syml");
+    // m_str(&ok, &msg, "Syml");
     m_lenblock(&ok, &msg, &newpath);
     if(ok) {
       seqf_t oldpath = msg;
@@ -911,12 +908,11 @@ void handle_fs_op_message(region_t r, struct process *proc,
       return;
     }
   }
+  case METHOD_FSOP_RENAME:
   {
     /* rename() call */
-    seqf_t msg = msg_orig;
     seqf_t newpath;
-    int ok = 1;
-    m_str(&ok, &msg, "Renm");
+    // m_str(&ok, &msg, "Renm");
     m_lenblock(&ok, &msg, &newpath);
     if(ok) {
       seqf_t oldpath = msg;
@@ -936,12 +932,11 @@ void handle_fs_op_message(region_t r, struct process *proc,
       }
     }
   }
+  case METHOD_FSOP_LINK:
   {
     /* link() call */
-    seqf_t msg = msg_orig;
     seqf_t newpath;
-    int ok = 1;
-    m_str(&ok, &msg, "Link");
+    // m_str(&ok, &msg, "Link");
     m_lenblock(&ok, &msg, &newpath);
     if(ok) {
       seqf_t oldpath = msg;
@@ -961,16 +956,15 @@ void handle_fs_op_message(region_t r, struct process *proc,
       }
     }
   }
+  case METHOD_FSOP_CHMOD:
   {
     /* chmod() call.  An old version of this re-used the code for "open"
        and then fchmod'ed the FD.  The problem with that is that it
        would allow the client process to chmod any file, even those it's
        not supposed to have write access to!  I have now added a chmod
        method to file and directory objects. */
-    seqf_t msg = msg_orig;
     int mode;
-    int ok = 1;
-    m_str(&ok, &msg, "Chmd");
+    // m_str(&ok, &msg, "Chmd");
     m_int(&ok, &msg, &mode);
     if(ok) {
       seqf_t pathname = msg;
@@ -986,14 +980,13 @@ void handle_fs_op_message(region_t r, struct process *proc,
       return;
     }
   }
+  case METHOD_FSOP_UTIME:
   {
     /* utime()/utimes()/lutimes() calls */
-    seqf_t msg = msg_orig;
     int nofollow;
     int atime_sec, atime_usec;
     int mtime_sec, mtime_usec;
-    int ok = 1;
-    m_str(&ok, &msg, "Utim");
+    // m_str(&ok, &msg, "Utim");
     m_int(&ok, &msg, &nofollow);
     m_int(&ok, &msg, &atime_sec);
     m_int(&ok, &msg, &atime_usec);
@@ -1018,11 +1011,10 @@ void handle_fs_op_message(region_t r, struct process *proc,
       return;
     }
   }
+  case METHOD_FSOP_UNLINK:
   {
     /* unlink() call */
-    seqf_t msg = msg_orig;
-    int ok = 1;
-    m_str(&ok, &msg, "Unlk");
+    // m_str(&ok, &msg, "Unlk");
     if(ok) {
       seqf_t pathname = msg;
       int err;
@@ -1039,11 +1031,10 @@ void handle_fs_op_message(region_t r, struct process *proc,
       return;
     }
   }
+  case METHOD_FSOP_RMDIR:
   {
     /* rmdir() call */
-    seqf_t msg = msg_orig;
-    int ok = 1;
-    m_str(&ok, &msg, "Rmdr");
+    // m_str(&ok, &msg, "Rmdr");
     if(ok) {
       seqf_t pathname = msg;
       int err;
@@ -1060,13 +1051,12 @@ void handle_fs_op_message(region_t r, struct process *proc,
       return;
     }
   }
+  case METHOD_FSOP_CONNECT:
   {
     /* connect() for Unix domain sockets */
-    seqf_t msg = msg_orig;
     fds_t fds = fds_orig;
-    int ok = 1;
     int sock_fd;
-    m_str(&ok, &msg, "Fcon");
+    // m_str(&ok, &msg, "Fcon");
     m_fd(&ok, &fds, &sock_fd);
     if(ok) {
       seqf_t pathname = msg;
@@ -1090,13 +1080,12 @@ void handle_fs_op_message(region_t r, struct process *proc,
       return;
     }
   }
+  case METHOD_FSOP_BIND:
   {
     /* bind() for Unix domain sockets */
-    seqf_t msg = msg_orig;
     fds_t fds = fds_orig;
-    int ok = 1;
     int sock_fd;
-    m_str(&ok, &msg, "Fbnd");
+    // m_str(&ok, &msg, "Fbnd");
     m_fd(&ok, &fds, &sock_fd);
     if(ok) {
       seqf_t pathname = msg;
@@ -1121,10 +1110,9 @@ void handle_fs_op_message(region_t r, struct process *proc,
       return;
     }
   }
+  case METHOD_FSOP_CHDIR:
   {
-    seqf_t msg = msg_orig;
-    int ok = 1;
-    m_str(&ok, &msg, "Chdr");
+    // m_str(&ok, &msg, "Chdr");
     if(ok) {
       seqf_t pathname = msg;
       int err = 0;
@@ -1142,6 +1130,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
       }
       return;
     }
+  }
   }
 
   // if(DO_LOG_SUMMARY(state)) fprintf(state->log, "Unknown message!\n");

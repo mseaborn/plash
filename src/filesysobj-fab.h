@@ -24,6 +24,10 @@
 #include "filesysslot.h"
 
 
+/* Device number reported by stat.  FIXME: avoid clashes? */
+#define FAB_OBJ_STAT_DEVICE 100
+
+
 /* Abstract version that "assoc" operates on. */
 struct list {
   char *name;

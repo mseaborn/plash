@@ -18,9 +18,9 @@
 # USA.
 
 
-PLASH_VERSION=1.8
+PLASH_VERSION=1.9
 
-JAIL_DIR=/usr/lib/plash-chroot-jail
+JAIL_DIR=/var/lib/plash-chroot-jail
 JAIL_INSTALL=$JAIL_DIR/special
 BIN_INSTALL=/usr/lib/plash
 LIB_INSTALL=/usr/lib/plash/lib

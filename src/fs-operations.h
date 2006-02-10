@@ -36,10 +36,12 @@ int exec_for_scripts
    int *exec_fd_out, int *argc_out, const char ***argv_out,
    int *err);
 
-void handle_fs_op_message(region_t r, struct process *proc,
-			  seqf_t msg_orig, fds_t fds_orig,
-			  seqt_t *reply, fds_t *reply_fds,
-			  seqt_t *log_msg, seqt_t *log_reply);
+/* This could be merged into struct fs_op_object now */
+struct process {
+  struct filesys_obj *root;
+  /* cwd may be null: processes may have an undefined current directory. */
+  struct dir_stack *cwd;
+};
 
 struct server_shared {
   int refcount;
@@ -56,6 +58,11 @@ struct fs_op_object {
   struct server_shared *shared;
   int id;
 };
+
+void handle_fs_op_message(region_t r, struct process *proc,
+			  seqf_t msg_orig, fds_t fds_orig,
+			  seqt_t *reply, fds_t *reply_fds,
+			  seqt_t *log_msg, seqt_t *log_reply);
 
 cap_t make_fs_op_server(struct server_shared *shared,
 			struct filesys_obj *root, struct dir_stack *cwd);

@@ -68,9 +68,11 @@ int get_process_caps(const char *arg, ...)
 	  *dest = inc_ref(caps[i]);
 	  goto found;
 	}
+	i++;
       }
       fprintf(stderr, "cap `%s' not present\n", name);
       for(i = 0; i < count; i++) filesys_obj_free(caps[i]);
+      /* FIXME: the references that were copied will not be freed */
       region_free(r);
       return -1;
     found:

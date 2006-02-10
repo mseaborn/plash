@@ -245,6 +245,19 @@ int seqf_equal(seqf_t str1, seqf_t str2)
   else return 0;
 }
 
+int seqf_compare(seqf_t x1, seqf_t x2)
+{
+  int i = 0;
+  while(1) {
+    if(i == x1.size && i == x2.size) return 0;
+    if(i == x1.size) return -1;
+    if(i == x2.size) return 1;
+    if(x1.data[i] < x2.data[i]) return -1;
+    if(x2.data[i] < x1.data[i]) return 1;
+    i++;
+  }
+}
+
 void close_fds(fds_t fds)
 {
   int i;

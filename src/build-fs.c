@@ -1,4 +1,4 @@
-/* Copyright (C) 2004 Mark Seaborn
+/* Copyright (C) 2004, 2005 Mark Seaborn
 
    This file is part of Plash, the Principle of Least Authority Shell.
 
@@ -20,76 +20,53 @@
 #include <errno.h>
 
 #include "region.h"
-#include "server.h"
 #include "parse-filename.h"
-#include "filesysobj-fab.h"
 #include "filesysobj-readonly.h"
+#include "filesysobj-fab.h"
 #include "filesysslot.h"
 #include "build-fs.h"
 
 
-/* As a special case, the root node is checked to make sure that if
-   `attach' is non-null, it contains a directory object. */
-/* Need to handle "slot" objects, which handle files/dirs that don't
-   exist yet and can be created. */
-struct node {
-  /* Symlink:  malloc'd block.  May be null.  If this is used, the
-     other parameters are ignored. */
-  char *symlink_dest;
-  /* Slot object to attach read-write.  May be null.  If this is used,
-     the read-only object and the children are ignored. */
-  struct filesys_obj *attach_rw_slot;
-  /* Object to attach read-only, in a read-only slot.  This object may
-     be writable; it needs to be attached using a read-only proxy.
-     May be null.  If this is used, children may be attached below in
-     the tree; they could be writable. */
-  struct filesys_obj *attach_ro_obj;
-  struct node_list *children; /* May be empty (ie. null) */
-};
+int next_inode = 1;
 
-struct node_list {
-  char *name;
-  struct node *node;
-  struct node_list *next;
-};
-
-
-struct node *make_empty_node()
+struct node *fs_make_empty_node()
 {
   struct node *n = amalloc(sizeof(struct node));
+  n->hdr.refcount = 1;
+  n->hdr.vtable = &node_vtable;
+  n->inode = next_inode++;
   n->symlink_dest = 0;
-  n->attach_rw_slot = 0;
-  n->attach_ro_obj = 0;
+  n->attach_slot = 0;
   n->children = 0;
   return n;
 }
 
-void free_node(struct node *node)
+void node_free(struct filesys_obj *obj)
 {
+  struct node *node = (void *) obj;
   struct node_list *l = node->children;
   while(l) {
     struct node_list *next = l->next;
     free(l->name);
-    free_node(l->node);
+    filesys_obj_free((cap_t) l->node);
     free(l);
     l = next;
   }
 
-  if(node->attach_ro_obj) filesys_obj_free(node->attach_ro_obj);
-  if(node->attach_rw_slot) filesys_obj_free(node->attach_rw_slot);
   if(node->symlink_dest) free(node->symlink_dest);
-  free(node);
+  if(node->attach_slot) filesys_obj_free(node->attach_slot);
 }
 
 /* Move down the filesystem being constructed.  Create a new node
    if necessary. */
+/* Returns borrowed reference. */
 struct node *tree_traverse(struct node *node, const char *name)
 {
   struct node_list *list_entry = (void *) assoc((void *) node->children, name);
   if(!list_entry) {
     list_entry = amalloc(sizeof(struct node_list));
     list_entry->name = strdup(name);
-    list_entry->node = make_empty_node();
+    list_entry->node = fs_make_empty_node();
     /* Insert into the current node */
     list_entry->next = node->children;
     node->children = list_entry;
@@ -97,7 +74,7 @@ struct node *tree_traverse(struct node *node, const char *name)
   return list_entry->node;
 }
 
-void print_tree(int indent, struct node *node)
+void fs_print_tree(int indent, struct node *node)
 {
   int i;
   struct node_list *list;
@@ -105,11 +82,11 @@ void print_tree(int indent, struct node *node)
   for(i = 0; i < indent; i++) putchar(' ');
   printf("obj: symlink=%s, attach=%s\n",
 	 node->symlink_dest ? node->symlink_dest : "none",
-	 node->attach_rw_slot ? "rw" : node->attach_ro_obj ? "ro" : "none");
+	 node->attach_slot ? "slot" : "none");
   for(list = node->children; list; list = list->next) {
     for(i = 0; i < indent+2; i++) putchar(' ');
     printf("%s =>\n", list->name);
-    print_tree(indent + 4, list->node);
+    fs_print_tree(indent + 4, list->node);
   }
 }
 
@@ -145,25 +122,27 @@ void dirnode_stack_free(struct dirnode_stack *st)
   }
 }
 
+/* Takes `obj' as an owning reference; it is a file or directory. */
 int attach_ro_obj(struct node *node, cap_t obj)
 {
   int replaced = 0;
-  if(node->attach_ro_obj) {
-    filesys_obj_free(node->attach_ro_obj);
+  if(node->attach_slot) {
+    filesys_obj_free(node->attach_slot);
     replaced = 1;
   }
-  node->attach_ro_obj = obj;
+  node->attach_slot = make_read_only_slot(make_read_only_proxy(obj));
   return replaced;
 }
 
+/* Takes `obj' as an owning reference; it is a slot. */
 int attach_rw_slot(struct node *node, struct filesys_obj *obj)
 {
   int replaced = 0;
-  if(node->attach_rw_slot) {
-    filesys_obj_free(node->attach_rw_slot);
+  if(node->attach_slot) {
+    filesys_obj_free(node->attach_slot);
     replaced = 1;
   }
-  node->attach_rw_slot = obj;
+  node->attach_slot = obj;
   return replaced;
 }
 
@@ -178,8 +157,7 @@ struct dirnode_stack *cwd_populate(struct dirnode_stack *root,
     struct dirnode_stack *parent = cwd_populate(root, cwd->parent);
     struct dirnode_stack *dirstack = amalloc(sizeof(struct dirnode_stack));
     dirstack->refcount = 1;
-    dirstack->dir = cwd->dir;
-    dirstack->dir->refcount++;
+    dirstack->dir = inc_ref(cwd->dir);
     dirstack->node = tree_traverse(parent->node, cwd->name);
     dirstack->parent = parent;
     dirstack->name = strdup(cwd->name);
@@ -191,6 +169,7 @@ struct dirnode_stack *cwd_populate(struct dirnode_stack *root,
   }
 }
 
+/* Similar, but it doesn't create a dirnode_stack. */
 struct node *cwd_populate2(struct node *root, struct dir_stack *cwd)
 {
   if(cwd->parent) {
@@ -201,8 +180,8 @@ struct node *cwd_populate2(struct node *root, struct dir_stack *cwd)
 
 /* Attaches a given object at a given path in the filesystem structure. */
 /* Takes an owning reference to obj. */
-int attach_at_pathname(struct node *root_node, struct dir_stack *cwd_ds,
-		       seqf_t filename, cap_t obj, int *err)
+int fs_attach_at_pathname(struct node *root_node, struct dir_stack *cwd_ds,
+			  seqf_t filename, cap_t obj, int *err)
 {
   struct node *node;
   int end;
@@ -261,7 +240,7 @@ int attach_at_pathname(struct node *root_node, struct dir_stack *cwd_ds,
    with a dirstack.  This is used for following symlinks.
    If it reached a file, returns REACHED_FILE.
    If it got an error, returns 0. */
-int resolve_populate_aux
+int fs_resolve_populate_aux
   (region_t r,
    struct dirnode_stack *root, struct dirnode_stack *cwd,
    seqf_t filename, int symlink_limit,
@@ -310,9 +289,8 @@ int resolve_populate_aux
 	 trailing slash.  FIXME! */
       if(end && attach && create) {
 	struct node *next_node = tree_traverse(dirstack->node, name1);
-	dirstack->dir->refcount++;
-	next_node->attach_rw_slot =
-	  make_generic_slot(dirstack->dir, name1);
+	attach_rw_slot(next_node,
+		       make_generic_slot(inc_ref(dirstack->dir), name1));
 	dirnode_stack_free(dirstack);
 	return ATTACHED_OBJ;
       }
@@ -356,15 +334,16 @@ int resolve_populate_aux
 	   copy.  If the underlying filesystem changes, this won't change.
 	   Furthermore, a client can't modify/delete the symlink.
 	   Should give different behaviour if "create" is set. */
+	if(next_node->symlink_dest) free(next_node->symlink_dest);
 	next_node->symlink_dest = strdup_seqf(link_dest);
 	
 	{
-	  int rc = resolve_populate_aux(r, root, dirstack,
-					link_dest, symlink_limit-1,
-					end ? attach : 0,
-					end ? create : 0,
-					trailing_slash || dir_only,
-					result, err);
+	  int rc = fs_resolve_populate_aux(r, root, dirstack,
+					   link_dest, symlink_limit-1,
+					   end ? attach : 0,
+					   end ? create : 0,
+					   trailing_slash || dir_only,
+					   result, err);
 	  dirnode_stack_free(dirstack);
 	  if(end) return rc;
 	  else if(rc == REACHED_DIR) {
@@ -383,7 +362,7 @@ int resolve_populate_aux
 	dirnode_stack_free(dirstack);
 	if(end && !(trailing_slash || dir_only)) {
 	  if(attach) {
-	    next_node->attach_ro_obj = obj;
+	    attach_ro_obj(next_node, obj);
 	    return ATTACHED_OBJ;
 	  }
 	  else {
@@ -404,9 +383,9 @@ int resolve_populate_aux
   /* This case is used for attaching the pathnames "." and "/".
      They can be attached as writable, but not as writable slots. */
   if(attach) {
-    dirstack->dir->refcount++;
+    inc_ref(dirstack->dir);
     if(create) {
-      dirstack->node->attach_rw_slot = make_read_only_slot(dirstack->dir);
+      attach_rw_slot(dirstack->node, make_read_only_slot(dirstack->dir));
     }
     else {
       /* FIXME: produce warning for overwriting? */
@@ -422,7 +401,7 @@ int resolve_populate_aux
 }
 
 /* Returns -1 if there's an error, 0 otherwise. */
-int resolve_populate
+int fs_resolve_populate
   (struct filesys_obj *root_obj, struct node *root_node,
    struct dir_stack *cwd_ds,
    seqf_t filename, int create, int *err)
@@ -453,9 +432,9 @@ int resolve_populate
   {
     region_t r = region_make();
     struct dirnode_stack *result_junk; /* Result not used or filled out */
-    int rc = resolve_populate_aux(r, root, cwd, filename, SYMLINK_LIMIT,
-				  1 /* attach */, create, 0 /* dir_only */,
-				  &result_junk, err);
+    int rc = fs_resolve_populate_aux(r, root, cwd, filename, SYMLINK_LIMIT,
+				     1 /* attach */, create, 0 /* dir_only */,
+				     &result_junk, err);
     region_free(r);
     dirnode_stack_free(root);
     dirnode_stack_free(cwd);
@@ -465,45 +444,4 @@ int resolve_populate
   }
 }
 
-
-int next_inode = 1;
-
-/* Returns an owning reference. */
-struct filesys_obj *build_fs(struct node *node)
-{
-  if(node->symlink_dest) {
-    struct fab_symlink *sym = amalloc(sizeof(struct fab_symlink));
-    seqf_t dest = { node->symlink_dest, strlen(node->symlink_dest) };
-    sym->hdr.refcount = 1;
-    sym->hdr.vtable = &fab_symlink_vtable;
-    sym->dest = dup_seqf(dest);
-    sym->inode = next_inode++;
-    return make_read_only_slot((struct filesys_obj *) sym);
-  }
-  else if(node->attach_rw_slot) {
-    node->attach_rw_slot->refcount++;
-    return node->attach_rw_slot;
-  }
-  else if(node->attach_ro_obj) {
-    node->attach_ro_obj->refcount++;
-    return make_read_only_slot(make_read_only_proxy(node->attach_ro_obj));
-  }
-  else {
-    /* Construct directory */
-    struct s_fab_dir *dir = amalloc(sizeof(struct s_fab_dir));
-    struct slot_list *nlist = 0;
-    struct node_list *list;
-    for(list = node->children; list; list = list->next) {
-      struct slot_list *n = amalloc(sizeof(struct obj_list));
-      n->name = strdup(list->name);
-      n->slot = build_fs(list->node);
-      n->next = nlist;
-      nlist = n;
-    }
-    dir->hdr.refcount = 1;
-    dir->hdr.vtable = &s_fab_dir_vtable;
-    dir->entries = nlist;
-    dir->inode = next_inode++;
-    return make_read_only_slot((struct filesys_obj *) dir);
-  }
-}
+#include "out-vtable-build-fs.h"

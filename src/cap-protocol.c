@@ -979,33 +979,4 @@ void cap_print_connections_info(FILE *fp)
 #endif
 
 
-#if 0
-struct filesys_obj_vtable remote_obj_vtable = {
-  /* .free = */ remote_obj_free,
-
-  /* .cap_invoke = */ remote_obj_invoke,
-  /* .cap_call = */ generic_obj_call,
-  /* .single_use = */ 0,
-  
-  /* .type = */ marshal_type,
-  /* .stat = */ marshal_stat,
-  /* .utimes = */ marshal_utimes,
-  /* .chmod = */ marshal_chmod,
-  /* .open = */ marshal_open,
-  /* .connect = */ marshal_socket_connect,
-  /* .traverse = */ marshal_traverse,
-  /* .list = */ marshal_list,
-  /* .create_file = */ marshal_create_file,
-  /* .mkdir = */ marshal_mkdir,
-  /* .symlink = */ marshal_symlink,
-  /* .rename = */ marshal_rename,
-  /* .link = */ marshal_link,
-  /* .unlink = */ marshal_unlink,
-  /* .rmdir = */ marshal_rmdir,
-  /* .socket_bind = */ marshal_socket_bind,
-  /* .readlink = */ marshal_readlink,
-  1
-};
-#endif
-
 #include "out-vtable-cap-protocol.h"

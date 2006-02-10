@@ -1,6 +1,6 @@
 Summary: Principle of Least Authority shell (Plash)
 Name: plash
-Version: 1.8
+Version: 1.9
 Release: 1
 Packager: Mark Seaborn <mseaborn@onetel.com>
 Copyright: GPL and LGPL
@@ -54,8 +54,8 @@ affected.
 install -d %{buildroot}/usr/share/doc/plash-%{version}
 install -d %{buildroot}/usr/share/man/man1
 install -d %{buildroot}/usr/lib/plash/lib
-install -d %{buildroot}/usr/lib/plash-chroot-jail/special
-install -d %{buildroot}/usr/lib/plash-chroot-jail/plash-uid-locks
+install -d %{buildroot}/var/lib/plash-chroot-jail/special
+install -d %{buildroot}/var/lib/plash-chroot-jail/plash-uid-locks
 install -d %{buildroot}/usr/bin
 
 # Install docs
@@ -76,9 +76,9 @@ gzip -9 %{buildroot}/usr/share/man/man1/*.1
 ( cd %{buildroot}/usr/share/man/man1 && ln -s plash-opts.1.gz plash-opts-gtk.1.gz )
 
 # Install libraries
-cp -pv plash/out-stripped/lib/* %{buildroot}/usr/lib/plash/lib/
-cp -pv plash/out-stripped/ld-linux.so.2 %{buildroot}/usr/lib/plash-chroot-jail/special/
-chmod +x %{buildroot}/usr/lib/plash-chroot-jail/special/ld-linux.so.2
+cp -pv plash/out-stripped/* %{buildroot}/usr/lib/plash/lib/
+cp -pv plash/out-stripped-2/ld.so %{buildroot}/var/lib/plash-chroot-jail/special/ld-linux.so.2
+chmod +x %{buildroot}/var/lib/plash-chroot-jail/special/ld-linux.so.2
 
 # Install executables
 cp -pv plash/bin/plash           %{buildroot}/usr/bin/
@@ -102,7 +102,7 @@ cp -pv plash/setuid/gc-uid-locks %{buildroot}/usr/lib/plash/
 
 /usr/bin
 /usr/lib/plash
-/usr/lib/plash-chroot-jail
+/var/lib/plash-chroot-jail
 /usr/share/man
 /usr/share/doc/plash-%{version}
 
@@ -110,7 +110,7 @@ cp -pv plash/setuid/gc-uid-locks %{buildroot}/usr/lib/plash/
 # %attr(06755,root,root) /usr/lib/plash/run-as-nobody+chroot
 %attr(06755,root,root) /usr/lib/plash/run-as-anonymous
 %attr(06755,root,root) /usr/lib/plash/gc-uid-locks
-%attr(00700,root,root) /usr/lib/plash-chroot-jail/plash-uid-locks
+%attr(00700,root,root) /var/lib/plash-chroot-jail/plash-uid-locks
 
 
 %changelog

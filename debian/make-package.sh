@@ -22,7 +22,7 @@
 
 PACKAGE=plash
 LIBDIR=debian/tmp/usr/lib/plash/lib
-CHROOT_JAIL=debian/tmp/usr/lib/plash-chroot-jail
+CHROOT_JAIL=debian/tmp/var/lib/plash-chroot-jail
 
 set -e
 

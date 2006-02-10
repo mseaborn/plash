@@ -81,19 +81,6 @@ struct filesys_obj *union_dir_traverse(struct filesys_obj *obj, const char *leaf
   return make_union_dir(child1, child2);
 }
 
-static int seqf_compare(seqf_t x1, seqf_t x2)
-{
-  int i = 0;
-  while(1) {
-    if(i == x1.size && i == x2.size) return 0;
-    if(i == x1.size) return -1;
-    if(i == x2.size) return 1;
-    if(x1.data[i] < x2.data[i]) return -1;
-    if(x2.data[i] < x1.data[i]) return 1;
-    i++;
-  }
-}
-
 static int sort_seqf_compare(const void *p1, const void *p2)
 {
   return seqf_compare(*(seqf_t *) p1, *(seqf_t *) p2);
@@ -188,32 +175,5 @@ int union_dir_list(struct filesys_obj *obj, region_t r, seqt_t *result, int *err
   }
 }
 
-
-#if 0
-struct filesys_obj_vtable union_dir_vtable = {
-  /* .free = */ union_dir_free,
-  /* .cap_invoke = */ local_obj_invoke,
-  /* .cap_call = */ marshal_cap_call,
-  /* .single_use = */ 0,
-  /* .type = */ objt_dir,
-  /* .stat = */ union_dir_stat,
-  /* .utimes = */ refuse_utimes,
-  /* .chmod = */ refuse_chmod,
-  /* .open = */ dummy_open,
-  /* .socket_connect = */ dummy_socket_connect,
-  /* .traverse = */ union_dir_traverse,
-  /* .list = */ union_dir_list,
-  /* .create_file = */ refuse_create_file,
-  /* .mkdir = */ refuse_mkdir,
-  /* .symlink = */ refuse_symlink,
-  /* .rename = */ refuse_rename_or_link,
-  /* .link = */ refuse_rename_or_link,
-  /* .unlink = */ refuse_unlink,
-  /* .rmdir = */ refuse_rmdir,
-  /* .socket_bind = */ refuse_socket_bind,
-  /* .readlink = */ dummy_readlink,
-  1
-};
-#endif
 
 #include "out-vtable-filesysobj-union.h"

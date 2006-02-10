@@ -24,6 +24,7 @@ GLIBC_VERSION=2.3.3
 #CC=gcc-3.3
 
 set -e
+set -x
 
 OPTS_C="-Wall -nostdlib \
         -g \
@@ -57,6 +58,8 @@ build_server () {
   $CC $OPTS_S -c src/log-proxy.c -o obj/log-proxy.o
   $CC $OPTS_S -c src/reconnectable-obj.c -o obj/reconnectable-obj.o
   $CC $OPTS_S -c src/build-fs.c -o obj/build-fs.o
+  $CC $OPTS_S -c src/build-fs-static.c -o obj/build-fs-static.o
+  $CC $OPTS_S -c src/build-fs-dynamic.c -o obj/build-fs-dynamic.o
   $CC $OPTS_S -c src/shell.c -o obj/shell.o
   $CC $OPTS_S -Wno-unused -c src/shell-parse.c -o obj/shell-parse.o
   $CC $OPTS_S -c src/shell-variants.c -o obj/shell-variants.o
@@ -66,7 +69,6 @@ build_server () {
   $CC $OPTS_S -c src/shell-options.c -o obj/shell-options.o
   $CC $OPTS_S -c src/resolve-filename.c -o obj/resolve-filename.o
   $CC $OPTS_S -c src/fs-operations.c -o obj/fs-operations.o
-  $CC $OPTS_S -c src/server.c -o obj/server.o
   # To link server with dietlibc, you need to do:
   # $CC $OPTS $DIET/bin-i386/start.o ...files... \
   #     $DIET/bin-i386/dietlibc.a -lgcc -o mrs/driver
@@ -77,8 +79,8 @@ build_server () {
 	obj/shell-globbing.o \
 	obj/shell-fds.o \
 	obj/shell-wait.o \
-	obj/build-fs.o \
-	obj/server.o obj/fs-operations.o obj/resolve-filename.o \
+	obj/build-fs.o obj/build-fs-static.o obj/build-fs-dynamic.o \
+	obj/fs-operations.o obj/resolve-filename.o \
 	obj/cap-utils.o obj/cap-utils-libc.o obj/cap-call-return.o obj/cap-protocol.o \
 	obj/filesysslot.o \
 	obj/filesysobj-fab.o \
@@ -105,11 +107,11 @@ build_server () {
 	src/chroot.c $LIBC_LINK \
 	obj/libplash.a -o bin/plash-chroot
   $CC $OPTS_S \
-	src/gcc-object.c $LIBC_LINK \
-	obj/libplash.a -o bin/gcc-object
-  $CC $OPTS_S \
 	src/exec-object.c $LIBC_LINK \
 	obj/libplash.a -o bin/exec-object
+  $CC $OPTS_S \
+	src/run-emacs.c $LIBC_LINK \
+	obj/libplash.a -o bin/run-emacs
 
   $CC $OPTS_S -c src/shell-options.c -o obj/shell-options.o
   $CC $OPTS_S \
@@ -245,6 +247,10 @@ build_client () {
 	misc/llistxattr.os misc/lremovexattr.os
 	posix/getuid.os posix/getgid.os
 	posix/geteuid.os posix/getegid.os
+	posix/setuid.os posix/setgid.os
+	posix/setresuid.os posix/setresgid.os
+	misc/seteuid.os misc/setegid.os
+	misc/setreuid.os misc/setregid.os
 	plash/not-cancel-open.os"
   # privileged things that operate on filenames:
   # misc/mount.os misc/umount.os misc/chroot.os misc/pivot_root.os

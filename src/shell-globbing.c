@@ -32,7 +32,7 @@
 #include <unistd.h>
 
 #include "filesysobj.h"
-#include "server.h"
+#include "resolve-filename.h"
 #include "shell.h"
 #include "shell-variants.h"
 #include "shell-globbing.h"

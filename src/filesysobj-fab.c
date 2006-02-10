@@ -108,13 +108,10 @@ void fab_dir_free(struct filesys_obj *obj1)
   }
 }
 
-/* Device number reported by stat.  FIXME: avoid clashes? */
-#define STAT_DEVICE 100
-
 int fab_dir_stat(struct filesys_obj *obj, struct stat *st, int *err)
 {
   struct fab_dir *dir = (void *) obj;
-  st->st_dev = STAT_DEVICE;
+  st->st_dev = FAB_OBJ_STAT_DEVICE;
   st->st_ino = dir->inode;
   st->st_mode = S_IFDIR | 0777;
   st->st_nlink = 0; /* FIXME: this can be used to count the number of child directories */
@@ -173,7 +170,7 @@ void fab_symlink_free(struct filesys_obj *obj1)
 int fab_symlink_stat(struct filesys_obj *obj, struct stat *st, int *err)
 {
   struct fab_symlink *sym = (void *) obj;
-  st->st_dev = STAT_DEVICE;
+  st->st_dev = FAB_OBJ_STAT_DEVICE;
   st->st_ino = sym->inode;
   st->st_mode = S_IFLNK | 0777;
   st->st_nlink = 1; /* Not necessarily accurate */
@@ -214,7 +211,7 @@ void s_fab_dir_free(struct filesys_obj *obj1)
 int s_fab_dir_stat(struct filesys_obj *obj, struct stat *st, int *err)
 {
   struct s_fab_dir *dir = (void *) obj;
-  st->st_dev = STAT_DEVICE;
+  st->st_dev = FAB_OBJ_STAT_DEVICE;
   st->st_ino = dir->inode;
   st->st_mode = S_IFDIR | 0777;
   st->st_nlink = 0; /* FIXME: this can be used to count the number of child directories */
@@ -346,81 +343,5 @@ int s_fab_dir_socket_bind(struct filesys_obj *obj, const char *leaf,
   }
 }
 
-#if 0
-struct filesys_obj_vtable fab_symlink_vtable = {
-  /* .free = */ fab_symlink_free,
-  /* .cap_invoke = */ local_obj_invoke,
-  /* .cap_call = */ marshal_cap_call,
-  /* .single_use = */ 0,
-  /* .type = */ objt_symlink,
-  /* .stat = */ fab_symlink_stat,
-  /* .utimes = */ refuse_utimes,
-  /* .chmod = */ dummy_chmod,
-  /* .open = */ dummy_open,
-  /* .socket_connect = */ dummy_socket_connect,
-  /* .traverse = */ dummy_traverse,
-  /* .list = */ dummy_list,
-  /* .create_file = */ dummy_create_file,
-  /* .mkdir = */ dummy_mkdir,
-  /* .symlink = */ dummy_symlink,
-  /* .rename = */ dummy_rename_or_link,
-  /* .link = */ dummy_rename_or_link,
-  /* .unlink = */ dummy_unlink,
-  /* .rmdir = */ dummy_rmdir,
-  /* .socket_bind = */ dummy_socket_bind,
-  /* .readlink = */ fab_symlink_readlink,
-  1
-};
-
-struct filesys_obj_vtable fab_dir_vtable = {
-  /* .free = */ fab_dir_free,
-  /* .cap_invoke = */ local_obj_invoke,
-  /* .cap_call = */ marshal_cap_call,
-  /* .single_use = */ 0,
-  /* .type = */ objt_dir,
-  /* .stat = */ fab_dir_stat,
-  /* .utimes = */ refuse_utimes,
-  /* .chmod = */ refuse_chmod,
-  /* .open = */ dummy_open,
-  /* .socket_connect = */ dummy_socket_connect,
-  /* .traverse = */ fab_dir_traverse,
-  /* .list = */ fab_dir_list,
-  /* .create_file = */ refuse_create_file,
-  /* .mkdir = */ refuse_mkdir,
-  /* .symlink = */ refuse_symlink,
-  /* .rename = */ refuse_rename_or_link,
-  /* .link = */ refuse_rename_or_link,
-  /* .unlink = */ refuse_unlink,
-  /* .rmdir = */ refuse_rmdir,
-  /* .socket_bind = */ refuse_socket_bind,
-  /* .readlink = */ dummy_readlink,
-  1
-};
-
-struct filesys_obj_vtable s_fab_dir_vtable = {
-  /* .free = */ s_fab_dir_free,
-  /* .cap_invoke = */ local_obj_invoke,
-  /* .cap_call = */ marshal_cap_call,
-  /* .single_use = */ 0,
-  /* .type = */ objt_dir,
-  /* .stat = */ s_fab_dir_stat,
-  /* .utimes = */ refuse_utimes,
-  /* .chmod = */ refuse_chmod,
-  /* .open = */ dummy_open,
-  /* .socket_connect = */ dummy_socket_connect,
-  /* .traverse = */ s_fab_dir_traverse,
-  /* .list = */ s_fab_dir_list,
-  /* .create_file = */ s_fab_dir_create_file,
-  /* .mkdir = */ s_fab_dir_mkdir,
-  /* .symlink = */ s_fab_dir_symlink,
-  /* .rename = */ refuse_rename_or_link,
-  /* .link = */ refuse_rename_or_link,
-  /* .unlink = */ s_fab_dir_unlink,
-  /* .rmdir = */ s_fab_dir_rmdir,
-  /* .socket_bind = */ s_fab_dir_socket_bind,
-  /* .readlink = */ dummy_readlink,
-  1
-};
-#endif
 
 #include "out-vtable-filesysobj-fab.h"

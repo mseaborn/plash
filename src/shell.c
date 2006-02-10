@@ -39,7 +39,6 @@
 #include <readline/history.h>
 
 #include "region.h"
-#include "server.h"
 #include "config.h"
 #include "shell-variants.h"
 #include "shell.h"
@@ -277,7 +276,7 @@ struct flatten_params {
   struct dir_stack *cwd; /* This may be null */
   /* This is zero if we're not constructing a filesystem.
      Used for the `!!' syntax. */
-  struct node *tree;
+  fs_node_t tree;
   int fds_allowed;
   struct fd_array fds;
 };
@@ -324,8 +323,8 @@ int flatten_args(region_t r, struct flatten_params *p,
       int err;
 
       if(p->tree) {
-	if(resolve_populate(p->root_dir, p->tree, p->cwd,
-			    filename, rw /* create */, &err) < 0) {
+	if(fs_resolve_populate(p->root_dir, p->tree, p->cwd,
+			       filename, rw /* create */, &err) < 0) {
 	  printf("plash: error in resolving filename `");
 	  fprint_d(stdout, filename);
 	  printf("'\n");
@@ -350,8 +349,8 @@ int flatten_args(region_t r, struct flatten_params *p,
 	int err;
 
 	if(p->tree) {
-	  if(resolve_populate(p->root_dir, p->tree, p->cwd,
-			      filename, rw /* create */, &err) < 0) {
+	  if(fs_resolve_populate(p->root_dir, p->tree, p->cwd,
+				 filename, rw /* create */, &err) < 0) {
 	    printf("plash: error in resolving filename `");
 	    fprint_d(stdout, filename);
 	    printf("'\n");
@@ -376,8 +375,8 @@ int flatten_args(region_t r, struct flatten_params *p,
 
 	if(p->tree) {
 	  for(l = args_got; l; l = l->next) {
-	    if(resolve_populate(p->root_dir, p->tree, p->cwd,
-				seqf_string(l->str), rw /* create */, &err) < 0) {
+	    if(fs_resolve_populate(p->root_dir, p->tree, p->cwd,
+				   seqf_string(l->str), rw /* create */, &err) < 0) {
 	      /* This error shouldn't happen unless the filesystem changes
 		 underneath us. */
 	      printf("plash: error in resolving globbed filename `%s'\n", l->str);
@@ -495,7 +494,7 @@ int flatten_args(region_t r, struct flatten_params *p,
 	seqf_t pathname = tilde_expansion(r, flatten_charlist(r, pathname1));
 	cap_t x = eval_expr(p->state, expr);
 	if(!x) return 1; /* Error */
-	if(attach_at_pathname(p->tree, p->cwd, pathname, x, &err) < 0) {
+	if(fs_attach_at_pathname(p->tree, p->cwd, pathname, x, &err) < 0) {
 	  printf("plash: %s\n", strerror(err));
 	  return 1; /* Error */
 	}
@@ -1367,7 +1366,6 @@ int command_invocation_object(region_t r, struct shell_state *state,
 {
   struct flatten_params p;
   struct str_list *args_got;
-  struct filesys_obj *root_slot;
   struct filesys_obj *root, *root_ref2;
 
   /* Process the arguments. */
@@ -1376,7 +1374,7 @@ int command_invocation_object(region_t r, struct shell_state *state,
   p.got_end = &args_got;
   p.root_dir = state->root;
   p.cwd = state->cwd;
-  p.tree = make_empty_node();
+  p.tree = fs_make_empty_node();
   p.fds_allowed = 1;
   p.fds.count = 3;
   p.fds.fds = region_alloc(r, p.fds.count * sizeof(int));
@@ -1388,14 +1386,12 @@ int command_invocation_object(region_t r, struct shell_state *state,
     return -1;
   }
 
-  if(state->print_fs_tree) print_tree(0, p.tree);
+  if(state->print_fs_tree) fs_print_tree(0, p.tree);
 
   /* Create the root directory. */
-  root_slot = build_fs(p.tree);
-  free_node(p.tree);
-  root = root_slot->vtable->slot_get(root_slot);
+  root = fs_make_root(p.tree);
   assert(root);
-  filesys_slot_free(root_slot);
+  free_node(p.tree);
 
   /* Make a connection between the forked server and the central server.
      We need to get a reference to the root directory that does not go
@@ -1507,45 +1503,43 @@ int command_invocation_sec
   p.got_end = &args_got;
   p.root_dir = state->root;
   p.cwd = state->cwd;
-  p.tree = make_empty_node();
+  p.tree = fs_make_empty_node();
   p.fds_allowed = 1;
   p.fds.count = 3;
   p.fds.fds = region_alloc(r, p.fds.count * sizeof(int));
   p.fds.fds[0] = fd_stdin;
   p.fds.fds[1] = fd_stdout;
   p.fds.fds[2] = STDERR_FILENO;
+
+  /* The default installation endowment. */
+  /* FIXME: check for errors */
+  fs_resolve_populate(state->root, p.tree, p.cwd, seqf_string("/etc"), 0 /* create */, &err);
+  fs_resolve_populate(state->root, p.tree, p.cwd, seqf_string("/bin"), 0 /* create */, &err);
+  fs_resolve_populate(state->root, p.tree, p.cwd, seqf_string("/lib"), 0 /* create */, &err);
+  fs_resolve_populate(state->root, p.tree, p.cwd, seqf_string("/usr"), 0 /* create */, &err);
+  fs_resolve_populate(state->root, p.tree, p.cwd, seqf_string("/dev/tty"), 1 /* create */, &err);
+  fs_resolve_populate(state->root, p.tree, p.cwd, seqf_string("/dev/null"), 1 /* create */, &err);
+  if(state->enable_x11) {
+    seqf_t filename = tilde_expansion(r, seqf_string("~/.Xauthority"));
+    fs_resolve_populate(state->root, p.tree, p.cwd, filename, 0 /* create */, &err);
+    fs_resolve_populate(state->root, p.tree, p.cwd, seqf_string("/tmp/.X11-unix/"), 1 /* create */, &err);
+  }
+
+  /* Add the executable:  This is necessary for scripts (using the
+     `#!' syntax).  It doesn't hurt for other executables. */
+  fs_resolve_populate(state->root, p.tree, p.cwd, cmd_filename, 0 /* create */, &err);
+
   if(flatten_args(r, &p, 0 /* rw */, 0 /* ambient */, args)) {
     free_node(p.tree);
     goto error;
   }
 
-  /* FIXME: check for errors */
-  resolve_populate(state->root, p.tree, p.cwd, seqf_string("/etc"), 0 /* create */, &err);
-  resolve_populate(state->root, p.tree, p.cwd, seqf_string("/bin"), 0 /* create */, &err);
-  resolve_populate(state->root, p.tree, p.cwd, seqf_string("/lib"), 0 /* create */, &err);
-  resolve_populate(state->root, p.tree, p.cwd, seqf_string("/usr"), 0 /* create */, &err);
-  resolve_populate(state->root, p.tree, p.cwd, seqf_string("/dev/tty"), 1 /* create */, &err);
-  resolve_populate(state->root, p.tree, p.cwd, seqf_string("/dev/null"), 1 /* create */, &err);
-  if(state->enable_x11) {
-    seqf_t filename = tilde_expansion(r, seqf_string("~/.Xauthority"));
-    resolve_populate(state->root, p.tree, p.cwd, filename, 0 /* create */, &err);
-    resolve_populate(state->root, p.tree, p.cwd, seqf_string("/tmp/.X11-unix/"), 1 /* create */, &err);
-  }
-
-  /* Add the executable:  This is necessary for scripts (using the
-     `#!' syntax).  It doesn't hurt for other executables. */
-  resolve_populate(state->root, p.tree, p.cwd, cmd_filename, 0 /* create */, &err);
-
   /* Create the root directory. */
-  {
-    struct filesys_obj *root_slot = build_fs(p.tree);
-    free_node(p.tree);
-    root = root_slot->vtable->slot_get(root_slot);
-    assert(root);
-    filesys_obj_free(root_slot);
-  }
+  root = fs_make_root(p.tree);
+  assert(root);
+  free_node(p.tree);
 
-  if(state->print_fs_tree) print_tree(0, p.tree);
+  if(state->print_fs_tree) fs_print_tree(0, p.tree);
 
   /* Open the executable file. */
   {
@@ -1950,13 +1944,13 @@ cap_t eval_expr(struct shell_state *state, struct shell_expr *expr)
   if(m_expr_mkfs(expr, &args)) {
     region_t r = region_make();
     struct flatten_params p;
-    struct filesys_obj *root_slot, *root;
+    struct filesys_obj *root;
     
     p.state = state;
     p.got_end = 0; /* should not be used because ambient=1 */
     p.root_dir = state->root;
     p.cwd = 0;
-    p.tree = make_empty_node();
+    p.tree = fs_make_empty_node();
     p.fds_allowed = 0;
     p.fds.fds = 0;
     p.fds.count = 0;
@@ -1966,13 +1960,11 @@ cap_t eval_expr(struct shell_state *state, struct shell_expr *expr)
       region_free(r);
       return 0;
     }
-
-    root_slot = build_fs(p.tree);
-    free_node(p.tree);
-    root = root_slot->vtable->slot_get(root_slot);
-    if(!root) printf("plash: error constructing directory\n");
-    filesys_obj_free(root_slot);
     
+    root = fs_make_root(p.tree);
+    free_node(p.tree);
+    if(!root) printf("plash: error constructing directory\n");
+
     region_free(r);
     return root;
   }
@@ -2085,81 +2077,59 @@ void shell_command(region_t r, struct shell_state *state, struct command *comman
     struct pipeline *pipeline;
     int bg_flag;
     if(m_command(command, &pipeline, &bg_flag)) {
+      int rc;
+      region_t sock_r = region_make();
+      struct job_cons_args job_cons;
+      struct d_conn_maker *d_conn = 0;
 
-      struct invocation *inv;
-      int no_sec;
-      struct char_cons *cmd_filename1;
-      struct arg_list *args;
-      if(m_pipeline_inv(pipeline, &inv) &&
-	 m_invocation(inv, &no_sec, &cmd_filename1, &args) &&
-	 !no_sec &&
-	 !strcmp("opts", flatten_charlist(r, cmd_filename1).data)) {
-	int unused;
-#if 0 && defined USE_GTK
-	if(gtk_available) {
-	  printf("Opening options window... (close it to continue)\n");
-	  option_window(state);
-	}
-	else printf("Gtk did not initialise successfully; no options window available\n");
-#else
-	printf("Gtk support not compiled in, so no options window available\n");
-#endif
+      job_cons.shared = make_server_shared(state);
+	
+      job_cons.shared->refcount++;
+      job_cons.fs_op_maker = fs_op_maker_make(job_cons.shared);
+
+      if(state->fork_server_per_job) {
+	d_conn = amalloc(sizeof(struct d_conn_maker));
+	d_conn->hdr.refcount = 1;
+	d_conn->hdr.vtable = &d_conn_maker_vtable;
+	d_conn->r = region_make();
+	d_conn->conns = 0;
+	job_cons.conn_maker = (cap_t) d_conn;
+	job_cons.conn_maker_for_client = inc_ref(state->conn_maker_local);
       }
       else {
-	int rc;
-	region_t sock_r = region_make();
-	struct job_cons_args job_cons;
-	struct d_conn_maker *d_conn = 0;
-
-	job_cons.shared = make_server_shared(state);
-	
-	job_cons.shared->refcount++;
-	job_cons.fs_op_maker = fs_op_maker_make(job_cons.shared);
-
-	if(state->fork_server_per_job) {
-	  d_conn = amalloc(sizeof(struct d_conn_maker));
-	  d_conn->hdr.refcount = 1;
-	  d_conn->hdr.vtable = &d_conn_maker_vtable;
-	  d_conn->r = region_make();
-	  d_conn->conns = 0;
-	  job_cons.conn_maker = (cap_t) d_conn;
-	  job_cons.conn_maker_for_client = inc_ref(state->conn_maker_local);
-	}
-	else {
-	  job_cons.conn_maker = inc_ref(state->conn_maker);
-	  job_cons.conn_maker_for_client = inc_ref(state->conn_maker);
-	}
-	job_cons.procs = 0;
-
-	rc = pipeline_invocation(sock_r, state, &job_cons, pipeline,
-				 STDIN_FILENO, STDOUT_FILENO);
-	server_shared_free(job_cons.shared);
-	filesys_obj_free(job_cons.fs_op_maker);
-	if(rc >= 0) {
-	  struct job *job;
-	  /* Region sock_r is freed inside the forked server process
-	     and before waiting for the child processes. */
-	  job = spawn_job(sock_r, state,
-			  d_conn ? d_conn->conns : 0,
-			  job_cons.procs, !bg_flag);
-	  if(d_conn) d_conn->conns = 0;
-	  
-	  if(bg_flag) {
-	    if(state->interactive) {
-	      printf("plash: job %i started\n", job->id);
-	    }
-	    /* Used to do remove_job(job) in non-interactive mode, but
-	       that is no longer safe now that the wait handler has
-	       references to struct shell_processes. */
-	  }
-	  else wait_for_job(state, job);
-	}
-	else {
-	  region_free(sock_r);
-	}
-	filesys_obj_free(job_cons.conn_maker);
-	filesys_obj_free(job_cons.conn_maker_for_client);
+	job_cons.conn_maker = inc_ref(state->conn_maker);
+	job_cons.conn_maker_for_client = inc_ref(state->conn_maker);
       }
+      job_cons.procs = 0;
+
+      rc = pipeline_invocation(sock_r, state, &job_cons, pipeline,
+			       STDIN_FILENO, STDOUT_FILENO);
+      server_shared_free(job_cons.shared);
+      filesys_obj_free(job_cons.fs_op_maker);
+      if(rc >= 0) {
+	struct job *job;
+	/* Region sock_r is freed inside the forked server process
+	   and before waiting for the child processes. */
+	job = spawn_job(sock_r, state,
+			d_conn ? d_conn->conns : 0,
+			job_cons.procs, !bg_flag);
+	if(d_conn) d_conn->conns = 0;
+	  
+	if(bg_flag) {
+	  if(state->interactive) {
+	    printf("plash: job %i started\n", job->id);
+	  }
+	  /* Used to do remove_job(job) in non-interactive mode, but
+	     that is no longer safe now that the wait handler has
+	     references to struct shell_processes. */
+	}
+	else wait_for_job(state, job);
+      }
+      else {
+	region_free(sock_r);
+      }
+      filesys_obj_free(job_cons.conn_maker);
+      filesys_obj_free(job_cons.conn_maker_for_client);
       return;
     }
   }
@@ -2756,8 +2726,7 @@ int main(int argc, char *argv[])
 	       "Special commands in the shell:\n"
 	       "  cd <directory pathname>  Change directory\n"
 	       "  fg <job number>          Put job in foreground\n"
-	       "  bg <job number>          Put job in background\n"
-	       "  opts                     Displays an options window\n",
+	       "  bg <job number>          Put job in background\n",
 	       argv[0]);
 	return 0;
       }

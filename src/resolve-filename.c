@@ -27,7 +27,7 @@
 
 #define MOD_DEBUG 0
 #define MOD_MSG "server: "
-static FILE *server_log = 0;
+#define LOG stderr
 
 
 /* Takes a non-owning reference.  Returns an owning reference. */
@@ -68,7 +68,7 @@ seqt_t string_of_cwd(region_t r, struct dir_stack *dir)
   if(dir->parent) {
     seqt_t got = seqt_empty;
     do {
-      if(MOD_DEBUG) fprintf(server_log, "path component: %s\n", dir->name);
+      if(MOD_DEBUG) fprintf(LOG, "path component: %s\n", dir->name);
       got = cat3(r, slash, mk_string(r, dir->name), got);
       dir = dir->parent;
     } while(dir->parent);
@@ -185,12 +185,12 @@ struct filesys_obj *resolve_file
   
   switch(filename_parse_start(filename, &end, &filename)) {
     case FILENAME_ROOT:
-      if(MOD_DEBUG) fprintf(server_log, MOD_MSG "resolve_file: relative to root\n");
+      if(MOD_DEBUG) fprintf(LOG, MOD_MSG "resolve_file: relative to root\n");
       if(!root) { *err = EACCES; return 0; }
       dirstack = dir_stack_root(root);
       break;
     case FILENAME_CWD:
-      if(MOD_DEBUG) fprintf(server_log, MOD_MSG "resolve_file: relative to cwd\n");
+      if(MOD_DEBUG) fprintf(LOG, MOD_MSG "resolve_file: relative to cwd\n");
       dirstack = cwd;
       if(!dirstack) { *err = E_NO_CWD_DEFINED; return 0; }
       dirstack->refcount++;
@@ -227,10 +227,10 @@ struct filesys_obj *resolve_file
       char *name1 = strdup_seqf(name);
       struct filesys_obj *obj = dirstack->dir->vtable->traverse(dirstack->dir, name1);
       int obj_type;
-      if(MOD_DEBUG) fprintf(server_log, MOD_MSG "resolve_file: \"%s\": ", name1);
+      if(MOD_DEBUG) fprintf(LOG, MOD_MSG "resolve_file: \"%s\": ", name1);
 
       if(!obj) {
-	if(MOD_DEBUG) fprintf(server_log, "not found\n");
+	if(MOD_DEBUG) fprintf(LOG, "not found\n");
 	free(name1);
 	dir_stack_free(dirstack);
 	*err = ENOENT;
@@ -238,7 +238,7 @@ struct filesys_obj *resolve_file
       }
       obj_type = obj->vtable->type(obj);
       if(obj_type == OBJT_DIR) {
-	if(MOD_DEBUG) fprintf(server_log, "dir\n");
+	if(MOD_DEBUG) fprintf(LOG, "dir\n");
 	if(end) {
 	  /* Error: wanted to open a file, not a directory */
 	  free(name1);
@@ -256,7 +256,7 @@ struct filesys_obj *resolve_file
       }
       else if(obj_type == OBJT_SYMLINK) {
 	seqf_t link_dest;
-	if(MOD_DEBUG) fprintf(server_log, "symlink\n");
+	if(MOD_DEBUG) fprintf(LOG, "symlink\n");
 	free(name1);
 	if(end && nofollow) {
 	  /* Error: ended with symlink, but called with NOFOLLOW */
@@ -295,7 +295,7 @@ struct filesys_obj *resolve_file
       }
       /* For OBJT_FILE: */
       else if(obj_type == OBJT_FILE) {
-	if(MOD_DEBUG) fprintf(server_log, "file\n");
+	if(MOD_DEBUG) fprintf(LOG, "file\n");
 	free(name1);
 	dir_stack_free(dirstack);
 	if(end) {
@@ -355,12 +355,12 @@ int resolve_obj(region_t r, struct filesys_obj *root, struct dir_stack *cwd,
   
   switch(filename_parse_start(filename, &end, &filename)) {
     case FILENAME_ROOT:
-      if(MOD_DEBUG) fprintf(server_log, MOD_MSG "resolve_obj: relative to root\n");
+      if(MOD_DEBUG) fprintf(LOG, MOD_MSG "resolve_obj: relative to root\n");
       if(!root) { *err = EACCES; return 0; }
       dirstack = dir_stack_root(root);
       break;
     case FILENAME_CWD:
-      if(MOD_DEBUG) fprintf(server_log, MOD_MSG "resolve_obj: relative to cwd\n");
+      if(MOD_DEBUG) fprintf(LOG, MOD_MSG "resolve_obj: relative to cwd\n");
       dirstack = cwd;
       if(!dirstack) { *err = E_NO_CWD_DEFINED; return 0; }
       dirstack->refcount++;
@@ -391,7 +391,7 @@ int resolve_obj(region_t r, struct filesys_obj *root, struct dir_stack *cwd,
       
       if(end && create == CREATE_ONLY) {
 	struct resolved_slot *slot = amalloc(sizeof(struct resolved_slot));
-	if(MOD_DEBUG) fprintf(server_log, "create_only option; return slot\n");
+	if(MOD_DEBUG) fprintf(LOG, "create_only option; return slot\n");
 	slot->dir = dirstack->dir;
 	slot->leaf = name1;
 	dirstack->dir->refcount++;
@@ -400,11 +400,11 @@ int resolve_obj(region_t r, struct filesys_obj *root, struct dir_stack *cwd,
 	return RESOLVED_EMPTY_SLOT;
       }
       obj = dirstack->dir->vtable->traverse(dirstack->dir, name1);
-      if(MOD_DEBUG) fprintf(server_log, MOD_MSG "resolve_obj: \"%s\": ", name1);
+      if(MOD_DEBUG) fprintf(LOG, MOD_MSG "resolve_obj: \"%s\": ", name1);
       if(!obj) {
 	if(end && create) {
 	  struct resolved_slot *slot = amalloc(sizeof(struct resolved_slot));
-	  if(MOD_DEBUG) fprintf(server_log, "not found; create flag set\n");
+	  if(MOD_DEBUG) fprintf(LOG, "not found; create flag set\n");
 	  slot->dir = dirstack->dir;
 	  slot->leaf = name1;
 	  dirstack->dir->refcount++;
@@ -413,7 +413,7 @@ int resolve_obj(region_t r, struct filesys_obj *root, struct dir_stack *cwd,
 	  return RESOLVED_EMPTY_SLOT;
 	}
 	else {
-	  if(MOD_DEBUG) fprintf(server_log, "not found\n");
+	  if(MOD_DEBUG) fprintf(LOG, "not found\n");
 	  free(name1);
 	  dir_stack_free(dirstack);
 	  *err = ENOENT;
@@ -423,7 +423,7 @@ int resolve_obj(region_t r, struct filesys_obj *root, struct dir_stack *cwd,
       obj_type = obj->vtable->type(obj);
       if(obj_type == OBJT_DIR) {
 	struct dir_stack *new_d = amalloc(sizeof(struct dir_stack));
-	if(MOD_DEBUG) fprintf(server_log, "dir\n");
+	if(MOD_DEBUG) fprintf(LOG, "dir\n");
 	new_d->refcount = 1;
 	new_d->dir = obj;
 	new_d->parent = dirstack;
@@ -432,7 +432,7 @@ int resolve_obj(region_t r, struct filesys_obj *root, struct dir_stack *cwd,
       }
       else if(obj_type == OBJT_SYMLINK) {
 	seqf_t link_dest;
-	if(MOD_DEBUG) fprintf(server_log, "symlink\n");
+	if(MOD_DEBUG) fprintf(LOG, "symlink\n");
 	free(name1);
 	/* Return the symlink itself if NOFOLLOW is set -- unless, that is,
 	   the pathname has a trailing slash, in which case we follow the
@@ -481,7 +481,7 @@ int resolve_obj(region_t r, struct filesys_obj *root, struct dir_stack *cwd,
 	}
       }
       else /* if(obj_type == OBJT_FILE) */ {
-	if(MOD_DEBUG) fprintf(server_log, "file\n");
+	if(MOD_DEBUG) fprintf(LOG, "file\n");
 	free(name1);
 	dir_stack_free(dirstack);
 	if(end && !trailing_slash) {

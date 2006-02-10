@@ -1,6 +1,6 @@
 Summary: Principle of Least Authority shell (Plash)
 Name: plash
-Version: 1.12
+Version: 1.14
 Release: 1
 Packager: Mark Seaborn <mseaborn@onetel.com>
 Copyright: GPL and LGPL
@@ -56,21 +56,25 @@ mkdir -p %{buildroot}/usr/share/doc/plash-%{version}/html
 mkdir -p %{buildroot}/usr/share/man/man1
 
 # Install docs
-cp -prv plash/COPYRIGHT plash/README \
-	plash/docs/README.old plash/docs/NEWS plash/docs/NEWS-exec-objs \
+# Removed -p option
+cp -L -rv plash/COPYRIGHT plash/README \
+	plash/docs/README.powerbox \
+	plash/docs/README.old \
+	plash/docs/NEWS \
+	plash/docs/NEWS-exec-objs \
 	plash/docs/protocols.txt \
 	plash/debian/changelog \
 	plash/docs/html \
 	%{buildroot}/usr/share/doc/plash-%{version}/
 
 # Install man pages
-cp -pv plash/docs/man/* %{buildroot}/usr/share/man/man1/
+cp -v plash/docs/man/* %{buildroot}/usr/share/man/man1/
 gzip -9 %{buildroot}/usr/share/man/man1/*.1
 ( cd %{buildroot}/usr/share/man/man1 && \
   ln -s plash-opts.1.gz plash-opts-gtk.1.gz )
 
 
-( cd plash && ./install.sh %{buildroot} )
+( cd plash && ./install.sh --nocheckroot %{buildroot} )
 
 
 %clean

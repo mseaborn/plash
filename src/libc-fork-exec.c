@@ -396,6 +396,9 @@ int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
   if(plash_init() < 0) return -1;
   if(!fs_server) { __set_errno(ENOSYS); return -1; }
 
+  /* Unset the close-on-exec flag. */
+  if(fcntl(comm_sock, F_SETFD, 0) < 0) { return -1; }
+      
   cap_call(fs_server, r,
 	   cap_args_make(cat6(r, mk_string(r, "Exec"),
 			      mk_int(r, exec_fd),

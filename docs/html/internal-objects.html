@@ -3,7 +3,7 @@ symlink objects, but I extended it so that references to objects can
 be exported to other processes using Plash's object-capability
 protocol.  There are other kinds of object now.</p><p>An object reference has type "struct filesys_obj *".  "cap_t" is an
 alias for this.
-</p><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="id2526899"></a>Methods</h3></div></div></div><p>There are a number of methods defined.  Every object supports all the
+</p><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="id2526900"></a>Methods</h3></div></div></div><p>There are a number of methods defined.  Every object supports all the
 methods.  That is, it is valid to call a method on any object, even if
 the method isn't relevant to that object.  If the method isn't
 relevant, it will return an error code (for those methods that can
@@ -13,7 +13,7 @@ means all the vtables need to be recompiled when we add new methods.
 Since the vtables are sparse (ie. most methods aren't relevant to a
 given object), we have a program, "make-vtables.pl", which generates
 the C code for constructing the vtables.
-</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="id2526922"></a>Reference counting</h3></div></div></div><p>All objects have a reference count.  To increment the count, use
+</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="id2526923"></a>Reference counting</h3></div></div></div><p>All objects have a reference count.  To increment the count, use
 "inc_ref(obj)".  To decrement the count, use "filesys_obj_free(obj)"
 (this will free the object when the count hits zero).  Some references
 are owning references -- you are supposed to free them.  Some
@@ -22,7 +22,7 @@ reference is based on a trade-off between convenience and minimising
 the lifetime of objects.  You have to look at the comments for a
 function to see whether its arguments are passed as owning or
 non-owning.
-</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="id2526943"></a>Marshalling</h3></div></div></div><p>In order to make a method call across a connection using the
+</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="id2526944"></a>Marshalling</h3></div></div></div><p>In order to make a method call across a connection using the
 object-capability protocol, the method's arguments must be marshalled
 -- converted into a string and an array of objects/FDs, and then
 converted back again at the other end.</p><p>Marshalled arguments are represented by "struct cap_args".</p><p>The most general methods are "cap_invoke" and "cap_call", which only

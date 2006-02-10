@@ -208,12 +208,12 @@ file uses with the "ldd" command:
 
 \programlisting~
   bash$ ldd /usr/bin/oggenc
-	libvorbisenc.so.0 => /usr/lib/libvorbisenc.so.0 (0x40028000)
-	libvorbis.so.0 => /usr/lib/libvorbis.so.0 (0x4009c000)
-	libm.so.6 => /lib/i686/libm.so.6 (0x400bb000)
-	libogg.so.0 => /usr/lib/libogg.so.0 (0x400dd000)
-	libc.so.6 => /lib/i686/libc.so.6 (0x42000000)
-	/lib/ld-linux.so.2 => /lib/ld-linux.so.2 (0x40000000)
+        libvorbisenc.so.0 => /usr/lib/libvorbisenc.so.0 (0x40028000)
+        libvorbis.so.0 => /usr/lib/libvorbis.so.0 (0x4009c000)
+        libm.so.6 => /lib/i686/libm.so.6 (0x400bb000)
+        libogg.so.0 => /usr/lib/libogg.so.0 (0x400dd000)
+        libc.so.6 => /lib/i686/libc.so.6 (0x42000000)
+        /lib/ld-linux.so.2 => /lib/ld-linux.so.2 (0x40000000)
 
 [Run this under Plash using "!!ldd /usr/bin/oggenc".]
 

@@ -314,7 +314,7 @@ int flatten_args(region_t r, struct flatten_params *p,
     if(m_arg_ambient(args, &a)) {
       if(p->tree) return flatten_args(r, p, rw, 1, a);
       else {
-	printf("plash: ambient args list ignored\n");
+	printf(_("plash: ambient args list ignored\n"));
 	return 0;
       }
     }
@@ -329,9 +329,8 @@ int flatten_args(region_t r, struct flatten_params *p,
 	if(fs_resolve_populate(p->root_dir, p->tree, p->cwd, filename,
 			       (rw ? FS_SLOT_RWC : 0) | FS_FOLLOW_SYMLINKS,
 			       &err) < 0) {
-	  printf("plash: error in resolving filename `");
-	  fprint_d(stdout, filename);
-	  printf("': %s\n", strerror(err));
+	  printf(_("plash: error in resolving filename `%s': %s\n"),
+		 region_strdup_seqf(r, filename), strerror(err));
 	}
       }
       if(!ambient) {
@@ -356,9 +355,8 @@ int flatten_args(region_t r, struct flatten_params *p,
 	  if(fs_resolve_populate(p->root_dir, p->tree, p->cwd, filename,
 				 (rw ? FS_SLOT_RWC : 0) | FS_FOLLOW_SYMLINKS,
 				 &err) < 0) {
-	    printf("plash: error in resolving filename `");
-	    fprint_d(stdout, filename);
-	    printf("': %s\n", strerror(err));
+	    printf(_("plash: error in resolving filename `%s': %s\n"),
+		   region_strdup_seqf(r, filename), strerror(err));
 	  }
 	}
 	if(!ambient) {
@@ -386,7 +384,7 @@ int flatten_args(region_t r, struct flatten_params *p,
 				   &err) < 0) {
 	      /* This error shouldn't happen unless the filesystem changes
 		 underneath us. */
-	      printf("plash: error in resolving globbed filename `%s': %s\n",
+	      printf(_("plash: error in resolving globbed filename `%s': %s\n"),
 		     l->str, strerror(err));
 	    }
 	  }
@@ -399,7 +397,7 @@ int flatten_args(region_t r, struct flatten_params *p,
 	  }
 	}
 	else {
-	  printf("plash: glob pattern matched nothing\n");
+	  printf(_("plash: glob pattern matched nothing\n"));
 	}
 	return 0;
       }
@@ -417,7 +415,7 @@ int flatten_args(region_t r, struct flatten_params *p,
 	p->got_end = &l->next;
       }
       else {
-	printf("warning: string argument \"%s\" in ambient arg list (ignored)\n", string.data);
+	printf(_("warning: string argument \"%s\" in ambient arg list (ignored)\n"), string.data);
       }
       return 0;
     }
@@ -431,7 +429,7 @@ int flatten_args(region_t r, struct flatten_params *p,
       int fd_no, fd_dest;
       
       if(!p->fds_allowed) {
-	printf("fd redirection not allowed in this context\n");
+	printf(_("fd redirection not allowed in this context\n"));
 	return 1; /* Error */
       }
       
@@ -459,7 +457,7 @@ int flatten_args(region_t r, struct flatten_params *p,
 	  fd_dest = p->fds.fds[i];
 	}
 	else {
-	  printf("plash: file descriptor %i not open\n", i);
+	  printf(_("plash: file descriptor %i not open\n"), i);
 	  return 1;
 	}
       }
@@ -476,9 +474,8 @@ int flatten_args(region_t r, struct flatten_params *p,
 	fd_dest = process_open(p->root_dir, p->cwd, filename,
 			       flags, 0666, &err);
 	if(fd_dest < 0) {
-	  printf("plash: couldn't open `");
-	  fprint_d(stdout, filename);
-	  printf("' for redirection\n");
+	  printf(_("plash: couldn't open `%s' for redirection: %s\n"),
+		 region_strdup_seqf(r, filename), strerror(err));
 	  return 1;
 	}
 	region_add_finaliser(r, finalise_close_fd, (void *) fd_dest);
@@ -494,7 +491,7 @@ int flatten_args(region_t r, struct flatten_params *p,
     struct shell_expr *expr;
     if(m_arg_fs_binding(args, &pathname1, &expr)) {
       if(!p->tree) {
-	printf("plash: cannot re-arrange filesystem when invoking commands with `!!'\n");
+	printf(_("plash: cannot re-arrange filesystem when invoking commands with `!!'\n"));
 	return 1; /* Error */
       }
       else {
@@ -503,7 +500,7 @@ int flatten_args(region_t r, struct flatten_params *p,
 	cap_t x = eval_expr(p->state, expr);
 	if(!x) return 1; /* Error */
 	if(fs_attach_at_pathname(p->tree, p->cwd, pathname, x, &err) < 0) {
-	  printf("plash: %s\n", strerror(err));
+	  printf(_("plash: %s\n"), strerror(err));
 	  return 1; /* Error */
 	}
 	if(!ambient) {
@@ -537,9 +534,13 @@ void args_to_exec_elf_program
   *cmd_out = PLASH_SETUID_BIN_INSTALL "/run-as-anonymous";
   i = 1;
   if(debug) argv2[i++] = "--debug";
+  argv2[i++] = "-s";
+  argv2[i++] = "LD_LIBRARY_PATH=" LIB_INSTALL;
   argv2[i++] = "/special/ld-linux.so.2";
-  argv2[i++] = "--library-path";
-  argv2[i++] = PLASH_LD_LIBRARY_PATH;
+  if(0) {
+    argv2[i++] = "--library-path";
+    argv2[i++] = PLASH_LD_LIBRARY_PATH;
+  }
   argv2[i++] = executable_filename;
   for(i = 1; i < argc; i++) { argv2[extra_args + i] = argv[i]; }
   argv2[extra_args + argc] = NULL;
@@ -627,15 +628,15 @@ void report_job_errors(struct job *job)
     if(WIFEXITED(p->wait_status)) {
       int rc = WEXITSTATUS(p->wait_status);
       if(rc) {
-	printf("plash: job %i: process #%i (pid %i) exited with status %i\n",
+	printf(_("plash: job %i: process #%i (pid %i) exited with status %i\n"),
 	       job->id, i, p->pid, rc);
       }
     }
     else if(WIFSIGNALED(p->wait_status)) {
       int sig = WTERMSIG(p->wait_status);
       const char *desc = strsignal(sig);
-      printf("plash: job %i: process #%i (pid %i) died with signal %i (%s)\n",
-	     job->id, i, p->pid, sig, desc ? desc : "unknown signal");
+      printf(_("plash: job %i: process #%i (pid %i) died with signal %i (%s)\n"),
+	     job->id, i, p->pid, sig, desc ? desc : _("unknown signal"));
     }
     i++;
   }
@@ -677,7 +678,7 @@ void wait_for_job(struct shell_state *state, struct job *job)
   }
 
   if(job->last_state == ST_STOPPED) {
-    printf("plash: job %i stopped\n", job->id);
+    printf(_("plash: job %i stopped\n"), job->id);
   }
   else if(job->last_state == ST_FINISHED) {
     /* Don't print any message when a foreground job finishes normally. */
@@ -685,7 +686,7 @@ void wait_for_job(struct shell_state *state, struct job *job)
     remove_job(job);
   }
   else {
-    printf("plash: unknown job state (job %i)\n", job->id);
+    printf(_("plash: unknown job state (job %i)\n"), job->id);
   }
 }
 
@@ -697,18 +698,18 @@ void report_jobs(struct shell_state *state)
     if(job->last_state != state) {
       job->last_state = state;
       if(state == ST_STOPPED) {
-	printf("plash: job %i stopped\n", job->id);
+	printf(_("plash: job %i stopped\n"), job->id);
       }
       else if(state == ST_FINISHED) {
 	struct job *next = job->next;
-	printf("plash: job %i finished\n", job->id);
+	printf(_("plash: job %i finished\n"), job->id);
 	report_job_errors(job);
 	remove_job(job);
 	job = next;
 	goto next;
       }
       else {
-	printf("plash: unknown job state (job %i)\n", job->id);
+	printf(_("plash: unknown job state (job %i)\n"), job->id);
       }
     }
     job = job->next;
@@ -1350,7 +1351,7 @@ void spawn_inv_process(void *spawn_h, struct process_desc_fork *f,
   }
   cap_invoke(obj->exec_obj,
 	     cap_args_make(cat4(r, mk_string(r, "Call"),
-				mk_string(r, "Exeo"),
+				mk_int(r, METHOD_EO_EXEC),
 				mk_int(r, spawn_args),
 				argbuf_data(argbuf)),
 			   cap_seq_append(r, mk_caps1(r, return_cont),

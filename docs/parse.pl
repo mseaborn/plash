@@ -54,7 +54,24 @@ sub traverse {
     traverse($subst->{$n}
 	     || die "$n not defined")
   }
+  elsif($t->{T} eq 'programlisting') {
+    tag('programlisting', XXMLParse::preformatted(@{traverse($t->{B})}))
+  }
   elsif($t->{T} eq 'xxmlexample') {
+    my @body = remove_ws(map { traverse($_) } @{$t->{B}});
+    die unless scalar(@body) == 2;
+    die unless $body[0]{T} eq 'xxml';
+    die unless $body[1]{T} eq 'xml';
+    traverse(tag('variablelist',
+		 tag('varlistentry',
+		     tag('term', 'XXML'),
+		     tag('listitem', tag('programlisting', $body[0]{B}))),
+		 tag('varlistentry',
+		     tag('term', 'XML'),
+		     tag('listitem', tag('programlisting', $body[1]{B})))))
+  }
+  # disabled
+  elsif($t->{T} eq 'xxmlexample' && 0) {
     my @body = remove_ws(map { traverse($_) } @{$t->{B}});
     die unless scalar(@body) == 2;
     die unless $body[0]{T} eq 'xxml';

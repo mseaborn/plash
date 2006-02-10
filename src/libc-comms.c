@@ -29,7 +29,7 @@
 char *glibc_getenv(const char *name);
 
 
-static int my_atoi(const char *str)
+int my_atoi(const char *str)
 {
   int x = 0;
   for(; *str; str++) {

@@ -26,6 +26,10 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#include <gtk/gtkwindow.h>
+#include <gtk/gtk.h>
+#include <glib.h>
+
 #include "region.h"
 #include "filesysobj.h"
 #include "filesysobj-real.h"
@@ -37,6 +41,7 @@
 #include "config.h"
 #include "marshal.h"
 #include "plash-libc.h"
+#include "powerbox.h"
 
 
 #define NAME "pola-run"
@@ -138,6 +143,11 @@ struct state {
   int args_count;
   const char *executable_filename;
   int log_summary;
+  const char *pet_name;
+  int powerbox;
+#if 0
+  int comm_fd_number;
+#endif
 };
 
 void usage(FILE *fp)
@@ -159,7 +169,9 @@ void usage(FILE *fp)
 	  "  [-B]            Grant access to /usr, /bin and /lib\n"
 	  "  [--x11]         Grant access to X11 Window System\n"
 	  "  [--net]         Grant access to network config files\n"
-	  "  [--log]         Print method calls client makes to file server\n");
+	  "  [--log]         Print method calls client makes to file server\n"
+	  "  [--pet-name <name>]\n"
+	  "  [--powerbox]\n");
 }
 
 struct flags {
@@ -412,6 +424,31 @@ int handle_arguments(region_t r, struct state *state,
       goto arg_handled;
     }
 
+    if(!strcmp(arg, "--powerbox")) {
+      state->powerbox = TRUE;
+      goto arg_handled;
+    }
+
+    if(!strcmp(arg, "--pet-name")) {
+      if(i + 1 > argc) {
+	fprintf(stderr, NAME_MSG "--pet-name expects 1 parameter\n");
+	return 1;
+      }
+      state->pet_name = argv[i++];
+      goto arg_handled;
+    }
+
+#if 0
+    if(!strcmp(arg, "--high-fd")) {
+      if(i + 1 > argc) {
+	fprintf(stderr, NAME_MSG "--high-fd expects 1 parameter\n");
+	return 1;
+      }
+      state->comm_fd_number = atoi(argv[i++]);
+      goto arg_handled;
+    }
+#endif
+
     if(!strcmp(arg, "--help")) { usage(stdout); return 1; }
 
   unknown:
@@ -423,13 +460,17 @@ int handle_arguments(region_t r, struct state *state,
   return 0;
 }
 
+/* Use the LD_LIBRARY_PATH environment variable rather than the
+   --library-path argument to ld-linux.so.2. */
+static int ld_library_env = 1;
+
 static void args_to_exec_elf_program
   (region_t r, const char *executable_filename,
    int argc, const char **argv,
    const char **cmd_out, int *argc_out, const char ***argv_out)
 {
   int debug = 0;
-  int extra_args = 4 + (debug ? 1:0);
+  int extra_args = 2 + (debug ? 1:0) + 2;
   const char **argv2;
   int i;
 
@@ -444,10 +485,25 @@ static void args_to_exec_elf_program
   }
   i = 1;
   if(debug) argv2[i++] = "--debug";
+  /* NB. When running inside the Plash environment, run-as-anonymous
+     is statically linked and so won't unset LD_LIBRARY_PATH, so we
+     don't need to restore it. */
+  if(ld_library_env && !under_plash) {
+    char *path = getenv("LD_LIBRARY_PATH");
+    argv2[i++] = "-s";
+    argv2[i++] =
+      flatten0(r, cat2(r, mk_string(r, "LD_LIBRARY_PATH=" LIB_INSTALL),
+		       path ? cat2(r, mk_string(r, ":"),
+				   mk_string(r, path))
+		            : seqt_empty)).data;
+  }
   argv2[i++] = "/special/ld-linux.so.2";
-  argv2[i++] = "--library-path";
-  argv2[i++] = PLASH_LD_LIBRARY_PATH;
+  if(!ld_library_env) {
+    argv2[i++] = "--library-path";
+    argv2[i++] = PLASH_LD_LIBRARY_PATH;
+  }
   argv2[i++] = executable_filename;
+  assert(i <= extra_args + 1);
   for(i = 1; i < argc; i++) { argv2[extra_args+i] = argv[i]; }
   argv2[extra_args + argc] = NULL;
   *argc_out = extra_args + argc;
@@ -503,6 +559,18 @@ int main(int argc, char **argv)
   state.args_count = 0;
   state.executable_filename = NULL;
   state.log_summary = FALSE;
+  state.pet_name = NULL;
+  state.powerbox = FALSE;
+#if 0
+  state.comm_fd_number = 0;
+#endif
+
+  /* Don't call gtk_init(): don't open an X11 connection at this stage,
+     because we don't know if we'll need one and X11 might not be
+     available to us. */
+  /* I don't like that Gtk will take command line arguments.  I would
+     like to pass an empty array here, but that causes Gtk to segfault. */
+  // gtk_parse_args(&argc, &argv);
 
   if(getenv("PLASH_CAPS")) {
     struct cap_args result;
@@ -598,9 +666,8 @@ int main(int argc, char **argv)
 
       child_root = fs_make_root(state.root_node);
       assert(child_root);
-      free_node(state.root_node);
 
-      // fs_print_tree(0, state.root_node);
+      if(0) { fs_print_tree(0, state.root_node); }
 
       /* Set up cwd.  If this fails, the cwd is left undefined. */
       if(state.cwd) {
@@ -624,9 +691,6 @@ int main(int argc, char **argv)
 	return 1;
       }
 
-      filesys_obj_free(state.root_dir);
-      if(state.cwd) { dir_stack_free(state.cwd); }
-      
       shared = amalloc(sizeof(struct server_shared));
       shared->refcount = 1;
       shared->next_id = 1;
@@ -642,11 +706,29 @@ int main(int argc, char **argv)
       shared->log_messages = 0;
 
       // "fs_op;conn_maker;fs_op_maker;union_dir_maker"
-      cap_names = "fs_op;conn_maker";
-      cap_count = 2;
+      if(state.powerbox) {
+	cap_names = "fs_op;fs_op_maker;conn_maker;powerbox_req_filename";
+	cap_count = 4;
+      }
+      else {
+	cap_names = "fs_op;fs_op_maker;conn_maker";
+	cap_count = 3;
+      }
       caps = region_alloc(r, cap_count * sizeof(cap_t));
+      shared->refcount++;
       caps[0] = make_fs_op_server(shared, child_root, child_cwd);
-      caps[1] = conn_maker_make();
+      caps[1] = fs_op_maker_make(shared);
+      caps[2] = conn_maker_make();
+      if(state.powerbox) {
+	caps[3] = powerbox_make(state.pet_name,
+				inc_ref(state.root_dir),
+				(struct node *) inc_ref((cap_t) state.root_node));
+      }
+
+      filesys_obj_free(state.root_dir);
+      if(state.cwd) { dir_stack_free(state.cwd); }
+      
+      free_node(state.root_node);
 
       /* Do I want to do a double fork so that the server process is no
 	 longer a child of the client process?  The client process might
@@ -667,6 +749,21 @@ int main(int argc, char **argv)
 	gc_check();
 #endif
 
+	if(state.powerbox) {
+	  /* NB. We have already processed arguments!  Gtk should not
+	     take anything from this arg list, we hope. */
+	  gtk_init(&argc, &argv);
+	  // gdk_display_get_default();
+	  
+	  /* It seems that if the X11 connection is broken, gtk_main() calls
+	     exit() rather than returning.  That's not what we want. */
+	  while(cap_server_exporting()) {
+	    gtk_main_iteration();
+	  }
+	}
+	/* We'd like to fall back to a normal non-X11 server if the X11
+	   event loop exits.  This in turn will exit if we're not serving
+	   any references any more. */
 	cap_run_server();
 	exit(0);
       }
@@ -677,6 +774,24 @@ int main(int argc, char **argv)
       cap_close_all_connections();
 
       close(socks[1]);
+
+#if 0
+      /* This is a hack to deal with programs which close all the file
+         descriptors in a range, even if they didn't open them
+         themselves.  This includes XEmacs, which closes file
+         descriptors 0 through to 64 (inclusive) when it forks a child
+         process.  The real solution is to have libc virtualise FDs,
+         or at least move its FD out of the way. */
+      {
+	int fd = fcntl(socks[0], F_DUPFD, state.comm_fd_number);
+	if(fd < 0) {
+	  perror(NAME_MSG "fcntl/dup");
+	  return 1;
+	}
+	close(socks[0]);
+	socks[0] = fd;
+      }
+#endif
 
       {
 	char buf[20];

@@ -43,7 +43,7 @@ the reference ID (an index into an export table).</p><p>The possible namespace I
    B removes the reference from its export table.</p><p>  </p></li><li><p>"Drop" cap/int</p><p>   Drops a reference.  `cap' is an object ID that B exports to A, so
    `cap' may only use the RECEIVER namespace.</p><p>   When B receives this message, it removes the reference `cap' from
    its export table.  B may also delete the object X that `cap'
-   denotes if there are no other references to X.</p><p>  </p></li></ul></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="id2523339"></a>Closing the connection</h3></div></div></div><p>Violations:  If either end receives a message that is illegal, such as
+   denotes if there are no other references to X.</p><p>  </p></li></ul></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="id2523340"></a>Closing the connection</h3></div></div></div><p>Violations:  If either end receives a message that is illegal, such as
 messages that contain illegal object IDs, it may choose to terminate
 the connection.  This would mean closing the file descriptor for the
 socket.  Assuming there are no other copies of this file descriptor in
@@ -57,7 +57,7 @@ conventional to close the connection, because it is of no use: no
 messages can legally be sent on it.  Conventionally, A will close the
 connection rather than sending a "Drop" message for the last reference
 that B exports to A, when A exports nothing to B.
-</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="id2523370"></a>Conventions</h3></div></div></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="id2523374"></a>Initial state of a newly-created connection</h4></div></div></div><p>A and B start off holding socket file descriptors connected to each
+</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="id2523370"></a>Conventions</h3></div></div></div><div class="sect3" lang="en"><div class="titlepage"><div><div><h4 class="title"><a name="id2523375"></a>Initial state of a newly-created connection</h4></div></div></div><p>A and B start off holding socket file descriptors connected to each
 other (typically created by socketpair()).  A exports M references to
 B; these are given IDs 0 to M-1.  B exports N references to A; these
 are given IDs 0 to N-1.</p><p>The numbers M and N must be made known to both A and B by some means

@@ -1,6 +1,27 @@
 #!/bin/bash
 
+# Copyright (C) 2004, 2005 Mark Seaborn
+#
+# This file is part of Plash, the Principle of Least Authority Shell.
+#
+# Plash is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Lesser General Public License as
+# published by the Free Software Foundation; either version 2.1 of
+# the License, or (at your option) any later version.
+#
+# Plash is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with Plash; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
+# USA.
+
+
 set -e
+# set -x
 
 . ./src/config.sh
 
@@ -23,6 +44,7 @@ OBJS_FOR_LIBC="
 	socket/connect.os
 	socket/bind.os
 	io/close.os
+	io/dup2.os
 	io/fstat.oS io/fxstat.os
 	io/xstat64.os io/xstatconv.os"
 OBJS_FOR_RTLD="
@@ -54,6 +76,7 @@ OBJS_FOR_RTLD="
 #   misc/mount.os misc/umount.os misc/chroot.os misc/pivot_root.os
 EXCLUDE="io/open.os io/open64.os io/creat.os io/creat64.os
 	io/close.os
+	io/dup2.os
 	io/getcwd.os io/chdir.os io/fchdir.os
 	io/xmknod.os
 	io/xstat.os io/xstat64.os
@@ -88,6 +111,10 @@ EXCLUDE="io/open.os io/open64.os io/creat.os io/creat64.os
 	misc/seteuid.os misc/setegid.os
 	misc/setreuid.os misc/setregid.os
 	io/not-cancel-open.os"
+
+if [ ! -d "$GLIBC" ]; then
+  echo "Warning: glibc object files directory \"$GLIBC\" does not exist"
+fi
   
 # Doesn't work if the stamp.os files are not available
 # ./src/files-to-link.pl $GLIBC $EXCLUDE > $OUT/obj-file-list-libc
@@ -407,7 +434,8 @@ build_shell_etc() {
 	obj/log-proxy.o \
 	obj/reconnectable-obj.o \
 	obj/parse-filename.o obj/comms.o \
-	obj/serialise.o obj/serialise-utils.o obj/region.o obj/utils.o
+	obj/serialise.o obj/serialise-utils.o obj/region.o obj/utils.o \
+	obj/powerbox.o
 
   # "search A B..." tries files A B etc. in turn, and prints the
   # name of the first one that exists.
@@ -427,8 +455,10 @@ build_shell_etc() {
   # We need to link with libdl.so and libm.so in case the installed ones
   # aren't compatible with our libc.so and ld.so (they might be non-2.3.5).
   # $GLIBC/math/libm.so $GLIBC/dlfcn/libdl.so shobj/libc.so shobj/ld.so
+  # FIXME: remove glib-2.0 from this
   LIBC_LINK="-Wl,-z,defs
 	$OUT/libc.so $OUT/ld.so
+	`pkg-config --libs glib-2.0`
 	`search $GLIBC_SO_DIR/{math/,}libm.so{,.6}`
 	`search $GLIBC_SO_DIR/{dlfcn/,}libdl.so{,.2}`"
 
@@ -440,7 +470,7 @@ build_shell_etc() {
 	gensrc/dummy-libc.c -o obj/dummy-libc.so
     LIBC_LINK_HACK=obj/dummy-libc.so
   else
-    LIBC_LINK_HACK=""
+    LIBC_LINK_HACK="`pkg-config --libs glib-2.0`"
   fi
   
   # `pkg-config gtk+-2.0 --libs`
@@ -463,9 +493,10 @@ build_shell_etc() {
   echo Linking bin/run-emacs
   $CC $OPTS_S obj/run-emacs.o $LIBC_LINK obj/libplash.a -o bin/plash-run-emacs
   echo Linking bin/pola-run
-  $CC $OPTS_S obj/pola-run.o $LIBC_LINK obj/libplash.a -o bin/pola-run
+  $CC $OPTS_S obj/pola-run.o $LIBC_LINK obj/libplash.a `pkg-config gtk+-2.0 --libs` -o bin/pola-run
 
-  $CC $OPTS_S obj/test-caps.o obj/libplash.a -o bin/test-caps
+  echo Linking bin/powerbox-req
+  $CC $OPTS_S obj/powerbox-req.o $LIBC_LINK obj/libplash.a -o bin/powerbox-req
 
   echo Linking bin/plash-opts-gtk
   $CC $OPTS_S \
@@ -488,6 +519,8 @@ build_shell_etc() {
   $CC $OPTS_S obj/socket-publish.o $LIBC_LINK obj/libplash.a -o bin/plash-socket-publish
   echo Linking bin/socket-connect
   $CC $OPTS_S obj/socket-connect.o $LIBC_LINK obj/libplash.a -o bin/plash-socket-connect
+
+  $CC $OPTS_S obj/test-caps.o $LIBC_LINK obj/libplash.a -o bin/test-caps
 }
 
 

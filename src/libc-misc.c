@@ -28,22 +28,28 @@
 /* #include <dirent.h> We have our own types */
 #include <sys/stat.h>
 #include <sys/un.h>
+#include <sys/statfs.h>
 
 #include "region.h"
 #include "comms.h"
 #include "libc-comms.h"
 #include "marshal.h"
+#include "cap-protocol.h"
 #include "cap-utils.h"
 
 
 #define MOD_MSG "libc: "
+#if 1
 #define log_msg(msg) /* nothing */
-#if 0
+#else
 static void log_msg(const char *msg)
 {
   write(2, msg, strlen(msg));
 }
 #endif
+
+
+int my_atoi(const char *str);
 
 
 /* This array maps file descriptor numbers to objects that implement
@@ -150,15 +156,93 @@ int new_open(const char *filename, int flags, ...)
   return -1;
 }
 
+/* This has turned out not to be a good idea. */
+#if 0
+static void relocate_comm_fd()
+{
+  /* This may set comm_sock to -1 on failure. */
+  comm_sock = cap_relocate_fd(comm_sock);
+
+  /* Note that resetting the environment like this often doesn't work,
+     eg. for XEmacs.
+     The application may have taken its own copy of the environment
+     which it then passes to execve().  We should insert our own changes
+     at the point of execve(), not here. */
+#if !defined(IN_RTLD)
+  if(comm_sock < 0) {
+    unsetenv("PLASH_COMM_FD");
+  }
+  else {
+    char buf[40];
+    snprintf(buf, sizeof(buf), "%i", comm_sock);
+    setenv("PLASH_COMM_FD", buf, 1);
+  }
+#endif
+
+  if(0) {
+    char *msg = "warning: comm socket clobbered!\n";
+    write(2, msg, strlen(msg));
+  }
+}
+#endif
+
 /* EXPORT: new_close => WEAK:close WEAK:__close __libc_close __GI_close __GI___close __GI___libc_close */
 int new_close(int fd)
 {
   log_msg(MOD_MSG "close\n");
+  if(fd == comm_sock) {
+    /* Pretend that this file descriptor slot is empty.  As far as the
+       application knows, it *is* empty.  The chances are that the
+       application is just closing all file descriptor numbers in a
+       range.  Giving an error is the correct response in that
+       case. */
+    __set_errno(EBADF);
+    return -1;
+
+#if 0
+    relocate_comm_fd();
+    /* Note that now we have relocated fd, fd has been closed, and the
+       call to close() below will fail and return an error.  But that's
+       okay: an error is what the caller should get. */
+#endif
+  }
   if(0 <= fd && fd < g_fds_size && g_fds[fd]) {
     filesys_obj_free(g_fds[fd]);
     g_fds[fd] = 0;
   }
   return close(fd);
+}
+
+/* EXPORT: new_dup2 => WEAK:dup2 __dup2 __GI_dup2 __GI___dup2 */
+int new_dup2(int source_fd, int dest_fd)
+{
+  int rc;
+  log_msg(MOD_MSG "dup2\n");
+
+  if(dest_fd == comm_sock) {
+    /* Don't allow the socket file descriptor to be clobbered.  This
+       will stop applications which allocate their own FD numbers from
+       going any further, assuming they check the return value for an
+       error.  This should be better than clobbering the socket and
+       getting a failure later. */
+    __set_errno(EINVAL);
+    return -1;
+
+#if 0
+    relocate_comm_fd();
+#endif
+  }
+  
+  rc = dup2(source_fd, dest_fd);
+  if(rc >= 0) {
+    /* Make sure our entry for the destination FD is removed. */
+    if(0 <= dest_fd && dest_fd < g_fds_size && g_fds[dest_fd]) {
+      filesys_obj_free(g_fds[dest_fd]);
+      g_fds[dest_fd] = 0;
+    }
+    /* To do: copy the g_fds entry from source_fd to dest_fd. */
+  }
+  return rc;
 }
 
 /* EXPORT: new_fchdir => WEAK:fchdir __fchdir __GI_fchdir __GI___fchdir */
@@ -1358,11 +1442,27 @@ int new_rmdir(const char *pathname)
 }
 
 /* EXPORT: new_statfs => WEAK:statfs __statfs __GI_statfs __GI___statfs */
-int new_statfs(const char *path, void *buf) // struct statfs *buf
+int new_statfs(const char *path, struct statfs *buf)
 {
+  char *v = getenv("PLASH_FAKE_STATFS_AVAIL");
   log_msg(MOD_MSG "statfs\n");
-  __set_errno(ENOSYS);
-  return -1;
+  if(v) {
+    int free = my_atoi(v);
+    memset(buf, 0, sizeof(struct statfs));
+    buf->f_type = 0;
+    buf->f_bsize = 1024;
+    buf->f_blocks = free;
+    buf->f_bfree = free;
+    buf->f_bavail = free;
+    buf->f_files = free;
+    buf->f_ffree = free;
+    buf->f_namelen = 1024;
+    return 0;
+  }
+  else {
+    __set_errno(ENOSYS);
+    return -1;
+  }
 }
 
 

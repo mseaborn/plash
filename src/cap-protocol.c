@@ -20,6 +20,11 @@
 #include <errno.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <fcntl.h>
+
+#ifdef PLASH_GLIB
+#include <glib.h>
+#endif
 
 #include "comms.h"
 #include "region.h"
@@ -53,13 +58,6 @@
    to combine the invocation and the drop, so that at least they're sent
    with the same "sendmsg" call.  This could reduce the number of
    context switches.
-*/
-
-/* Conventions for message contents:
-   "Call" msg + CAP (used as return capability)
-   "ECon" (connection broken)
-   "Fail" ...
-   "Okay" ...
 */
 
 /* If true, the connection will be severed if the protocol is violated,
@@ -123,6 +121,10 @@ struct connection {
 
   /* Number of remote_objects referring to this connection. */
   int import_count;
+
+#ifdef PLASH_GLIB
+  GIOChannel *ch;
+#endif
 };
 
 struct c_server_state {
@@ -157,6 +159,9 @@ struct remote_obj {
 struct cap_seq caps_empty = { 0, 0 };
 
 
+static void listen_on_connection(struct connection *conn);
+
+
 /* Sets up the arguments to select().  Needs to be called every time the
    process list is changed. */
 static void init_fd_set(struct c_server_state *state)
@@ -178,6 +183,10 @@ static void shut_down_connection(struct connection *conn)
   int export_size = conn->export_size;
   assert(conn->comm); /* Connection should not have been shut down already */
 
+#ifdef PLASH_GLIB
+  g_io_channel_unref(conn->ch);
+#endif
+
   /* Close socket and connection. */
   if(close(conn->sock_fd) < 0) { /* perror("close"); */ }
   comm_free(conn->comm);
@@ -196,11 +205,14 @@ static void shut_down_connection(struct connection *conn)
     /* Zero other details just in case: */
     conn->l.prev = 0;
     conn->l.next = 0;
-    conn->sock_fd = 0;
+    conn->sock_fd = -1;
     conn->export = 0;
     conn->export_size = 0;
     conn->export_count = 0;
     conn->export_next = 0;
+#ifdef PLASH_GLIB
+    conn->ch = 0;
+#endif
   }
   else {
     free(conn);
@@ -683,6 +695,21 @@ static void handle_msg(struct connection *conn, seqf_t data_orig, fds_t fds)
   close_fds(fds);
 }
 
+#ifdef PLASH_GLIB
+static gboolean event_handler(GIOChannel *ch, GIOCondition cond, void *obj)
+{
+  struct connection *conn = obj;
+  if(cond & (G_IO_NVAL | G_IO_ERR | G_IO_HUP)) {
+    shut_down_connection(conn);
+    return FALSE; /* remove handler */
+  }
+  if(cond & G_IO_IN) {
+    listen_on_connection(conn);
+  }
+  return TRUE;
+}
+#endif
+
 static int next_conn_id = 0;
 
 /* Creates a new connection given a socket file descriptor.
@@ -734,6 +761,12 @@ cap_t *cap_make_connection(region_t r, int sock_fd,
   init_fd_set(&server_state);
 
   server_state.total_export_count += export.size;
+
+#ifdef PLASH_GLIB
+  conn->ch = g_io_channel_unix_new(sock_fd);
+  g_io_add_watch(conn->ch, G_IO_IN | G_IO_ERR | G_IO_HUP | G_IO_NVAL,
+		 event_handler, conn);
+#endif
 
   /* Create imported object references. */
   conn->import_count = 0; /* This will be incremented by lookup_id(). */
@@ -898,6 +931,13 @@ int cap_run_server_step()
 #endif
 }
 
+/* Returns whether we are currently exporting any references.  This is
+   used to determine whether the process should exit. */
+int cap_server_exporting()
+{
+  return server_state.total_export_count;
+}
+
 void cap_run_server()
 {
   // /* While the process list is non-empty... */
@@ -975,6 +1015,43 @@ void cap_handle_select_result(fd_set *read_fds,
   }
 }
 
+
+/* This has turned out not to be a good idea. */
+#if 0
+/* This is used by libc when it gets a close() or dup2() call that it
+   notices will clobber the existing connection.  This function
+   attempts to relocate the connection that uses old_fd to a different
+   file descriptor number. */
+/* Returns the new file descriptor number, or -1 if no connection used
+   old_fd. */
+int cap_relocate_fd(int old_fd)
+{
+  struct connection *conn;
+  for(conn = server_state.list.next;
+      !conn->l.head;
+      conn = conn->l.next) {
+    if(conn->comm && conn->sock_fd == old_fd) {
+      /* If the socket currently uses a low-numbered FD, try a
+	 high-numbered FD.  If it uses a high-numbered FD, try a
+	 low-numbered FD. */
+      int new_fd = fcntl(old_fd, F_DUPFD,
+			 old_fd < 100 ? 100 : 0);
+      if(new_fd < 0) {
+	/* Give up.  There's no way of signalling an error at the moment. */
+	shut_down_connection(conn);
+	return -1;
+      }
+      else {
+	close(old_fd);
+	conn->sock_fd = new_fd;
+	conn->comm->sock = new_fd;
+	return new_fd;
+      }
+    }
+  }
+  return -1;
+}
+#endif
 
 
 #ifdef GC_DEBUG

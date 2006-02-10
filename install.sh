@@ -1,20 +1,45 @@
 #!/bin/sh
 
+# Copyright (C) 2004, 2005 Mark Seaborn
+#
+# This file is part of Plash, the Principle of Least Authority Shell.
+#
+# Plash is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Lesser General Public License as
+# published by the Free Software Foundation; either version 2.1 of
+# the License, or (at your option) any later version.
+#
+# Plash is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with Plash; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
+# USA.
+
+
 # This install program just covers the basics.
 # It doesn't install man pages or other documentation.
 
-if [ "$#" -ne 1 -o "$1" = "" ]; then
-  echo "Usage: $0 <dest-dir>"
+usage () {
+  echo "Usage: $0 [--nocheckroot] <dest-dir>"
   echo "To install normally, do: $0 /"
-  exit 1
-fi
-DEST=$1
-
-
-if [ "`id -u`" != 0 ]; then
   echo "$0 must be run as root in order to install setuid root programs"
   exit 1
+}
+
+if [ "$1" = "--nocheckroot" ]; then
+  shift
+elif [ "`id -u`" != 0 ]; then
+  usage
 fi
+
+if [ "$#" -ne 1 -o "$1" = "" ]; then
+  usage
+fi
+DEST=$1
 
 
 set -e
@@ -77,4 +102,4 @@ install -d $DEST/$LIB_INSTALL
 
 # Install Emacs lisp file
 install -d $DEST/$PLASH_EMACS_INSTALL
-cp -pv src/plash-gnuserv.el $DEST/$PLASH_EMACS_INSTALL/
+cp -pv src/plash-gnuserv.el src/powerbox.el $DEST/$PLASH_EMACS_INSTALL/

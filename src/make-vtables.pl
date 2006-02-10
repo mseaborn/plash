@@ -571,6 +571,17 @@ put('gensrc/out-vtable-run-emacs.h',
      }
     ]);
 
+put('gensrc/out-vtable-powerbox.h',
+    [{ Name => 'powerbox_vtable',
+       Interfaces => [],
+       Contents =>
+         [['free', 'powerbox_free'],
+	  ['mark', 'powerbox_mark'],
+	  ['cap_invoke', 'powerbox_invoke'],
+	 ]
+     }
+    ]);
+
 print "vtables use $bytes bytes\n";
 
 

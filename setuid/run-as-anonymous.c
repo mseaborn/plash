@@ -41,6 +41,7 @@
    root happens to own using symlinks.
 */
 
+#include <stdlib.h>
 #include <alloca.h>
 #include <errno.h>
 #include <stdio.h>
@@ -120,16 +121,13 @@ int pick_uid()
   }
 }
 
-int main(int argc, char *argv[], char *envp[])
+int main(int argc, char **argv)
 {
   if(argc < 2) {
-    fprintf(stderr, "Usage: %s program args...\n", argv[0]);
+    fprintf(stderr, "Usage: %s [--debug] [-s ENVVAR=VALUE]... program args...\n", argv[0]);
     return 1;
   }
   else {
-#ifndef NO_DEBUG
-    int debug = 0;
-#endif
     char **argv2;
     int i;
     int uid;
@@ -169,20 +167,6 @@ int main(int argc, char *argv[], char *envp[])
     uid = pick_uid();
     if(uid == 0) return 1;
 
-    argc--;
-    argv++;
-#ifndef NO_DEBUG
-    if(argc >= 2 && !strcmp(argv[0], "--debug")) {
-      debug = 1;
-      argc--;
-      argv++;
-    }
-#endif
-
-    argv2 = alloca((argc + 1) * sizeof(char *));
-    for(i = 0; i < argc; i++) argv2[i] = argv[i];
-    argv2[i] = 0;
-
 #if !defined IN_CHROOT_JAIL
     if(chroot(JAIL_DIR) < 0) { perror(NAME ": chroot: " JAIL_DIR); return 1; }
 #endif
@@ -204,15 +188,45 @@ int main(int argc, char *argv[], char *envp[])
 
     if(close(lock_file_fd) < 0) { perror(NAME ": close"); return 1; }
 
+    /* From this point on, the code is running as unprivileged.
+       It is not quite so critical, from the point of view of whoever
+       installs this as setuid root. */
+
+    argc--;
+    argv++;
+
+    /* Process the --debug option.  This suspends the process and
+       prints the PID.  This is useful for attaching gdb to the
+       process. */
 #ifndef NO_DEBUG
-    if(debug) {
+    if(argc >= 2 && !strcmp(argv[0], "--debug")) {
       fprintf(stderr, NAME ": stopping, pid %i\n", getpid());
       if(raise(SIGSTOP) < 0) { perror(NAME ": raise(SIGSTOP)"); return 1; }
+      
+      argc--;
+      argv++;
     }
 #endif
+
+    /* Process -s options for setting environment variables.  This is
+       useful for restoring variables such as LD_LIBRARY_PATH, which
+       the dynamic linker will unset when run-as-anonymous starts
+       because it notices that the process is setuid. */
+    while(argc >= 3 && !strcmp(argv[0], "-s")) {
+      if(putenv(argv[1]) < 0) {
+	fprintf(stderr, NAME ": putenv failed\n");
+	return 1;
+      }
+      argc -= 2;
+      argv += 2;
+    }
+
+    argv2 = alloca((argc + 1) * sizeof(char *));
+    for(i = 0; i < argc; i++) argv2[i] = argv[i];
+    argv2[i] = 0;
     
-    execve(argv[0], argv2, envp);
-    perror(NAME ": exec");
+    execv(argv[0], argv2);
+    fprintf(stderr, NAME ": exec: %s: %s\n", argv[0], strerror(errno));
     return 1;
   }
 }

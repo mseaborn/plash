@@ -1,3 +1,36 @@
+plash (1.14) unstable; urgency=low
+
+  * Add powerbox:  powerbox.[ch], powerbox-req.c, powerbox.el.
+    Changed pola-run.c to add --powerbox option etc.
+  * cap-protocol.c:  Add support for using glib, so that its event loop
+    can be subsumed into glib's event loop, and we can use Gtk.
+  * libc-misc.c:  Now intercept the dup2() call.
+     * I was going to handle close() and dup2() on the comm socket FD
+       by relocating the comm socket to another FD number, but this
+       turned out not to be a good idea (so the code is #if'd out).
+       cap-protocol.c:  Add cap_relocate_fd().
+     * That's because libc.so cannot relocate the FD by itself.  It
+       would need to be able to tell ld.so (but it has no way to).
+       Really, the application should have control over which FD
+       number is used, and I make use of that elsewhere.
+     * So instead, dup2() and close() now just refuse the clobber the
+       socket FD.
+  * Replace use of ld-linux.so.2's --library-path argument with use of
+    the LD_LIBRARY_PATH environment variable.  Change run-as-anonymous
+    to take extra arguments for setting environment variables.  This is
+    needed because run-as-anonymous runs setuid, and this causes the
+    dynamic linker to unset LD_LIBRARY_PATH, so this needs to be
+    restored.
+    Changed shell.c, pola-run.c, fs-operations.c.
+  * shell.c:  Change some cases to use format strings -- the beginnings
+    of gettext support.
+  * pola-run.c:  Now export fs_op_maker object to the application.
+  * libc-misc.c:  Change statfs().  Provide a way to fake the amount of
+    free space by setting the PLASH_FAKE_STATFS_AVAIL environment
+    variable.  This was needed to make the Firefox installer run.
+
+ -- Mark Seaborn <mseaborn@onetel.com>  Wed,  9 Nov 2005 21:07:41 +0000
+
 plash (1.13) unstable; urgency=low
 
   * Big changes to build process, so that I can distribute pre-built

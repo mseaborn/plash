@@ -33,7 +33,7 @@ gcc('src/serialise.c', 'obj/serialise.o', @opts_s);
 gcc('src/serialise-utils.c', 'obj/serialise-utils.o', @opts_s);
 gcc('src/comms.c', 'obj/comms.o', @opts_s,
     '-DHALF_NAME="server"');
-gcc('src/cap-protocol.c', 'obj/cap-protocol.o', @opts_s);
+gcc('src/cap-protocol.c', 'obj/cap-protocol.o', '-DPLASH_GLIB', @opts_s);
 gcc('src/cap-call-return.c', 'obj/cap-call-return.o', @opts_s);
 gcc('src/cap-utils.c', 'obj/cap-utils.o', @opts_s);
 gcc('src/cap-utils-libc.c', 'obj/cap-utils-libc.o', @opts_s);
@@ -61,6 +61,7 @@ gcc('src/shell-wait.c', 'obj/shell-wait.o', @opts_s);
 gcc('src/shell-options.c', 'obj/shell-options.o', @opts_s);
 gcc('src/resolve-filename.c', 'obj/resolve-filename.o', @opts_s);
 gcc('src/fs-operations.c', 'obj/fs-operations.o', @opts_s);
+gcc('src/powerbox.c', 'obj/powerbox.o', @opts_s);
 
 # Non-library code
 gcc('src/test-caps.c', 'obj/test-caps.o', @opts_s);
@@ -73,6 +74,7 @@ gcc('src/socket-publish.c', 'obj/socket-publish.o', @opts_s);
 gcc('src/socket-connect.c', 'obj/socket-connect.o', @opts_s);
 gcc('src/run-emacs.c', 'obj/run-emacs.o', @opts_s);
 gcc('src/pola-run.c', 'obj/pola-run.o', @opts_s);
+gcc('src/powerbox-req.c', 'obj/powerbox-req.o', @opts_s);
 
 
 

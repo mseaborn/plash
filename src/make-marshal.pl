@@ -119,6 +119,11 @@ my $methods =
    ['Exep', 'eo_is_executable'],
    ['Exeo', 'eo_exec'],
 
+   # Powerbox
+   ['Pbrf', 'powerbox_req_filename'],
+   ['Pbgf', 'powerbox_result_filename'],
+   ['Pbgc', 'powerbox_result_cancel'],
+
    # Used by shell
    ['Sopt', 'set_option'],
    ['Gopt', 'get_option'],

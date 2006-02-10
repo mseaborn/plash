@@ -651,14 +651,17 @@ void handle_fs_op_message(region_t r, struct process *proc,
 			  &executable_filename,
 			  &argc, &argv, &err) < 0) goto exec_fail;
 
-      extra_args = 3;
+      extra_args = 1;
       argv2 = region_alloc(r, (argc + extra_args) * sizeof(seqf_t));
       assert(argc >= 1);
       argv2[0] = argv[0];
       cmd_filename2 = seqf_string("/special/ld-linux.so.2");
-      argv2[1] = "--library-path";
-      argv2[2] = PLASH_LD_LIBRARY_PATH;
-      argv2[3] = executable_filename;
+      argv2[1] = executable_filename;
+      if(0) {
+	argv2[1] = "--library-path";
+	argv2[2] = PLASH_LD_LIBRARY_PATH;
+	argv2[3] = executable_filename;
+      }
       for(i = 1; i < argc; i++) { argv2[extra_args + i] = argv[i]; }
 
       {

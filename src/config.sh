@@ -18,7 +18,7 @@
 # USA.
 
 
-PLASH_VERSION=1.13
+PLASH_VERSION=1.14
 
 # Where to find partially-built glibc.
 # Used when building.
@@ -56,7 +56,8 @@ PLASH_EXECUTABLES="
 	exec-object
 	plash-socket-connect
 	plash-socket-publish
-	plash-run-emacs"
+	plash-run-emacs
+	powerbox-req"
 
 # Where to install to.
 # These paths are also compiled into the executables.

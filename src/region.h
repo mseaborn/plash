@@ -26,6 +26,10 @@
 #include <assert.h>
 
 
+/* gettext support. */
+#define _(x) x
+
+
 typedef struct region *region_t;
 region_t region_make();
 void region_free(region_t r);

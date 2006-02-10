@@ -42,7 +42,11 @@ cp -pv debian/copyright $DEST/usr/share/doc/$PACKAGE/
 cp -pv debian/changelog $DEST/usr/share/doc/$PACKAGE/changelog
 gzip -9 $DEST/usr/share/doc/$PACKAGE/changelog
 cp -pv README \
-	docs/README.old docs/NEWS docs/NEWS-exec-objs docs/protocols.txt \
+	docs/README.powerbox \
+	docs/README.old \
+	docs/NEWS \
+	docs/NEWS-exec-objs \
+	docs/protocols.txt \
 	$DEST/usr/share/doc/$PACKAGE/
 cp -prv docs/html/ $DEST/usr/share/doc/$PACKAGE/
 

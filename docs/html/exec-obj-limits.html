@@ -24,7 +24,7 @@ file descriptor.  This may be a problem in the future.</p><p>I can see two ways 
 you can stop the process by pressing Ctrl-Z, but the shell is not
 informed that the process has been stopped, so the shell will not
 return control to the user and display a prompt.</p><p>This needs to be fixed.  It is a deficiency in the specification of
-the "Exeo" method call.</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="id2523052"></a>exec-object limitations</h3></div></div></div><p>exec-object does not set the current working directory of the
+the "Exeo" method call.</p></div><div class="sect2" lang="en"><div class="titlepage"><div><div><h3 class="title"><a name="id2523053"></a>exec-object limitations</h3></div></div></div><p>exec-object does not set the current working directory of the
 processes it starts.</p><p>exec-object doesn't provide any control over the arguments and
 environment variables it passes to the processes it starts.</p><p>exec-object doesn't start its child processes with a different UID, so
 the child process could kill it, ptrace() it, etc.  (exec-object
@@ -35,7 +35,7 @@ executable file, but not where CMD is an executable object, and it
 doesn't support running CMD in the standard Unix way (as the `!!' 
 syntax does).</p><p>A "capcmd !! CMD ARGS..." expression would allow the use of existing
 setuid executables from programs running under Plash.</p><p>A "capcmd VAR ARGS..." expression would make it possible to have
-a single process provide multiple executable objects, ie:</p><pre class="programlisting">
-  def factory_maker = capcmd factory-maker-maker
-  def echo = capcmd factory_maker '/bin/echo' ...
-  def ls = capcmd factory_maker '/bin/ls' ...</pre></div></div><div class="navfooter"><hr><table width="100%" summary="Navigation footer"><tr><td width="40%" align="left"><a accesskey="p" href="exec-obj-notes.html">Prev</a>&#160;</td><td width="20%" align="center"><a accesskey="u" href="exec-obj.html">Up</a></td><td width="40%" align="right">&#160;<a accesskey="n" href="interfaces.html">Next</a></td></tr><tr><td width="40%" align="left" valign="top">Notes&#160;</td><td width="20%" align="center"><a accesskey="h" href="index.html">Home</a></td><td width="40%" align="right" valign="top">&#160;Chapter&#160;5.&#160;Protocols and interfaces</td></tr></table></div></body></html>
+a single process provide multiple executable objects, ie:</p><pre class="programlisting">def factory_maker = capcmd factory-maker-maker
+def echo = capcmd factory_maker '/bin/echo' ...
+def ls = capcmd factory_maker '/bin/ls' ...
+</pre></div></div><div class="navfooter"><hr><table width="100%" summary="Navigation footer"><tr><td width="40%" align="left"><a accesskey="p" href="exec-obj-notes.html">Prev</a>&#160;</td><td width="20%" align="center"><a accesskey="u" href="exec-obj.html">Up</a></td><td width="40%" align="right">&#160;<a accesskey="n" href="interfaces.html">Next</a></td></tr><tr><td width="40%" align="left" valign="top">Notes&#160;</td><td width="20%" align="center"><a accesskey="h" href="index.html">Home</a></td><td width="40%" align="right" valign="top">&#160;Chapter&#160;5.&#160;Protocols and interfaces</td></tr></table></div></body></html>

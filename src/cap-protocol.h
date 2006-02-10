@@ -31,6 +31,7 @@ cap_t *cap_make_connection(region_t r, int sock_fd,
 /* This handles connections until there are no more objects exported.
    It prints a warning if imported objects remain. */
 void cap_run_server(void);
+int cap_server_exporting();
 /* Returns 0 when there are no connections left to handle: */
 int cap_run_server_step(void);
 void cap_close_all_connections(void);
@@ -51,6 +52,10 @@ void cap_add_select_fds(int *max_fd,
 void cap_handle_select_result(fd_set *read_fds,
 			      fd_set *write_fds,
 			      fd_set *except_fds);
+
+#if 0
+int cap_relocate_fd(int old_fd);
+#endif
 
 
 /* For cap-call-return.c: */

@@ -50,7 +50,9 @@ sub read_file {
   my ($file) = @_;
   my $f = IO::File->new($file, 'r');
   if(!defined $f) { die "Can't open file `$file'" }
-  my $x = parse(join('', <$f>), Filename => $file);
+  my $data = join('', <$f>);
+  if($data =~ /\t/) { warn "File `$file' contains tabs" }
+  my $x = parse($data, Filename => $file);
   $f->close();
   $x;
 }
@@ -145,6 +147,65 @@ sub paras {
   $paras
 }
 
+# This is broken because a tag like \pre: swallows whitespace following it,
+# and so the indentation that this function sees is not what was in the
+# original text.
+sub preformatted {
+  printf STDERR "Input: %s\n",
+    join('', map { if(ref($_)) { '' } else { "<$_>" } } @_);
+  my @all =
+    map {
+      if(!ref($_)) { split(/(\n)/, $_) }
+      else { $_ }
+    } @_;
+  # Split into lines
+  my $line = [];
+  my $lines = [];
+  foreach my $elt (grep { $_ ne '' } @all) {
+    if($elt eq "\n") {
+      push(@$lines, $line);
+      $line = [];
+    }
+    else {
+      push(@$line, $elt);
+    }
+  }
+  push(@$lines, $line);
+  # Calculate the amount of indentation that all lines share
+  # Empty lines are ignored
+  my $indent = 100;
+  foreach my $line (@$lines) {
+    if(!ref($line->[0])) {
+      if(defined $line->[0] && $line->[0] =~ /^( *)\S/) {
+	my $n = length($1);
+	# print STDERR "got $n\n";
+	if($indent > $n) { $indent = $n }
+      }
+    }
+    else { $indent = 0 }
+  }
+  # Remove first line if empty
+  if(scalar(@{$lines->[0]}) == 0) {
+    shift(@$lines)
+  }
+  # Remove last line if empty
+  if(scalar(@{$lines->[-1]}) == 0) {
+    pop(@$lines)
+  }
+  # Remove the indentation
+  # print STDERR "Indent: $indent\n";
+  foreach my $line (@$lines) {
+    if(!ref($line->[0])) {
+      $line->[0] = substr($line->[0], $indent);
+      # print STDERR ">>$line->[0]\n";
+    }
+  }
+  my @out = map { @$_, "\n" } @$lines;
+  printf STDERR "Result: %s\n",
+    join('', map { if(ref($_)) { '' } else { "<$_>" } } @out);
+  @out
+}
+
 
 sub parse_tag {
   my ($a, $got1) = @_;
@@ -154,6 +215,14 @@ sub parse_tag {
     my $body = [];
     my $attrs = [];
     # print "$tag_name\n";
+
+    # For debugging files:
+    if($tag_name eq 'STOP') {
+      printf STDERR "STOP found, index %i\n", pos($a->{Data});
+      pos($a->{Data}) = length($a->{Data});
+      return;
+    }
+    
     while(1) {
       if($a->{Data} =~ /\G\s+/gc) {}
       elsif($a->{Data} =~ /\G;/gc)       { last }

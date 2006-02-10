@@ -75,7 +75,7 @@ if(scalar(@ARGV) == 2 && $ARGV[0] eq '--dest-dir') {
 	   '--remove-section=.comment',
 	   '--remove-section=.note',
 	   $x->[0], '-o', "$dest_dir/$x->[1].new");
-    rename("$dest_dir/$x->[1].new", "$dest_dir/$x->[1]") || die "Can't rename";
+    do_cmd('mv', "$dest_dir/$x->[1].new", "$dest_dir/$x->[1]");
   }
 
   # do_cmd('strip', 'mrs/ld.so', '-o', "$dir/ld-linux.so.2");
@@ -94,7 +94,7 @@ elsif(scalar(@ARGV) == 1 && $ARGV[0] eq '--local-cp') {
   # but can still exist; the new file has a new inode.
   foreach my $x (@$libs) {
     do_cmd('cp', $x->[0], "$dest_dir/$x->[1].new");
-    rename("$dest_dir/$x->[1].new", "$dest_dir/$x->[1]") || die "Can't rename";
+    do_cmd('mv', "$dest_dir/$x->[1].new", "$dest_dir/$x->[1]");
   }
   print "done\n";
 }

@@ -128,5 +128,21 @@ invocation.
 References
 ----------
 
- * Ka-Ping Yee and Miriam Walker, "Interaction Design for End User Security"
+[This needs filling out fully.]
+
+ * Ka-Ping Yee and Miriam Walker, "Interaction Design for End User Security",
+   December 2000
+   http://www.sims.berkeley.edu/~ping/sid/ideus.html -- the paper
+   http://www.sims.berkeley.edu/~ping/sid/design.html -- home page for their project that they did for a CS course
+   Later rewritten as:
+   http://zesty.ca/pubs/icics-2002-uidss.pdf
+   http://zesty.ca/ -- Ka-Ping Yee's home page
  * CapDesk
+   http://www.capdesk.com/ -- just a placeholder
+   http://www.combex.com/tech/edesk.html
+ * Polaris
+   http://www.hpl.hp.com/techreports/2004/HPL-2004-221.html
+   http://www.hp.com/hpinfo/newsroom/feature_stories/2005/05special_virussafe.html
+   www.hpl.hp.com/personal/Alan_Karp/polaris.pdf
+ * cap-talk mailing list:
+   http://www.eros-os.org/mailman/listinfo/cap-talk

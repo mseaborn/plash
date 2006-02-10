@@ -20,6 +20,7 @@ pola-run
   | {\option:--no-cwd}
   | {\option:--copy-cwd} ]...
   [{\option:-B}] [{\option:--x11}] [{\option:--net}]
+  [{\option:--powerbox} [{\option:--pet-name} {\r:name}]]
 }
 
 
@@ -82,22 +83,12 @@ latter may be more readable in hand-written shell scripts.
 This gives the filename of the executable to be invoked.  If it
 doesn't contain a slash, it will be looked up in {\envar:PATH}.
 
+The filename is resolved in the callee's namespace, not the caller's
+namespace.
+
 Note that if the executable is a "#!" script, access to the
 interpreter specified in the "#!" line will {\emphasis:not} be
 implicitly granted.
-
-}
-
-\dt- {\option:--prog-sock} {\r:filename}
-\dt- {\option:--prog-sock}={\r:filename}
-{\dd\ps:
-
-Invoke an executable object rather than an executable file.  The
-executable object is taken from the socket named by {\r:filename}.  An
-object can be exported to a socket using
-{\command:plash-socket-publish}.
-
-This option implies {\option:--no-default}.
 
 }
 
@@ -251,6 +242,31 @@ Currently, this is equivalent to:
 -fl /etc/resolv.conf
 -fl /etc/hosts
 -fl /etc/services
+
+}
+
+\dt- {\option:--powerbox}
+{\dd\ps:
+
+Grants the callee program an object "powerbox_req_filename" which can
+be used to open a file powerbox.  A file powerbox is a file chooser
+dialog box which can grant the callee program access to files.  The
+powerbox will dynamically attach files or directories into the callee
+program's file namespace.
+
+Currently, it only makes sense to use this when the caller runs with
+the user's namespace, since the file chooser will display directory
+contents for the caller's namespace.  In the future, the
+{\option:--powerbox} option will be able to pass on the caller's
+powerbox request object rather than always creating a new one.
+
+}
+
+\dt- {\option:--pet-name} {\r:name}
+{\dd\ps:
+
+This provides a name to use in the title bar of powerbox windows, so
+that the user can identify which application is making the request.
 
 }
 

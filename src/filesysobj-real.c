@@ -335,8 +335,26 @@ int real_dir_symlink(struct filesys_obj *obj, const char *leaf,
   return 0;
 }
 
+/* Tests whether dir2 is the same as dir.
+   This is used for the "rename" and "link" operations.
+   First we do a simple pointer comparison:  that works for cases
+   like rename("foo.temp", "foo").
+   Then we try comparing the inode and device numbers:  that works for
+   cases like rename("dir/foo.temp", "dir/foo").  In this case, the
+   path "dir" will be looked up twice.  Because we do no caching of
+   "struct real_dir" objects, it would create two new objects. */
+static int same_directory(struct real_dir *dir,
+			  struct filesys_obj *dir2)
+{
+  return
+    dir == (void *) dir2 ||
+    (dir2->vtable == &real_dir_vtable &&
+     dir->stat.st_dev == ((struct real_dir *) dir2)->stat.st_dev &&
+     dir->stat.st_ino == ((struct real_dir *) dir2)->stat.st_ino);
+}
+
 int real_dir_rename(struct filesys_obj *obj, const char *leaf,
-		    struct filesys_obj *dest_dir1, const char *dest_leaf,
+		    struct filesys_obj *dest_dir, const char *dest_leaf,
 		    int *err)
 {
   struct real_dir *dir = (void *) obj;
@@ -344,7 +362,7 @@ int real_dir_rename(struct filesys_obj *obj, const char *leaf,
   if(!leafname_ok(leaf) || !leafname_ok(dest_leaf)) { *err = ENOENT; return -1; }
 
   /* Handle the same-directory case only. */
-  if(dir == (void *) dest_dir1) {
+  if(same_directory(dir, dest_dir)) {
     /* Couldn't open the directory; we don't have an FD for it. */
     if(!dir->fd) { *err = EIO; return -1; }
     
@@ -356,15 +374,10 @@ int real_dir_rename(struct filesys_obj *obj, const char *leaf,
     *err = EXDEV;
     return -1;
   }
-  /*
-  if(dest_dir1->vtable == &real_dir_vtable) {
-    struct real_dir *dest_dir = (void *) dest_dir1;
-  }
-  */
 }
 
 int real_dir_link(struct filesys_obj *obj, const char *leaf,
-		  struct filesys_obj *dest_dir1, const char *dest_leaf,
+		  struct filesys_obj *dest_dir, const char *dest_leaf,
 		  int *err)
 {
   struct real_dir *dir = (void *) obj;
@@ -372,7 +385,7 @@ int real_dir_link(struct filesys_obj *obj, const char *leaf,
   if(!leafname_ok(leaf) || !leafname_ok(dest_leaf)) { *err = ENOENT; return -1; }
 
   /* Handle the same-directory case only. */
-  if(dir == (void *) dest_dir1) {
+  if(same_directory(dir, dest_dir)) {
     /* Couldn't open the directory; we don't have an FD for it. */
     if(!dir->fd) { *err = EIO; return -1; }
     

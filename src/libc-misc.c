@@ -33,6 +33,7 @@
 #include "region.h"
 #include "comms.h"
 #include "libc-comms.h"
+#include "libc-fds.h"
 #include "marshal.h"
 #include "cap-protocol.h"
 #include "cap-utils.h"
@@ -48,18 +49,76 @@ static void log_msg(const char *msg)
 }
 #endif
 
+#if defined IN_LIBC && 0
+#define log_fd(fd, msg) fprintf(stderr, "libc: fd %i: %s\n", (fd), (msg))
+#else
+#define log_fd(fd, msg)
+#endif
+
 
 int my_atoi(const char *str);
 
 
-/* This array maps file descriptor numbers to objects that implement
-   the FD.  The FD slot will be filled by a corresponding real FD in
-   the kernel's mapping for the process, but this is only a "dummy"
-   FD, created by opening /dev/null.
-   The array contains NULL when there is no mapping for the slot.
-   Only open(), close() and fchdir() use this array at present. */
-cap_t *g_fds = 0;
+struct libc_fd *g_fds = NULL; /* Array allocated with malloc() */
 int g_fds_size = 0;
+
+static void libc_fd_init(struct libc_fd *fd)
+{
+  fd->fd_dir_obj = NULL;
+  fd->fd_socket_pathname = NULL;
+}
+
+/* Ensure that the g_fds array is at least `fd + 1' elements long,
+   ie. at least big enough to contain the index `fd'. */
+void fds_resize(int fd)
+{
+  if(fd >= g_fds_size) {
+    int i;
+    int new_size = fd + 4; /* Some margin to reduce resize frequency */
+    struct libc_fd *new_array = amalloc(new_size * sizeof(struct libc_fd));
+    memcpy(new_array, g_fds, g_fds_size * sizeof(struct libc_fd));
+    for(i = g_fds_size; i < new_size; i++) { libc_fd_init(&new_array[i]); }
+    free(g_fds);
+    g_fds = new_array;
+    g_fds_size = new_size;
+  }
+}
+
+void fds_slot_clear(int fd)
+{
+  if(0 <= fd && fd < g_fds_size) {
+    struct libc_fd info = g_fds[fd];
+    libc_fd_init(&g_fds[fd]);
+
+    if(info.fd_dir_obj) {
+      filesys_obj_free(info.fd_dir_obj);
+    }
+    if(info.fd_socket_pathname) {
+      free(info.fd_socket_pathname);
+    }
+  }
+}
+
+void fds_slot_clear_warn_if_used(int fd)
+{
+  if(0 <= fd && fd < g_fds_size) {
+    struct libc_fd info = g_fds[fd];
+    libc_fd_init(&g_fds[fd]);
+
+    /* These cases shouldn't happen.  The kernel has returned a FD
+       with a number that we think is already in use. */
+    if(info.fd_dir_obj) {
+      log_fd(fd, "fd_dir_obj field was in use");
+      libc_log("Warning: fd_dir_obj field was in use");
+      filesys_obj_free(info.fd_dir_obj);
+    }
+    if(info.fd_socket_pathname) {
+      log_fd(fd, "fd_socket_pathname field was in use");
+      libc_log("Warning: fd_socket_pathname field was in use");
+      free(info.fd_socket_pathname);
+    }
+  }
+}
 
 
 /* Try to set the errno from the given message, otherwise set it to ENOSYS. */
@@ -80,6 +139,7 @@ int new_open(const char *filename, int flags, ...)
   int mode = 0;
   struct cap_args result;
   log_msg(MOD_MSG "open\n");
+  plash_libc_lock();
 
   if(!filename) {
     __set_errno(EINVAL);
@@ -109,6 +169,8 @@ int new_open(const char *filename, int flags, ...)
     m_end(&ok, &msg);
     if(ok && result.fds.count == 1 && result.caps.size == 0) {
       int fd = result.fds.fds[0];
+      fds_slot_clear_warn_if_used(fd);
+      plash_libc_unlock();
       region_free(r);
       return fd;
     }
@@ -125,25 +187,12 @@ int new_open(const char *filename, int flags, ...)
 
       /* Resize the file descriptor array. */
       assert(fd >= 0);
-      if(fd >= g_fds_size) {
-	int i;
-	int new_size = fd + 4;
-	cap_t *new_array = amalloc(new_size * sizeof(cap_t));
-	memcpy(new_array, g_fds, g_fds_size * sizeof(cap_t));
-	for(i = g_fds_size; i < new_size; i++) new_array[i] = 0;
-	free(g_fds);
-	g_fds = new_array;
-	g_fds_size = new_size;
-      }
-      if(g_fds[fd]) {
-	/* This shouldn't happen.  The kernel has returned a FD with a
-	   number that we think is already in use. */
-	/* This should give a warning once there is a mechanism for
-	   doing that.  FIXME. */
-	filesys_obj_free(g_fds[fd]);
-      }
-      g_fds[fd] = result.caps.caps[0];
-      
+      fds_resize(fd);
+      fds_slot_clear_warn_if_used(fd);
+      log_fd(fd, "fill out fd_dir_obj");
+      g_fds[fd].fd_dir_obj = result.caps.caps[0];
+
+      plash_libc_unlock();
       region_free(r);
       return fd;
     }
@@ -152,6 +201,7 @@ int new_open(const char *filename, int flags, ...)
   close_fds(result.fds);
   set_errno_from_reply(flatten_reuse(r, result.data));
  error:
+  plash_libc_unlock();
   region_free(r);
   return -1;
 }
@@ -186,10 +236,11 @@ static void relocate_comm_fd()
 }
 #endif
 
-/* EXPORT: new_close => WEAK:close WEAK:__close __libc_close __GI_close __GI___close __GI___libc_close */
+/* EXPORT: new_close => WEAK:close WEAK:__close __libc_close __GI_close __GI___close __GI___libc_close close_not_cancel close_not_cancel_no_status */
 int new_close(int fd)
 {
   log_msg(MOD_MSG "close\n");
+  log_fd(fd, "close");
   if(fd == comm_sock) {
     /* Pretend that this file descriptor slot is empty.  As far as the
        application knows, it *is* empty.  The chances are that the
@@ -206,10 +257,7 @@ int new_close(int fd)
        okay: an error is what the caller should get. */
 #endif
   }
-  if(0 <= fd && fd < g_fds_size && g_fds[fd]) {
-    filesys_obj_free(g_fds[fd]);
-    g_fds[fd] = 0;
-  }
+  fds_slot_clear(fd);
   return close(fd);
 }
 
@@ -218,6 +266,8 @@ int new_dup2(int source_fd, int dest_fd)
 {
   int rc;
   log_msg(MOD_MSG "dup2\n");
+  log_fd(source_fd, "dup2 source");
+  log_fd(dest_fd, "dup2 dest");
 
   if(dest_fd == comm_sock) {
     /* Don't allow the socket file descriptor to be clobbered.  This
@@ -236,10 +286,8 @@ int new_dup2(int source_fd, int dest_fd)
   rc = dup2(source_fd, dest_fd);
   if(rc >= 0) {
     /* Make sure our entry for the destination FD is removed. */
-    if(0 <= dest_fd && dest_fd < g_fds_size && g_fds[dest_fd]) {
-      filesys_obj_free(g_fds[dest_fd]);
-      g_fds[dest_fd] = 0;
-    }
+    fds_slot_clear(dest_fd);
+    
     /* To do: copy the g_fds entry from source_fd to dest_fd. */
   }
   return rc;
@@ -249,17 +297,17 @@ int new_dup2(int source_fd, int dest_fd)
 int new_fchdir(int fd)
 {
   log_msg(MOD_MSG "fchdir\n");
-  if(fd < g_fds_size) {
-    cap_t obj = g_fds[fd];
+  log_fd(fd, "fchdir");
+  if(0 <= fd && fd < g_fds_size) {
+    cap_t obj = g_fds[fd].fd_dir_obj;
     if(obj) {
       struct cap_args result;
       region_t r = region_make();
       if(plash_init() < 0) goto error;
       if(!fs_server) { __set_errno(ENOSYS); goto error; }
       cap_call(fs_server, r,
-	       cap_args_make(mk_int(r, METHOD_FSOP_FCHDIR),
-			     mk_caps1(r, inc_ref(obj)),
-			     fds_empty),
+	       cap_args_dc(mk_int(r, METHOD_FSOP_FCHDIR),
+			   mk_caps1(r, inc_ref(obj))),
 	       &result);
       {
 	seqf_t msg = flatten_reuse(r, result.data);
@@ -915,6 +963,75 @@ struct abi_stat64 {
                                  /* 96 */
 };
 
+static void m_stat_info(int *ok, seqf_t *msg, int type, void *buf)
+{
+  int myst_dev, myst_ino, myst_mode, myst_nlink, myst_uid, myst_gid, myst_rdev,
+    myst_size, myst_blksize, myst_blocks, myst_atime, myst_mtime, myst_ctime;
+  m_int(ok, msg, &myst_dev);
+  m_int(ok, msg, &myst_ino);
+  m_int(ok, msg, &myst_mode);
+  m_int(ok, msg, &myst_nlink);
+  m_int(ok, msg, &myst_uid);
+  m_int(ok, msg, &myst_gid);
+  m_int(ok, msg, &myst_rdev);
+  m_int(ok, msg, &myst_size);
+  m_int(ok, msg, &myst_blksize);
+  m_int(ok, msg, &myst_blocks);
+  m_int(ok, msg, &myst_atime);
+  m_int(ok, msg, &myst_mtime);
+  m_int(ok, msg, &myst_ctime);
+  if(*ok) {
+    if(type == TYPE_STAT) {
+      struct abi_stat *stat = buf;
+      stat->myst_dev = myst_dev;
+      stat->__pad1 = 0;
+      stat->myst_ino = myst_ino;
+      stat->myst_mode = myst_mode;
+      stat->myst_nlink = myst_nlink;
+      stat->myst_uid = myst_uid;
+      stat->myst_gid = myst_gid;
+      stat->myst_rdev = myst_rdev;
+      stat->__pad2 = 0;
+      stat->myst_size = myst_size;
+      stat->myst_blksize = myst_blksize;
+      stat->myst_blocks = myst_blocks;
+      stat->myst_atime = myst_atime;
+      stat->__unused1 = 0;
+      stat->myst_mtime = myst_mtime;
+      stat->__unused2 = 0;
+      stat->myst_ctime = myst_ctime;
+      stat->__unused3 = 0;
+      stat->__unused4 = 0;
+      stat->__unused5 = 0;
+    }
+    else if(type == TYPE_STAT64) {
+      struct abi_stat64 *stat = buf;
+      stat->myst_dev = myst_dev;
+      stat->__pad1 = 0;
+      stat->__myst_ino = myst_ino;
+      stat->myst_mode = myst_mode;
+      stat->myst_nlink = myst_nlink;
+      stat->myst_uid = myst_uid;
+      stat->myst_gid = myst_gid;
+      stat->myst_rdev = myst_rdev;
+      stat->__pad2 = 0;
+      stat->myst_size = myst_size;
+      stat->myst_blksize = myst_blksize;
+      stat->myst_blocks = myst_blocks;
+      stat->myst_atime = myst_atime;
+      stat->__unused1 = 0;
+      stat->myst_mtime = myst_mtime;
+      stat->__unused2 = 0;
+      stat->myst_ctime = myst_ctime;
+      stat->__unused3 = 0;
+      stat->myst_ino = myst_ino;
+    }
+    else {
+      *ok = 0;
+    }
+  }
+}
+
 /* nofollow=0 for stat, nofollow=1 for lstat. */
 int my_stat(int nofollow, int type, const char *pathname, void *buf)
 {
@@ -930,74 +1047,13 @@ int my_stat(int nofollow, int type, const char *pathname, void *buf)
 			   mk_string(r, pathname)), &reply) < 0) goto error;
   {
     seqf_t msg = reply;
-    int myst_dev, myst_ino, myst_mode, myst_nlink, myst_uid, myst_gid, myst_rdev,
-      myst_size, myst_blksize, myst_blocks, myst_atime, myst_mtime, myst_ctime;
     int ok = 1;
     m_str(&ok, &msg, "RSta");
-    m_int(&ok, &msg, &myst_dev);
-    m_int(&ok, &msg, &myst_ino);
-    m_int(&ok, &msg, &myst_mode);
-    m_int(&ok, &msg, &myst_nlink);
-    m_int(&ok, &msg, &myst_uid);
-    m_int(&ok, &msg, &myst_gid);
-    m_int(&ok, &msg, &myst_rdev);
-    m_int(&ok, &msg, &myst_size);
-    m_int(&ok, &msg, &myst_blksize);
-    m_int(&ok, &msg, &myst_blocks);
-    m_int(&ok, &msg, &myst_atime);
-    m_int(&ok, &msg, &myst_mtime);
-    m_int(&ok, &msg, &myst_ctime);
+    m_stat_info(&ok, &msg, type, buf);
     m_end(&ok, &msg);
     if(ok) {
-      if(type == TYPE_STAT) {
-	struct abi_stat *stat = buf;
-	stat->myst_dev = myst_dev;
-	stat->__pad1 = 0;
-	stat->myst_ino = myst_ino;
-	stat->myst_mode = myst_mode;
-	stat->myst_nlink = myst_nlink;
-	stat->myst_uid = myst_uid;
-	stat->myst_gid = myst_gid;
-	stat->myst_rdev = myst_rdev;
-	stat->__pad2 = 0;
-	stat->myst_size = myst_size;
-	stat->myst_blksize = myst_blksize;
-	stat->myst_blocks = myst_blocks;
-	stat->myst_atime = myst_atime;
-	stat->__unused1 = 0;
-	stat->myst_mtime = myst_mtime;
-	stat->__unused2 = 0;
-	stat->myst_ctime = myst_ctime;
-	stat->__unused3 = 0;
-	stat->__unused4 = 0;
-	stat->__unused5 = 0;
-	region_free(r);
-	return 0;
-      }
-      else if(type == TYPE_STAT64) {
-	struct abi_stat64 *stat = buf;
-	stat->myst_dev = myst_dev;
-	stat->__pad1 = 0;
-	stat->__myst_ino = myst_ino;
-	stat->myst_mode = myst_mode;
-	stat->myst_nlink = myst_nlink;
-	stat->myst_uid = myst_uid;
-	stat->myst_gid = myst_gid;
-	stat->myst_rdev = myst_rdev;
-	stat->__pad2 = 0;
-	stat->myst_size = myst_size;
-	stat->myst_blksize = myst_blksize;
-	stat->myst_blocks = myst_blocks;
-	stat->myst_atime = myst_atime;
-	stat->__unused1 = 0;
-	stat->myst_mtime = myst_mtime;
-	stat->__unused2 = 0;
-	stat->myst_ctime = myst_ctime;
-	stat->__unused3 = 0;
-	stat->myst_ino = myst_ino;
-	region_free(r);
-	return 0;
-      }
+      region_free(r);
+      return 0;
     }
   }
   set_errno_from_reply(reply);
@@ -1010,55 +1066,98 @@ int my_fstat(int type, int fd, void *buf)
 {
   struct stat st;
   log_msg(MOD_MSG "fstat\n");
-  if(fstat(fd, &st) < 0) return -1;
-  if(type == TYPE_STAT) {
-    struct abi_stat *stat = buf;
-    stat->myst_dev = st.st_dev;
-    stat->__pad1 = 0;
-    stat->myst_ino = st.st_ino;
-    stat->myst_mode = st.st_mode;
-    stat->myst_nlink = st.st_nlink;
-    stat->myst_uid = st.st_uid;
-    stat->myst_gid = st.st_gid;
-    stat->myst_rdev = st.st_rdev;
-    stat->__pad2 = 0;
-    stat->myst_size = st.st_size;
-    stat->myst_blksize = st.st_blksize;
-    stat->myst_blocks = st.st_blocks;
-    stat->myst_atime = st.st_atime;
-    stat->__unused1 = 0;
-    stat->myst_mtime = st.st_mtime;
-    stat->__unused2 = 0;
-    stat->myst_ctime = st.st_ctime;
-    stat->__unused3 = 0;
-    stat->__unused4 = 0;
-    stat->__unused5 = 0;
-    return 0;
+
+  if(0 <= fd && fd < g_fds_size && g_fds[fd].fd_dir_obj) {
+    /* Handle directory FDs specially:  send a message. */
+    cap_t dir_obj = g_fds[fd].fd_dir_obj;
+    region_t r = region_make();
+    struct cap_args result;
+    log_fd(fd, "fstat on directory");
+    if(!buf) {
+      __set_errno(EINVAL);
+      goto error;
+    }
+    if(plash_init() < 0) { goto error; }
+    if(!fs_server) { __set_errno(ENOSYS); goto error; }
+    cap_call(fs_server, r,
+	     cap_args_dc(mk_int(r, METHOD_FSOP_DIR_FSTAT),
+			 mk_caps1(r, inc_ref(dir_obj))),
+	     &result);
+    {
+      seqf_t msg = flatten_reuse(r, result.data);
+      int ok = 1;
+      m_int_const(&ok, &msg, METHOD_OKAY);
+      m_stat_info(&ok, &msg, type, buf);
+      m_end(&ok, &msg);
+      if(ok && result.fds.count == 0 && result.caps.size == 0) {
+	region_free(r);
+	return 0;
+      }
+    }
+    caps_free(result.caps);
+    close_fds(result.fds);
+    set_errno_from_reply(flatten_reuse(r, result.data));
+  error:
+    region_free(r);
+    return -1;
   }
-  else if(type == TYPE_STAT64) {
-    struct abi_stat64 *stat = buf;
-    stat->myst_dev = st.st_dev;
-    stat->__pad1 = 0;
-    stat->__myst_ino = st.st_ino;
-    stat->myst_mode = st.st_mode;
-    stat->myst_nlink = st.st_nlink;
-    stat->myst_uid = st.st_uid;
-    stat->myst_gid = st.st_gid;
-    stat->myst_rdev = st.st_rdev;
-    stat->__pad2 = 0;
-    stat->myst_size = st.st_size;
-    stat->myst_blksize = st.st_blksize;
-    stat->myst_blocks = st.st_blocks;
-    stat->myst_atime = st.st_atime;
-    stat->__unused1 = 0;
-    stat->myst_mtime = st.st_mtime;
-    stat->__unused2 = 0;
-    stat->myst_ctime = st.st_ctime;
-    stat->__unused3 = 0;
-    stat->myst_ino = st.st_ino;
-    return 0;
+  else {
+    /* Use the normal fstat system call. */
+    log_fd(fd, "normal fstat");
+    if(fstat(fd, &st) < 0) { return -1; }
+    if(type == TYPE_STAT) {
+      struct abi_stat *stat = buf;
+      stat->myst_dev = st.st_dev;
+      stat->__pad1 = 0;
+      stat->myst_ino = st.st_ino;
+      stat->myst_mode = st.st_mode;
+      stat->myst_nlink = st.st_nlink;
+      stat->myst_uid = st.st_uid;
+      stat->myst_gid = st.st_gid;
+      stat->myst_rdev = st.st_rdev;
+      stat->__pad2 = 0;
+      stat->myst_size = st.st_size;
+      stat->myst_blksize = st.st_blksize;
+      stat->myst_blocks = st.st_blocks;
+      stat->myst_atime = st.st_atime;
+      stat->__unused1 = 0;
+      stat->myst_mtime = st.st_mtime;
+      stat->__unused2 = 0;
+      stat->myst_ctime = st.st_ctime;
+      stat->__unused3 = 0;
+      stat->__unused4 = 0;
+      stat->__unused5 = 0;
+      return 0;
+    }
+    else if(type == TYPE_STAT64) {
+      struct abi_stat64 *stat = buf;
+      stat->myst_dev = st.st_dev;
+      stat->__pad1 = 0;
+      stat->__myst_ino = st.st_ino;
+      stat->myst_mode = st.st_mode;
+      stat->myst_nlink = st.st_nlink;
+      stat->myst_uid = st.st_uid;
+      stat->myst_gid = st.st_gid;
+      stat->myst_rdev = st.st_rdev;
+      stat->__pad2 = 0;
+      stat->myst_size = st.st_size;
+      stat->myst_blksize = st.st_blksize;
+      stat->myst_blocks = st.st_blocks;
+      stat->myst_atime = st.st_atime;
+      stat->__unused1 = 0;
+      stat->myst_mtime = st.st_mtime;
+      stat->__unused2 = 0;
+      stat->myst_ctime = st.st_ctime;
+      stat->__unused3 = 0;
+      stat->myst_ino = st.st_ino;
+      return 0;
+    }
+    else {
+      /* Don't recognise ABI version requested. */
+      __set_errno(ENOSYS);
+      return -1;
+    }
   }
-  return -1;
 }
 
 /* EXPORT: new_xstat => __xstat __GI___xstat */

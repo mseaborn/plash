@@ -33,7 +33,7 @@ int main(int argc, char *argv[])
   cap_t fs_server;
 
   if(argc != 2 && argc != 4) {
-    printf("Usage: %s /x=shell_options [OPTION_NAME on/off]\n", argv[0]);
+    printf(_("Usage: %s /x=shell_options [OPTION_NAME on/off]\n"), argv[0]);
     return 1;
   }
 
@@ -51,7 +51,7 @@ int main(int argc, char *argv[])
 	     &result);
     filesys_obj_free(fs_server);
     if(expect_cap1(result, &opts) < 0) {
-      fprintf(stderr, "%s: couldn't get options object\n", argv[0]);
+      fprintf(stderr, _("%s: couldn't get options object\n"), argv[0]);
       return 1;
     }
 
@@ -67,7 +67,7 @@ int main(int argc, char *argv[])
       if(!strcmp(argv[3], "on")) x = 1;
       else if(!strcmp(argv[3], "off")) x = 0;
       else {
-	fprintf(stderr, "value `%s' not recognised\n", argv[3]);
+	fprintf(stderr, _("value `%s' not recognised\n"), argv[3]);
 	return 1;
       }
       set_option(r, opts, argv[2], x);

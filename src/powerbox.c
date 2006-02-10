@@ -128,7 +128,7 @@ static void dialog_response(GtkDialog *dialog, gint arg, gpointer obj)
 			     seqf_string(filename),
 			     (ro ? FS_READ_ONLY : FS_SLOT_RWC)
 			     | FS_FOLLOW_SYMLINKS, &err) < 0) {
-	fprintf(stderr, "powerbox: error in resolving filename \"%s\": %s\n",
+	fprintf(stderr, _("powerbox: error in resolving filename \"%s\": %s\n"),
 		filename, strerror(err));
       }
       else {

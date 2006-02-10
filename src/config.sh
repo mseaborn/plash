@@ -18,7 +18,7 @@
 # USA.
 
 
-PLASH_VERSION=1.14
+PLASH_VERSION=1.15
 
 # Where to find partially-built glibc.
 # Used when building.
@@ -26,7 +26,7 @@ PLASH_VERSION=1.14
 # GLIBC_NONSHARED_DIR is used to find libc_nonshared.a
 # GLIBC_SO_DIR is used to find various lib*.so files that are installed unmodified
 
-GLIBC=./glibc-i386-objs-2.3.5_1
+GLIBC=./glibc-i386-objs-2.3.5_2
 GLIBC_PIC_DIR=$GLIBC
 GLIBC_NONSHARED_DIR=$GLIBC
 GLIBC_SO_DIR=$GLIBC
@@ -48,8 +48,8 @@ GLIBC_SO_DIR=$GLIBC
 CC=gcc-4.0
 
 PLASH_EXECUTABLES="
-	plash
 	pola-run
+	pola-shell
 	plash-chroot
 	plash-opts
 	plash-opts-gtk

@@ -28,9 +28,12 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
+#include <arpa/inet.h>
+
 #include "region.h"
 #include "comms.h"
 #include "libc-comms.h"
+#include "libc-fds.h"
 
 
 /* EXPORT: new_connect => WEAK:connect WEAK:__connect __libc_connect __connect_internal */
@@ -56,6 +59,16 @@ int new_connect(int sock_fd, const struct sockaddr *addr, socklen_t addr_len)
       m_str(&ok, &msg, "RFco");
       m_end(&ok, &msg);
       if(ok) {
+	/* Store the pathname for later, so that getsockname() can
+	   return the correct pathname. */
+	fds_resize(sock_fd);
+	if(g_fds[sock_fd].fd_socket_pathname) {
+	  /* Should give a warning here, because we don't expect this
+	     field to have been filled out already. */
+	  free(g_fds[sock_fd].fd_socket_pathname);
+	}
+	g_fds[sock_fd].fd_socket_pathname = strdup(addr2->sun_path);
+	
 	region_free(r);
 	return 0;
       }
@@ -79,6 +92,20 @@ int new_connect(int sock_fd, const struct sockaddr *addr, socklen_t addr_len)
     return -1;
   }
   else {
+    if(addr->sa_family == AF_INET) {
+      struct sockaddr_in *addr2 = (void *) addr;
+      char addr_buf[50];
+      char buf[200];
+      inet_ntop(addr2->sin_family, &addr2->sin_addr,
+		addr_buf, sizeof(addr_buf));
+      snprintf(buf, sizeof(buf),
+	       "connect AF_INET, %s:%i", addr_buf, addr2->sin_port);
+      libc_log(buf);
+    }
+    else {
+      libc_log("connect AF_?");
+    }
+    
     return connect(sock_fd, addr, addr_len);
   }
 }
@@ -106,6 +133,16 @@ int new_bind(int sock_fd, struct sockaddr *addr, socklen_t addr_len)
       m_str(&ok, &msg, "RFbd");
       m_end(&ok, &msg);
       if(ok) {
+	/* Store the pathname for later, so that getsockname() can
+	   return the correct pathname. */
+	fds_resize(sock_fd);
+	if(g_fds[sock_fd].fd_socket_pathname) {
+	  /* Should give a warning here, because we don't expect this
+	     field to have been filled out already. */
+	  free(g_fds[sock_fd].fd_socket_pathname);
+	}
+	g_fds[sock_fd].fd_socket_pathname = strdup(addr2->sun_path);
+	
 	region_free(r);
 	return 0;
       }
@@ -129,8 +166,46 @@ int new_bind(int sock_fd, struct sockaddr *addr, socklen_t addr_len)
     return -1;
   }
   else {
+    if(addr->sa_family == AF_INET) {
+      struct sockaddr_in *addr2 = (void *) addr;
+      char addr_buf[50];
+      char buf[200];
+      inet_ntop(addr2->sin_family, &addr2->sin_addr,
+		addr_buf, sizeof(addr_buf));
+      snprintf(buf, sizeof(buf),
+	       "bind AF_INET, %s:%i", addr_buf, addr2->sin_port);
+      libc_log(buf);
+    }
+    else {
+      libc_log("bind AF_?");
+    }
+    
     return bind(sock_fd, addr, addr_len);
   }
+}
+
+/* EXPORT: my_getsockname => getsockname WEAK:__getsockname */
+int my_getsockname(int sock_fd, struct sockaddr *name, socklen_t *name_len)
+{
+  /* Try return a filename stored by connect() or bind(). */
+  if(0 <= sock_fd && sock_fd < g_fds_size) {
+    char *pathname = g_fds[sock_fd].fd_socket_pathname;
+    if(pathname) {
+      struct sockaddr_un *name2 = (void *) name;
+      int len = strlen(pathname);
+      int need = offsetof(struct sockaddr_un, sun_path) + len + 1;
+      if(!name_len) { __set_errno(EINVAL); return -1; }
+      if(need > *name_len) { __set_errno(ENAMETOOLONG); return -1; }
+      name2->sun_family = AF_LOCAL;
+      memcpy(name2->sun_path, pathname, len + 1);
+      *name_len = need;
+      
+      libc_log("getsockname: returned filename");
+      return 0;
+    }
+  }
+  
+  return getsockname(sock_fd, name, name_len);
 }
 
 

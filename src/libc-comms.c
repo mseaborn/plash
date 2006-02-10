@@ -17,13 +17,19 @@
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
    USA.  */
 
+/* For PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP */
+#define _GNU_SOURCE
+
 #include <errno.h>
+#include <pthread.h>
+#include <unistd.h>
 
 #include "region.h"
 #include "comms.h"
 #include "libc-comms.h"
 #include "cap-protocol.h"
 #include "cap-utils.h"
+#include "marshal.h"
 
 
 char *glibc_getenv(const char *name);
@@ -48,54 +54,7 @@ static char *my_strdup(const char *str)
 }
 
 
-#ifdef SIMPLE_SERVER
-
-int comm_sock = -1;
-struct comm *comm = 0;
-
-static int init()
-{
-  if(comm_sock == -2) {
-    /* This could happen when something goes wrong in fork(). */
-    __set_errno(EIO); return -1;
-  }
-  if(comm_sock == -1) {
-    char *var = glibc_getenv("PLASH_COMM_FD");
-    if(var) comm_sock = my_atoi(var);
-    else { __set_errno(ENOSYS); return -1; }
-  }
-  if(!comm) {
-    comm = comm_init(comm_sock);
-  }
-  return 0;
-}
-
-/* Send a message, expecting a reply without FDs. */
-int req_and_reply_with_fds(region_t r, seqt_t msg,
-			   seqf_t *reply, fds_t *reply_fds)
-{
-  if(init() < 0) return -1;
-  if(comm_send(r, comm_sock, msg, fds_empty) < 0) return -1;
-  if(comm_get(comm, reply, reply_fds) <= 0) return -1;
-  return 0;
-}
-int req_and_reply_with_fds2(region_t r, seqt_t msg, fds_t fds,
-			    seqf_t *reply, fds_t *reply_fds)
-{
-  if(init() < 0) return -1;
-  if(comm_send(r, comm_sock, msg, fds) < 0) return -1;
-  if(comm_get(comm, reply, reply_fds) <= 0) return -1;
-  return 0;
-}
-int req_and_reply(region_t r, seqt_t msg, seqf_t *reply)
-{
-  fds_t fds;
-  if(req_and_reply_with_fds(r, msg, reply, &fds) < 0) return -1;
-  close_fds(fds);
-  return 0;
-}
-
-#else
+pthread_mutex_t libc_lock = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
 
 static int initialised = 0;
 int comm_sock = -1;
@@ -193,12 +152,17 @@ int req_and_reply(region_t r, seqt_t msg, seqf_t *reply)
   struct cap_args result;
   if(plash_init() < 0) return -1;
   if(!fs_server) { __set_errno(ENOSYS); return -1; }
+
+  plash_libc_lock();
+
   cap_call(fs_server, r,
 	   cap_args_make(msg, caps_empty, fds_empty),
 	   &result);
   caps_free(result.caps);
   close_fds(result.fds);
   *reply = flatten_reuse(r, result.data);
+
+  plash_libc_unlock();
   return 0;
 }
 
@@ -208,12 +172,17 @@ int req_and_reply_with_fds2(region_t r, seqt_t msg, fds_t fds,
   struct cap_args result;
   if(plash_init() < 0) return -1;
   if(!fs_server) { __set_errno(ENOSYS); return -1; }
+
+  plash_libc_lock();
+
   cap_call(fs_server, r,
 	   cap_args_make(msg, caps_empty, fds),
 	   &result);
   caps_free(result.caps);
   *reply = flatten_reuse(r, result.data);
   *reply_fds = result.fds;
+
+  plash_libc_unlock();
   return 0;
 }
 
@@ -221,6 +190,16 @@ int req_and_reply_with_fds(region_t r, seqt_t msg,
 			   seqf_t *reply, fds_t *reply_fds)
 {
   return req_and_reply_with_fds2(r, msg, fds_empty, reply, reply_fds);
+}
+
+void libc_log(const char *msg)
+{
+  region_t r = region_make();
+  seqf_t reply;
+  req_and_reply(r, cat2(r, mk_int(r, METHOD_FSOP_LOG),
+			mk_string(r, msg)),
+		&reply);
+  region_free(r);
 }
 
 /* EXPORT: plash_libc_duplicate_connection */
@@ -245,8 +224,6 @@ int plash_libc_duplicate_connection()
   region_free(r);
   return fd;
 }
-
-#endif
 
 
 #include "out-aliases_libc-comms.h"

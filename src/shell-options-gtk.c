@@ -86,37 +86,37 @@ void option_window(cap_t opts)
   g_signal_connect(G_OBJECT(w.window), "destroy",
 		   G_CALLBACK(window_destroy), NULL);
 
-  widget = gtk_check_button_new_with_label("Log calls, single line each");
+  widget = gtk_check_button_new_with_label(_("Log calls, single line each"));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget),
 			       get_option(r, opts, "log_summary"));
   gtk_widget_show(widget);
   w.o_log_summary = widget;
 
-  widget = gtk_check_button_new_with_label("Log messages in/out");
+  widget = gtk_check_button_new_with_label(_("Log messages in/out"));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget),
 			       get_option(r, opts, "log_messages"));
   gtk_widget_show(widget);
   w.o_log_messages = widget;
 
-  widget = gtk_check_button_new_with_label("Send log data to new xterm");
+  widget = gtk_check_button_new_with_label(_("Send log data to new xterm"));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget),
 			       get_option(r, opts, "log_into_xterm"));
   gtk_widget_show(widget);
   w.o_log_into_xterm = widget;
 
-  widget = gtk_check_button_new_with_label("Print constructed filesystem tree");
+  widget = gtk_check_button_new_with_label(_("Print constructed filesystem tree"));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget),
 			       get_option(r, opts, "print_fs_tree"));
   gtk_widget_show(widget);
   w.o_print_fs_tree = widget;
 
-  widget = gtk_check_button_new_with_label("Grant access to X11 Window System by default");
+  widget = gtk_check_button_new_with_label(_("Grant access to X11 Window System by default"));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget),
 			       get_option(r, opts, "enable_x11"));
   gtk_widget_show(widget);
   w.o_enable_x11 = widget;
 
-  button = gtk_button_new_with_label("Okay");
+  button = gtk_button_new_with_label(_("Okay"));
   gtk_widget_show(button);
   g_signal_connect(G_OBJECT(button), "clicked", G_CALLBACK(window_ok), &w);
   
@@ -148,12 +148,12 @@ int main(int argc, char *argv[])
   cap_t fs_server;
 
   if(argc != 2) {
-    printf("Usage: " PROG_NAME " /x=shell_options\n");
+    printf(_("Usage: %s /x=shell_options\n"), PROG_NAME);
     return 1;
   }
 
   if(!gtk_init_check(&argc, &argv)) {
-    fprintf(stderr, "failed to initialise gtk\n");
+    fprintf(stderr, _("failed to initialise gtk\n"));
     return 1;
   }
 
@@ -171,7 +171,7 @@ int main(int argc, char *argv[])
 	     &result);
     filesys_obj_free(fs_server);
     if(expect_cap1(result, &options_obj) < 0) {
-      fprintf(stderr, PROG "couldn't get options object\n");
+      fprintf(stderr, PROG _("couldn't get options object\n"));
       return 1;
     }
     option_window(options_obj);

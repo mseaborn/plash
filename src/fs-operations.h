@@ -49,6 +49,7 @@ struct server_shared {
 
   FILE *log; /* 0 if not doing logging */
   int log_summary, log_messages;
+  int call_count; /* Number of calls received */
 };
 void server_shared_free(struct server_shared *s);
 

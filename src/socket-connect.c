@@ -36,7 +36,7 @@ int main(int argc, char *argv[])
   cap_t return_cont;
 
   if(argc != 2) {
-    printf("Usage: %s socket-pathname\n", argv[0]);
+    printf(_("Usage: %s socket-pathname\n"), argv[0]);
     return 1;
   }
 
@@ -57,7 +57,7 @@ int main(int argc, char *argv[])
     name.sun_path[len] = 0;
     if(connect(sock_fd, &name,
 	       offsetof(struct sockaddr_un, sun_path) + len + 1) < 0) {
-      fprintf(stderr, "%s: can't connect to socket at `%s': %s\n",
+      fprintf(stderr, _("%s: can't connect to socket at `%s': %s\n"),
 	      argv[0], pathname, strerror(errno));
       return 1;
     }

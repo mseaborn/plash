@@ -151,8 +151,8 @@ sub paras {
 # and so the indentation that this function sees is not what was in the
 # original text.
 sub preformatted {
-  printf STDERR "Input: %s\n",
-    join('', map { if(ref($_)) { '' } else { "<$_>" } } @_);
+  #printf STDERR "Input: %s\n",
+  #  join('', map { if(ref($_)) { '' } else { "<$_>" } } @_);
   my @all =
     map {
       if(!ref($_)) { split(/(\n)/, $_) }
@@ -201,8 +201,8 @@ sub preformatted {
     }
   }
   my @out = map { @$_, "\n" } @$lines;
-  printf STDERR "Result: %s\n",
-    join('', map { if(ref($_)) { '' } else { "<$_>" } } @out);
+  #printf STDERR "Result: %s\n",
+  #  join('', map { if(ref($_)) { '' } else { "<$_>" } } @out);
   @out
 }
 

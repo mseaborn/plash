@@ -217,7 +217,7 @@ int fs_attach_at_pathname(struct node *root_node, struct dir_stack *cwd_ds,
     filename_parse_component(filename, &name, &end, &filename, &trailing_slash);
     if(filename_parent(name)) {
       /* Easier not to support "..". */
-      printf("plash: warning: \"..\" not supported in filesystem bindings\n");
+      printf(_("plash: warning: \"..\" not supported in filesystem bindings\n"));
       filesys_obj_free(obj);
       *err = ENOENT;
       return -1;
@@ -233,9 +233,10 @@ int fs_attach_at_pathname(struct node *root_node, struct dir_stack *cwd_ds,
     /* Doesn't check trailing_slash.  FIXME? */
   }
   if(attach_rw_slot(node, make_read_only_slot(obj))) {
-    printf("plash: warning: object bound to `");
-    fprint_d(stdout, filename);
-    printf("' was replaced\n");
+    region_t r = region_make();
+    printf(_("plash: warning: object bound to `%s' was replaced\n"),
+	   region_strdup_seqf(r, filename));
+    region_free(r);
   }
   return 0;
 }

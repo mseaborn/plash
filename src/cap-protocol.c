@@ -236,14 +236,14 @@ static void violation(struct connection *conn, seqf_t msg)
 #ifdef DO_LOG
     if(MOD_LOG_ERRORS) {
       PRINT_PID;
-      fprintf(LOG, MOD_MSG "[fd %i] %s: protocol violation in strict mode: shutting down connection\n", conn->sock_fd, conn->name);
+      fprintf(LOG, MOD_MSG _("[fd %i] %s: protocol violation in strict mode: shutting down connection\n"), conn->sock_fd, conn->name);
     }
 #endif
     shut_down_connection(conn);
   }
 #ifdef MOD_DUMP_ON_VIOLATION
   PRINT_PID;
-  fprintf(LOG, MOD_MSG "offending message:\n");
+  fprintf(LOG, MOD_MSG _("offending message:\n"));
   fprint_data(LOG, msg);
 #endif
 }
@@ -283,7 +283,7 @@ static int decr_import_count(struct connection *conn)
 #ifdef DO_LOG
       if(MOD_DEBUG) {
 	PRINT_PID;
-	fprintf(LOG, MOD_MSG "[fd %i] %s: free last reference: dropping connection\n", conn->sock_fd, conn->name);
+	fprintf(LOG, MOD_MSG _("[fd %i] %s: free last reference: dropping connection\n"), conn->sock_fd, conn->name);
       }
 #endif
       shut_down_connection(conn);
@@ -292,7 +292,7 @@ static int decr_import_count(struct connection *conn)
 #ifdef DO_LOG
       if(MOD_DEBUG) {
 	PRINT_PID;
-	fprintf(LOG, MOD_MSG "free: freeing last reference to dropped connection \"%s\"\n", conn->name);
+	fprintf(LOG, MOD_MSG _("free: freeing last reference to dropped connection \"%s\"\n"), conn->name);
       }
 #endif
       free(conn);
@@ -313,7 +313,7 @@ void remote_obj_free(struct filesys_obj *obj1)
 #ifdef DO_LOG
     if(MOD_DEBUG) {
       PRINT_PID;
-      fprintf(LOG, MOD_MSG "[fd %i] %s: free: dropping reference 0x%x\n", obj->conn->sock_fd, obj->conn->name, obj->id);
+      fprintf(LOG, MOD_MSG _("[fd %i] %s: free: dropping reference 0x%x\n"), obj->conn->sock_fd, obj->conn->name, obj->id);
     }
 #endif
     comm_send(r, conn->sock_fd,
@@ -379,10 +379,10 @@ void remote_obj_invoke(struct filesys_obj *obj, struct cap_args args)
     if(MOD_DEBUG) {
       PRINT_PID;
       if(dest->single_use) {
-	fprintf(LOG, MOD_MSG "send tried on used single-use cap (or on closed connection), id 0x%x (connection unknown): ", dest->id);
+	fprintf(LOG, MOD_MSG _("send tried on used single-use cap (or on closed connection), id 0x%x (connection unknown): "), dest->id);
       }
       else {
-	fprintf(LOG, MOD_MSG "send tried on closed connection, id 0x%x (connection unknown): ", dest->id);
+	fprintf(LOG, MOD_MSG _("send tried on closed connection, id 0x%x (connection unknown): "), dest->id);
       }
       print_msgt(LOG, args.data);
       fprintf(LOG, "\n");
@@ -399,7 +399,7 @@ void remote_obj_invoke(struct filesys_obj *obj, struct cap_args args)
 #ifdef DO_LOG
     if(MOD_DEBUG) {
       PRINT_PID;
-      fprintf(LOG, MOD_MSG "[fd -] %s: send tried on closed connection, id 0x%x: ", conn->name, dest->id);
+      fprintf(LOG, MOD_MSG _("[fd -] %s: send tried on closed connection, id 0x%x: "), conn->name, dest->id);
       print_msgt(LOG, args.data);
       fprintf(LOG, "\n");
     }
@@ -415,7 +415,7 @@ void remote_obj_invoke(struct filesys_obj *obj, struct cap_args args)
 #ifdef DO_LOG
   if(MOD_DEBUG) {
     PRINT_PID;
-    fprintf(LOG, MOD_MSG "[fd %i] %s: send on id 0x%x: ", conn->sock_fd, conn->name, dest->id);
+    fprintf(LOG, MOD_MSG _("[fd %i] %s: send on id 0x%x: "), conn->sock_fd, conn->name, dest->id);
     print_msgt(LOG, args.data);
     fprintf(LOG, "\n");
   }
@@ -480,7 +480,7 @@ static cap_t lookup_id(struct connection *conn, int full_id)
 #ifdef DO_LOG
       if(MOD_LOG_ERRORS) {
 	PRINT_PID;
-	fprintf(LOG, MOD_MSG "[fd %i] %s: bad index in argument id: 0x%x\n", conn->sock_fd, conn->name, full_id);
+	fprintf(LOG, MOD_MSG _("[fd %i] %s: bad index in argument id: 0x%x\n"), conn->sock_fd, conn->name, full_id);
       }
 #endif
       return 0; /* Error */
@@ -500,7 +500,7 @@ static cap_t lookup_id(struct connection *conn, int full_id)
 #ifdef DO_LOG
       if(MOD_LOG_ERRORS) {
 	PRINT_PID;
-	fprintf(LOG, MOD_MSG "[fd %i] %s: bad namespace in argument id: 0x%x\n", conn->sock_fd, conn->name, full_id);
+	fprintf(LOG, MOD_MSG _("[fd %i] %s: bad namespace in argument id: 0x%x\n"), conn->sock_fd, conn->name, full_id);
       }
 #endif
       return 0;
@@ -526,7 +526,7 @@ static void remove_exported_id(struct connection *conn, int id)
 #ifdef DO_LOG
     if(MOD_LOG_ERRORS) {
       PRINT_PID;
-      fprintf(LOG, MOD_MSG "[fd %i] %s: why didn't the other end drop the connection?\n", conn->sock_fd, conn->name);
+      fprintf(LOG, MOD_MSG _("[fd %i] %s: why didn't the other end drop the connection?\n"), conn->sock_fd, conn->name);
     }
 #endif
     shut_down_connection(conn);
@@ -552,9 +552,9 @@ static void handle_msg(struct connection *conn, seqf_t data_orig, fds_t fds)
       if(MOD_DEBUG) {
 	int i;
 	PRINT_PID;
-	fprintf(LOG, MOD_MSG "[fd %i] %s: got invoke 0x%x: ", conn->sock_fd, conn->name, dest_id);
+	fprintf(LOG, MOD_MSG _("[fd %i] %s: got invoke 0x%x: "), conn->sock_fd, conn->name, dest_id);
 	print_msg(LOG, data);
-	fprintf(LOG, " with %i fds", fds.count);
+	fprintf(LOG, _(" with %i fds"), fds.count);
 	for(i = 0; i < fds.count; i++) {
 	  fprintf(LOG, " %i", fds.fds[i]);
 	}
@@ -621,7 +621,7 @@ static void handle_msg(struct connection *conn, seqf_t data_orig, fds_t fds)
 #ifdef DO_LOG
             if(MOD_LOG_ERRORS) {
 	      PRINT_PID;
-	      fprintf(LOG, MOD_MSG "[fd %i] %s: bad index in destination id: 0x%x\n", conn->sock_fd, conn->name, dest_id);
+	      fprintf(LOG, MOD_MSG _("[fd %i] %s: bad index in destination id: 0x%x\n"), conn->sock_fd, conn->name, dest_id);
 	    }
 #endif
 	    violation(conn, data_orig);
@@ -631,7 +631,7 @@ static void handle_msg(struct connection *conn, seqf_t data_orig, fds_t fds)
 #ifdef DO_LOG
           if(MOD_LOG_ERRORS) {
 	    PRINT_PID;
-	    fprintf(LOG, MOD_MSG "[fd %i] %s: bad namespace in destination id: 0x%x\n", conn->sock_fd, conn->name, dest_id);
+	    fprintf(LOG, MOD_MSG _("[fd %i] %s: bad namespace in destination id: 0x%x\n"), conn->sock_fd, conn->name, dest_id);
 	  }
 #endif
 	  violation(conn, data_orig);
@@ -651,7 +651,7 @@ static void handle_msg(struct connection *conn, seqf_t data_orig, fds_t fds)
 #ifdef DO_LOG
       if(MOD_DEBUG) {
 	PRINT_PID;
-	fprintf(LOG, MOD_MSG "[fd %i] %s: got drop 0x%x\n", conn->sock_fd, conn->name, dest_id);
+	fprintf(LOG, MOD_MSG _("[fd %i] %s: got drop 0x%x\n"), conn->sock_fd, conn->name, dest_id);
       }
 #endif
       switch(dest_id & CAPP_NAMESPACE_MASK) {
@@ -667,7 +667,7 @@ static void handle_msg(struct connection *conn, seqf_t data_orig, fds_t fds)
 #ifdef DO_LOG
 	    if(MOD_LOG_ERRORS) {
 	      PRINT_PID;
-	      fprintf(LOG, MOD_MSG "[fd %i] %s: bad index in dropped id: 0x%x\n", conn->sock_fd, conn->name, dest_id);
+	      fprintf(LOG, MOD_MSG _("[fd %i] %s: bad index in dropped id: 0x%x\n"), conn->sock_fd, conn->name, dest_id);
 	    }
 #endif
 	    violation(conn, data_orig);
@@ -677,7 +677,7 @@ static void handle_msg(struct connection *conn, seqf_t data_orig, fds_t fds)
 #ifdef DO_LOG
           if(MOD_LOG_ERRORS) {
 	    PRINT_PID;
-	    fprintf(LOG, MOD_MSG "[fd %i] %s: bad namespace in dropped id: 0x%x\n", conn->sock_fd, conn->name, dest_id);
+	    fprintf(LOG, MOD_MSG _("[fd %i] %s: bad namespace in dropped id: 0x%x\n"), conn->sock_fd, conn->name, dest_id);
 	  }
 #endif
 	  violation(conn, data_orig);
@@ -688,7 +688,7 @@ static void handle_msg(struct connection *conn, seqf_t data_orig, fds_t fds)
 #ifdef DO_LOG
   if(MOD_LOG_ERRORS) {
     PRINT_PID;
-    fprintf(LOG, MOD_MSG "[fd %i] %s: unknown message\n", conn->sock_fd, conn->name);
+    fprintf(LOG, MOD_MSG _("[fd %i] %s: unknown message\n"), conn->sock_fd, conn->name);
   }
 #endif
   violation(conn, data_orig);
@@ -730,7 +730,7 @@ cap_t *cap_make_connection(region_t r, int sock_fd,
 #ifdef DO_LOG
   if(MOD_DEBUG) {
     PRINT_PID;
-    fprintf(LOG, MOD_MSG "%s: creating connection from socket %i: import %i, export %i\n", name, sock_fd, import_count, export.size);
+    fprintf(LOG, MOD_MSG _("%s: creating connection from socket %i: import %i, export %i\n"), name, sock_fd, import_count, export.size);
   }
 #endif
 
@@ -809,7 +809,7 @@ static void listen_on_connection(struct connection *conn)
 #ifdef DO_LOG
     if(MOD_LOG_ERRORS) {
       PRINT_PID;
-      fprintf(LOG, MOD_MSG "[fd %i] %s: got EAGAIN on recv: why?\n", conn->sock_fd, conn->name);
+      fprintf(LOG, MOD_MSG _("[fd %i] %s: got EAGAIN on recv: why?\n"), conn->sock_fd, conn->name);
     }
 #endif
   }
@@ -818,14 +818,14 @@ static void listen_on_connection(struct connection *conn)
     if(r < 0) {
       if(MOD_LOG_ERRORS) {
 	PRINT_PID;
-	fprintf(LOG, MOD_MSG "[fd %i] %s: connection error, errno %i (%s)\n",
+	fprintf(LOG, MOD_MSG _("[fd %i] %s: connection error, errno %i (%s)\n"),
 		conn->sock_fd, conn->name, err, strerror(err));
       }
     }
     else {
       if(MOD_DEBUG) {
 	PRINT_PID;
-	fprintf(LOG, MOD_MSG "[fd %i] %s: connection end\n", conn->sock_fd, conn->name);
+	fprintf(LOG, MOD_MSG _("[fd %i] %s: connection end\n"), conn->sock_fd, conn->name);
       }
     }
 #endif
@@ -875,7 +875,7 @@ int cap_run_server_step()
 #ifdef DO_LOG
     if(MOD_DEBUG) {
       PRINT_PID;
-      fprintf(LOG, MOD_MSG "[fd %i] %s: run_server_step: only one connection\n", state->list.next->sock_fd, state->list.next->name);
+      fprintf(LOG, MOD_MSG _("[fd %i] %s: run_server_step: only one connection\n"), state->list.next->sock_fd, state->list.next->name);
     }
 #endif
     listen_on_connection(state->list.next);
@@ -890,7 +890,7 @@ int cap_run_server_step()
 #ifdef DO_LOG
       if(MOD_DEBUG) {
 	PRINT_PID;
-	fprintf(LOG, MOD_MSG "run_server_step: calling select()\n");
+	fprintf(LOG, MOD_MSG _("run_server_step: calling select()\n"));
       }
 #endif
       result = select(state->max_fd, &read_fds, 0, 0, 0 /* &timeout */);
@@ -953,7 +953,7 @@ void cap_run_server()
       /* If the connection list is non-empty, imports remain. */
       if(!server_state.list.next->l.head && MOD_LOG_ERRORS) {
 	PRINT_PID;
-	fprintf(LOG, MOD_MSG "warning: no exports, so finished, but imports remain -- possible reference leak\n");
+	fprintf(LOG, MOD_MSG _("warning: no exports, so finished, but imports remain -- possible reference leak\n"));
       }
 #endif
       break;

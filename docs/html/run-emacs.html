@@ -1,7 +1,7 @@
 <html><head><meta http-equiv="Content-Type" content="text/html; charset=ANSI_X3.4-1968"><title>plash-run-emacs</title><meta name="generator" content="DocBook XSL Stylesheets V1.68.1"><link rel="start" href="index.html" title="Plash: the Principle of Least Authority shell"><link rel="up" href="man-pages.html" title="Chapter&#160;6.&#160;Man pages"><link rel="prev" href="exec-object.html" title="exec-object"><link rel="next" href="socket-publish.html" title="plash-socket-publish"></head><body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF"><div class="navheader"><table width="100%" summary="Navigation header"><tr><th colspan="3" align="center">plash-run-emacs</th></tr><tr><td width="20%" align="left"><a accesskey="p" href="exec-object.html">Prev</a>&#160;</td><th width="60%" align="center">Chapter&#160;6.&#160;Man pages</th><td width="20%" align="right">&#160;<a accesskey="n" href="socket-publish.html">Next</a></td></tr></table><hr></div><div class="refentry" lang="en"><a name="run-emacs"></a><div class="titlepage"></div><div class="refnamediv"><h2>Name</h2><p>plash-run-emacs &#8212; Run XEmacs and then grant it access to individual files</p></div><div class="refsynopsisdiv"><h2>Synopsis</h2><pre class="synopsis">def <em class="replaceable"><code>edit_file</code></em> = capcmd plash-run-emacs <em class="replaceable"><code>options...</code></em>
 
 <em class="replaceable"><code>edit_file</code></em> =&gt; <em class="replaceable"><code>file-you-want-to-edit.txt</code></em> &amp;
-</pre></div><div class="refsect1" lang="en"><a name="id2525596"></a><h2>Description</h2><p>This lets you run XEmacs without initially giving it access to any of
+</pre></div><div class="refsect1" lang="en"><a name="id2525615"></a><h2>Description</h2><p>This lets you run XEmacs without initially giving it access to any of
 your personal files.  You can grant the XEmacs process access to
 individual files or directories when you want to edit or view them.</p><p>XEmacs is a large and complex system.  It doesn't have any internal
 security, and it gives ELisp programs access to everything that it has
@@ -14,14 +14,14 @@ message to XEmacs asking it to open a file to edit.  Similarly,
 <span><strong class="command">plash-run-emacs</strong></span> returns an object that will ask XEmacs to
 edit a given file -- but it will also give XEmacs a reference to the
 file, giving XEmacs access to it.</p><p>The <em class="replaceable"><code>plash-run-emacs</code></em> command is only useful when called using a
-"capcmd" expression from Plash.</p></div><div class="refsect1" lang="en"><a name="id2525665"></a><h2>Return value</h2><p>Returns an executable object, <em class="replaceable"><code>edit_file</code></em>, using the "return_cont"
+"capcmd" expression from Plash.</p></div><div class="refsect1" lang="en"><a name="id2525684"></a><h2>Return value</h2><p>Returns an executable object, <em class="replaceable"><code>edit_file</code></em>, using the "return_cont"
 mechanism.  (You can bind this to a variable in the shell using the
 "def" syntax.  <em class="replaceable"><code>edit_file</code></em> can be any variable name.)</p><p>You can use <em class="replaceable"><code>edit_file</code></em> to open files in XEmacs.  Give it some
 filenames as arguments.  You need to use "=&gt;" for the shell to grant
-write access to those files.</p></div><div class="refsect1" lang="en"><a name="id2525694"></a><h2>Notes</h2><p>By default, the Plash shell doesn't grant access to the X Window
+write access to those files.</p></div><div class="refsect1" lang="en"><a name="id2525713"></a><h2>Notes</h2><p>By default, the Plash shell doesn't grant access to the X Window
 System.  You'll have to enable that with the command:</p><pre class="programlisting">
 plash-opts /x=options 'enable_x11' 'on'
-</pre></div><div class="refsect1" lang="en"><a name="id2525711"></a><h2>Limitations</h2><p>The X Window System is not secure, so actually the XEmacs process can
+</pre></div><div class="refsect1" lang="en"><a name="id2525731"></a><h2>Limitations</h2><p>The X Window System is not secure, so actually the XEmacs process can
 still potentially get all of the user's authority.</p><p>XEmacs still has unlimited ability to connect to the Internet.</p><p>Doesn't work with GNU Emacs.</p><p>You must use a shell command to open a file in XEmacs.  You can't get
 an "Open File" dialogue box directly from XEmacs itself.  This is to
 be implemented in the future.  The "Open File" dialogue box is known
@@ -36,7 +36,7 @@ you'll terminate the server process, and the files you granted to
 XEmacs using this job will disappear from its namespace.</p><p>When XEmacs tries to save backup files, that won't work.  This
 generates annoying warnings.  XEmacs doesn't have authority to create
 files with names other than the ones it was explicitly granted access
-to.  This could be best fixed in a powerbox design.</p></div><div class="refsect1" lang="en"><a name="id2525776"></a><h2>How it works</h2><p><span><strong class="command">plash-run-emacs</strong></span> builds a file namespace for XEmacs in a
+to.  This could be best fixed in a powerbox design.</p></div><div class="refsect1" lang="en"><a name="id2525796"></a><h2>How it works</h2><p><span><strong class="command">plash-run-emacs</strong></span> builds a file namespace for XEmacs in a
 way similar to how the Plash shell builds file namespaces.  The
 difference is that in this case, it can add entries to the namespace
 dynamically.  The file namespace that XEmacs sees will typically be a
@@ -54,12 +54,12 @@ using ELisp, there would be no need for
 XEmacs (it runs with the same UID).  In the future, it might implement
 a powerbox.  Then it would need to be trusted.  It would need access
 to the user's namespace (ie. all your files), so it would need to
-start XEmacs under a different UID.</p></div><div class="refsect1" lang="en"><a name="id2525848"></a><h2>Examples</h2><pre class="programlisting">
+start XEmacs under a different UID.</p></div><div class="refsect1" lang="en"><a name="id2525868"></a><h2>Examples</h2><pre class="programlisting">
 def edit =
   capcmd ~/projects/plash/bin/run-emacs
      -iconic
      -l ~/projects/plash/src/plash-gnuserv.el
      + ~/config ~/.emacs
-       =&gt; ~/Mail ~/.im /tmp);</pre></div><div class="refsect1" lang="en"><a name="id2525866"></a><h2>See also</h2><p><span><strong class="command">plash</strong></span>, <span><strong class="command">plash-socket-publish</strong></span>, <span><strong class="command">plash-run-emacs</strong></span>, <span><strong class="command">xemacs</strong></span>, <span><strong class="command">gnuclient</strong></span></p><p>  /usr/share/doc/plash
-</p></div><div class="refsect1" lang="en"><a name="id2525904"></a><h2>Author</h2><p>Mark Seaborn &lt;mseaborn@onetel.com&gt;
+       =&gt; ~/Mail ~/.im /tmp);</pre></div><div class="refsect1" lang="en"><a name="id2525885"></a><h2>See also</h2><p><span><strong class="command">plash</strong></span>, <span><strong class="command">plash-socket-publish</strong></span>, <span><strong class="command">plash-run-emacs</strong></span>, <span><strong class="command">xemacs</strong></span>, <span><strong class="command">gnuclient</strong></span></p><p>  /usr/share/doc/plash
+</p></div><div class="refsect1" lang="en"><a name="id2525923"></a><h2>Author</h2><p>Mark Seaborn &lt;mseaborn@onetel.com&gt;
 </p></div></div><div class="navfooter"><hr><table width="100%" summary="Navigation footer"><tr><td width="40%" align="left"><a accesskey="p" href="exec-object.html">Prev</a>&#160;</td><td width="20%" align="center"><a accesskey="u" href="man-pages.html">Up</a></td><td width="40%" align="right">&#160;<a accesskey="n" href="socket-publish.html">Next</a></td></tr><tr><td width="40%" align="left" valign="top">exec-object&#160;</td><td width="20%" align="center"><a accesskey="h" href="index.html">Home</a></td><td width="40%" align="right" valign="top">&#160;plash-socket-publish</td></tr></table></div></body></html>

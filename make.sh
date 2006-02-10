@@ -30,6 +30,10 @@ OUT=shobj
 mkdir -p $OUT bin obj gensrc
 
 
+# Unset to ensure that debugging info is included.  This slows down the build.
+STRIP_EARLY=1
+
+
 # These are object files from glibc that the Plash-libc code links to.
 # They are not to be visible outside of the Plash-libc code.
 # These are linked into the combined-*.os files below.
@@ -43,6 +47,7 @@ OBJS_FOR_LIBC="
 	posix/execve.os
 	socket/connect.os
 	socket/bind.os
+	socket/getsockname.os
 	io/close.os
 	io/dup2.os
 	io/fstat.oS io/fxstat.os
@@ -75,7 +80,9 @@ OBJS_FOR_RTLD="
 # because they are privileged and so not usable from Plash anyway:
 #   misc/mount.os misc/umount.os misc/chroot.os misc/pivot_root.os
 EXCLUDE="io/open.os io/open64.os io/creat.os io/creat64.os
+	io/not-cancel-open.os
 	io/close.os
+	io/not-cancel-close.os
 	io/dup2.os
 	io/getcwd.os io/chdir.os io/fchdir.os
 	io/xmknod.os
@@ -93,6 +100,7 @@ EXCLUDE="io/open.os io/open64.os io/creat.os io/creat64.os
 	misc/utimes.os misc/lutimes.os
 	misc/truncate.os
 	socket/connect.os socket/bind.os
+	socket/getsockname.os
 	posix/fork.os posix/vfork.os posix/execve.os
 	dirent/opendir.os dirent/closedir.os
 	dirent/readdir.os dirent/readdir64.os
@@ -198,7 +206,7 @@ build_libc_ldso_extras () {
 	-o $OUT/combined-libc.os
 
   echo Linking $OUT/combined-rtld.os
-  ld -r obj/libc-misc.os obj/libc-getuid.os \
+  ld -r obj/rtld-libc-misc.os obj/libc-getuid.os \
 	obj/libc-comms.os \
 	obj/cap-utils.os \
 	obj/cap-call-return.os \
@@ -251,7 +259,9 @@ build_ldso () {
 
   echo "  Linking $OUT/ld.so"
   $CC -nostdlib -nostartfiles -shared -o $OUT/ld.so \
-	-Wl,-z,combreloc -Wl,-z,defs \
+	-Wl,-z,combreloc \
+	-Wl,-z,defs \
+	-Wl,-z,relro \
 	'-Wl,-(' $GLIBC/elf/dl-allobjs.os $OUT/rtld-libc.a $OUT/combined-rtld.os -lgcc '-Wl,-)' \
 	-Wl,--version-script=$GLIBC/ld.map \
 	-Wl,-soname=ld-linux.so.2 \
@@ -274,8 +284,6 @@ build_libc () {
 	 *(__libc_freeres_ptrs) \
 	 PROVIDE(__stop___libc_freeres_ptrs = .);/'
 
-  # strip --strip-debug glibc5/libc_pic.a -o libc/5/libc_pic.a
-
   if false; then
     # Without using libc_pic.a:
     OBJ_FILES=`cat $OUT/obj-file-list-libc`
@@ -283,9 +291,12 @@ build_libc () {
   else
     # Using libc_pic.a:
     echo "  Making $OUT/libc_rem.a"
-    # cp -av $GLIBC_PIC_DIR/libc_pic.a $OUT/libc_rem.a
-    # Stripping libc_pic.a now will make later steps go faster.
-    strip --strip-debug $GLIBC_PIC_DIR/libc_pic.a -o $OUT/libc_rem.a
+    if [ $STRIP_EARLY ]; then
+      # Stripping libc_pic.a now will make later steps go faster.
+      strip --strip-debug $GLIBC_PIC_DIR/libc_pic.a -o $OUT/libc_rem.a
+    else
+      cp -av $GLIBC_PIC_DIR/libc_pic.a $OUT/libc_rem.a
+    fi
     ar -d $OUT/libc_rem.a `for F in $EXCLUDE; do basename $F; done`
 
     OBJ_FILES="-Wl,--whole-archive $OUT/libc_rem.a -Wl,--no-whole-archive"
@@ -297,7 +308,8 @@ build_libc () {
   #   -Wl,-rpath-link=.:math:elf:dlfcn:nss:nis:rt:resolv:crypt:linuxthreads
   # echo NB. could remove -Wl,-O1 for faster linking
   $CC -Wl,--stats,--no-keep-memory -Wl,-O1 \
-	-shared -static-libgcc -Wl,-z,defs \
+	-shared -static-libgcc \
+	-Wl,-z,defs \
 	-Wl,-dynamic-linker=/lib/ld-linux.so.2 \
 	-Wl,--version-script=src/libc.map-2.3.5 \
 	-Wl,-soname=libc.so.6 \
@@ -335,9 +347,12 @@ build_libpthread () {
   # (See the comment in linuxthreads/Makefile.)
 
   echo '  Build dummy libc.so solely for linking libpthread.so against'
-  # cp -av $GLIBC_PIC_DIR/libc_pic.a $OUT/libc_pic_lite.a
-  # Stripping libc_pic.a now will make later steps go faster.
-  strip --strip-debug $GLIBC_PIC_DIR/libc_pic.a -o $OUT/libc_pic_lite.a
+  if [ $STRIP_EARLY ]; then
+    # Stripping libc_pic.a now will make later steps go faster.
+    strip --strip-debug $GLIBC_PIC_DIR/libc_pic.a -o $OUT/libc_pic_lite.a
+  else
+    cp -av $GLIBC_PIC_DIR/libc_pic.a $OUT/libc_pic_lite.a
+  fi
   ar -d $OUT/libc_pic_lite.a errno.os herrno.os res_libc.os
 
   #  * Note that "-z defs" must be removed: it causes unresolved symbols
@@ -485,10 +500,10 @@ build_shell_etc() {
   #    pulled in libncurses instead.)
   #  * Link with "-lncurses".  This builds on RedHat 7.3 and Debian.
   #    ncurses replaces termcap.
-  echo Linking bin/plash
+  echo Linking bin/pola-shell
   $CC $OPTS_S obj/shell.o obj/libplash.a \
 	$LIBC_LINK_HACK -lreadline -ltermcap \
-	-o bin/plash
+	-o bin/pola-shell
 
   echo Linking bin/run-emacs
   $CC $OPTS_S obj/run-emacs.o $LIBC_LINK obj/libplash.a -o bin/plash-run-emacs
@@ -523,6 +538,17 @@ build_shell_etc() {
   $CC $OPTS_S obj/test-caps.o $LIBC_LINK obj/libplash.a -o bin/test-caps
 }
 
+build_gtk_powerbox () {
+  echo Linking shobj/gtk-powerbox.so
+  $CC -shared -Wl,-z,defs \
+	obj/gtk-powerbox.os \
+	obj/libplash.a \
+	`pkg-config --libs gtk+-2.0` -ldl \
+	-o shobj/powerbox-for-gtk.so
+}
+
+
+if [ "$1" != "--include" ]; then
 
 build_small_bits
 ./src/make-link-def.pl  # Must come before compiling src/libc-*.c files
@@ -534,3 +560,6 @@ build_ldso
 build_libc
 build_libpthread
 build_shell_etc
+build_gtk_powerbox
+
+fi

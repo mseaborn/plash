@@ -362,7 +362,6 @@ void glob_aux2(region_t r,
   }
 
   if(m_glob_path_end(rest, &slash)) {
-    seqf_t filename;
     struct str_list *l;
     seqf_t name = seqf_string(name1);
     
@@ -393,10 +392,9 @@ void glob_aux2(region_t r,
     }
     
     /* Add this filename to the list. */
-    filename = flatten0(r, cat3(r, pathname_got, mk_leaf(r, name),
-				mk_string(r, slash ? "/" : "")));
     l = region_alloc(r, sizeof(struct str_list));
-    l->str = (char *) filename.data;
+    l->str = flatten_str(r, cat3(r, pathname_got, mk_leaf(r, name),
+				 mk_string(r, slash ? "/" : "")));
     l->next = 0;
     *params->got_end = l;
     params->got_end = &l->next;

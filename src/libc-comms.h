@@ -44,6 +44,7 @@ int req_and_reply_with_fds(region_t r, seqt_t msg,
 int req_and_reply_with_fds2(region_t r, seqt_t msg, fds_t fds,
 			    seqf_t *reply, fds_t *reply_fds);
 int req_and_reply(region_t r, seqt_t msg, seqf_t *reply);
+void libc_log(const char *msg);
 
 
 #define weak_extern(symbol) asm (".weak " #symbol);
@@ -52,6 +53,37 @@ int req_and_reply(region_t r, seqt_t msg, seqf_t *reply);
 
 
 #define offsetof(s, f) ((int) &((s *) 0)->f)
+
+
+#include <pthread.h>
+#include <errno.h>
+
+extern pthread_mutex_t libc_lock;
+
+weak_extern(pthread_mutex_lock)
+weak_extern(pthread_mutex_unlock)
+weak_extern(pthread_mutex_trylock)
+
+inline static void plash_libc_lock()
+{
+#if 0
+  if(pthread_mutex_trylock && pthread_mutex_trylock(&libc_lock) == EBUSY) {
+    const char *msg = "libc: contention\n";
+    write(2, msg, strlen(msg));
+
+    if(pthread_mutex_lock) pthread_mutex_lock(&libc_lock);
+  }
+#endif
+  
+  if(pthread_mutex_lock) pthread_mutex_lock(&libc_lock);
+}
+
+inline static void plash_libc_unlock()
+{
+  if(pthread_mutex_unlock) {
+    pthread_mutex_unlock(&libc_lock);
+  }
+}
 
 
 #endif

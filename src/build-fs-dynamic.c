@@ -445,6 +445,66 @@ int comb_dir_socket_bind(struct filesys_obj *obj1, const char *name,
   }
 }
 
+/* This works when both directories are comb_dirs, and when the slots in
+   both directories belong to the backing directories.
+   In that case, this drops through to calling rename() on the backing
+   directories. */
+int comb_dir_rename(struct filesys_obj *obj1, const char *leaf,
+		    struct filesys_obj *dest_dir, const char *dest_leaf, int *err)
+{
+  struct comb_dir *obj = (void *) obj1;
+  if(dest_dir->vtable == &comb_dir_vtable) {
+    struct comb_dir *dest_obj = (void *) dest_dir;
+
+    if(obj->dir && dest_obj->dir) {
+      struct node_list *list_entry =
+	(void *) assoc((void *) obj->node->children, leaf);
+
+      if(!list_entry) {
+	struct node_list *dest_list_entry =
+	  (void *) assoc((void *) dest_obj->node->children, dest_leaf);
+
+	if(!dest_list_entry) {
+	  return obj->dir->vtable->rename(obj->dir, leaf,
+					  dest_obj->dir, dest_leaf, err);
+	}
+      }
+    }
+  }
+  *err = EACCES;
+  return -1;
+}
+
+/* This works when both directories are comb_dirs, and when the slots in
+   both directories belong to the backing directories.
+   In that case, this drops through to calling link() on the backing
+   directories. */
+int comb_dir_link(struct filesys_obj *obj1, const char *leaf,
+		  struct filesys_obj *dest_dir, const char *dest_leaf, int *err)
+{
+  struct comb_dir *obj = (void *) obj1;
+  if(dest_dir->vtable == &comb_dir_vtable) {
+    struct comb_dir *dest_obj = (void *) dest_dir;
+
+    if(obj->dir && dest_obj->dir) {
+      struct node_list *list_entry =
+	(void *) assoc((void *) obj->node->children, leaf);
+
+      if(!list_entry) {
+	struct node_list *dest_list_entry =
+	  (void *) assoc((void *) dest_obj->node->children, dest_leaf);
+
+	if(!dest_list_entry) {
+	  return obj->dir->vtable->link(obj->dir, leaf,
+					dest_obj->dir, dest_leaf, err);
+	}
+      }
+    }
+  }
+  *err = EACCES;
+  return -1;
+}
+
 
 struct filesys_obj *fs_make_root(struct node *node)
 {

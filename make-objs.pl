@@ -99,13 +99,27 @@ gcc('src/cap-call-return.c', 'obj/cap-call-return.os', @opts_c);
 gcc('src/cap-utils.c', 'obj/cap-utils.os', @opts_c);
 gcc('src/dont-free.c', 'obj/dont-free.os', @opts_c);
 gcc('src/filesysobj.c', 'obj/filesysobj.os', @opts_c);
-gcc('src/libc-misc.c', 'obj/libc-misc.os', @opts_c);
+gcc('src/libc-misc.c', 'obj/libc-misc.os', @opts_c,
+    '-DIN_LIBC');
+gcc('src/libc-misc.c', 'obj/rtld-libc-misc.os', @opts_c,
+    '-DIN_RTLD');
 gcc('src/libc-comms.c', 'obj/libc-comms.os', @opts_c);
 gcc('src/libc-fork-exec.c', 'obj/libc-fork-exec.os', @opts_c);
 gcc('src/libc-connect.c', 'obj/libc-connect.os', @opts_c);
 gcc('src/libc-getuid.c', 'obj/libc-getuid.os', @opts_c);
 gcc('src/libc-utime.c', 'obj/libc-utime.os', @opts_c);
 gcc('src/libc-truncate.c', 'obj/libc-truncate.os', @opts_c);
+
+
+
+# Build powerbox for Gtk
+
+my @opts_gtk_pb = ('-Igensrc', '-Isrc',
+		   '-Wall',
+		   '-fPIC',
+		   split(/\s+/, `pkg-config gtk+-2.0 --cflags`));
+
+gcc('src/gtk-powerbox.c', 'obj/gtk-powerbox.os', @opts_gtk_pb);
 
 
 

@@ -12,6 +12,7 @@ pola\-run
   | \fB\-\-no\-cwd\fR
   | \fB\-\-copy\-cwd\fR ]...
   [\fB\-B\fR] [\fB\-\-x11\fR] [\fB\-\-net\fR]
+  [\fB\-\-powerbox\fR [\fB\-\-pet\-name\fR \fIname\fR]]
 .fi
 .SH DESCRIPTION
 pola\-run runs programs under the Plash environment. It starts a
@@ -59,19 +60,12 @@ latter may be more readable in hand\-written shell scripts.
 This gives the filename of the executable to be invoked. If it
 doesn't contain a slash, it will be looked up in \fBPATH\fR.
 
+The filename is resolved in the callee's namespace, not the caller's
+namespace.
+
 Note that if the executable is a "#!" script, access to the
 interpreter specified in the "#!" line will \fInot\fR be
 implicitly granted.
-.TP 
-\fB\-\-prog\-sock\fR \fIfilename\fR
-.TP 
-\fB\-\-prog\-sock\fR=\fIfilename\fR
-Invoke an executable object rather than an executable file. The
-executable object is taken from the socket named by \fIfilename\fR. An
-object can be exported to a socket using
-plash\-socket\-publish.
-
-This option implies \fB\-\-no\-default\fR.
 .TP 
 \fB\-f\fR[awls]...[,\fIoption\fR]... \fIpathname\fR
 .TP 
@@ -201,6 +195,23 @@ Currently, this is equivalent to:
 \-fl /etc/hosts
 \-fl /etc/services
 .fi
+.TP 
+\fB\-\-powerbox\fR
+Grants the callee program an object "powerbox_req_filename" which can
+be used to open a file powerbox. A file powerbox is a file chooser
+dialog box which can grant the callee program access to files. The
+powerbox will dynamically attach files or directories into the callee
+program's file namespace.
+
+Currently, it only makes sense to use this when the caller runs with
+the user's namespace, since the file chooser will display directory
+contents for the caller's namespace. In the future, the
+\fB\-\-powerbox\fR option will be able to pass on the caller's
+powerbox request object rather than always creating a new one.
+.TP 
+\fB\-\-pet\-name\fR \fIname\fR
+This provides a name to use in the title bar of powerbox windows, so
+that the user can identify which application is making the request.
 .SH EXAMPLES
 In Bash:
 .PP

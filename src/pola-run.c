@@ -112,7 +112,7 @@ struct dir_stack *copy_cwd(struct filesys_obj *root_dir)
   struct dir_stack *cwd = NULL;
   char *cwd_name = getcwd(0, 0);
   if(!cwd_name) {
-    perror(NAME_MSG "can't get current working directory");
+    perror(NAME_MSG _("can't get current working directory"));
   }
   else {
     region_t r = region_make();
@@ -120,7 +120,7 @@ struct dir_stack *copy_cwd(struct filesys_obj *root_dir)
     cwd = resolve_dir(r, root_dir, NULL /* cwd */, seqf_string(cwd_name),
 		      SYMLINK_LIMIT, &err);
     if(!cwd) {
-      fprintf(stderr, NAME_MSG "can't set cwd to \"%s\": %s\n",
+      fprintf(stderr, NAME_MSG _("can't set cwd to \"%s\": %s\n"),
 	      cwd_name, strerror(err));
     }
     free(cwd_name);
@@ -143,6 +143,7 @@ struct state {
   int args_count;
   const char *executable_filename;
   int log_summary;
+  int debug;
   const char *pet_name;
   int powerbox;
 #if 0
@@ -153,7 +154,7 @@ struct state {
 void usage(FILE *fp)
 {
   fprintf(fp,
-	  "Plash version " PLASH_VERSION "\n"
+	  _("Plash version " PLASH_VERSION "\n"
 	  "Usage: "
 	  NAME "\n"
 	  "  --prog <file>   Gives filename of executable to invoke\n"
@@ -171,7 +172,7 @@ void usage(FILE *fp)
 	  "  [--net]         Grant access to network config files\n"
 	  "  [--log]         Print method calls client makes to file server\n"
 	  "  [--pet-name <name>]\n"
-	  "  [--powerbox]\n");
+	  "  [--powerbox]\n"));
 }
 
 struct flags {
@@ -198,9 +199,12 @@ int handle_flag(seqf_t flag, struct flags *f)
     f->build_fs |= FS_OBJECT_RW;
     return 0;
   }
-  fprintf(stderr, NAME_MSG "error: unrecognised flag, \"");
-  fprint_d(stderr, flag);
-  fprintf(stderr, "\"\n");
+  {
+    region_t r = region_make();
+    fprintf(stderr, NAME_MSG _("error: unrecognised flag, \"%s\"\n"),
+	    region_strdup_seqf(r, flag));
+    region_free(r);
+  }
   return 1;
 }
 
@@ -270,7 +274,7 @@ int handle_arguments(region_t r, struct state *state,
 	if(parse_flags(arg + 2, &flags, &filename)) { return 1; }
 	if(!filename) {
 	  if(i + 1 > argc) {
-	    fprintf(stderr, NAME_MSG "-f expects 1 parameter\n");
+	    fprintf(stderr, NAME_MSG _("-f expects 1 parameter\n"));
 	    return 1;
 	  }
 	  filename = argv[i++];
@@ -280,7 +284,7 @@ int handle_arguments(region_t r, struct state *state,
 			       seqf_string(filename),
 			       flags.build_fs, &err) < 0) {
 	  /* Warning */
-	  fprintf(stderr, NAME_MSG "error resolving filename \"%s\": %s\n",
+	  fprintf(stderr, NAME_MSG _("error resolving filename \"%s\": %s\n"),
 		  filename, strerror(err));
 	}
 	if(flags.a) { add_to_arg_list(r, state, filename); }
@@ -292,7 +296,7 @@ int handle_arguments(region_t r, struct state *state,
 	struct flags flags;
 	const char *dest_filename, *src_filename;
 	if(i + 2 > argc) {
-	  fprintf(stderr, NAME_MSG "-t expects 2 parameters\n");
+	  fprintf(stderr, NAME_MSG _("-t expects 2 parameters\n"));
 	  return 1;
 	}
 	dest_filename = argv[i++];
@@ -306,7 +310,7 @@ int handle_arguments(region_t r, struct state *state,
 				 FALSE /* nofollow */, &err);
 	if(!obj) {
 	  /* Warning */
-	  fprintf(stderr, NAME_MSG "error resolving filename \"%s\": %s\n",
+	  fprintf(stderr, NAME_MSG _("error resolving filename \"%s\": %s\n"),
 		  src_filename, strerror(err));
 	}
 	else {
@@ -326,13 +330,13 @@ int handle_arguments(region_t r, struct state *state,
 	if(arg[2] == '=') { str = arg + 3; }
 	else if(!arg[2]) {
 	  if(i + 1 > argc) {
-	    fprintf(stderr, NAME_MSG "-a expects 1 parameter\n");
+	    fprintf(stderr, NAME_MSG _("-a expects 1 parameter\n"));
 	    return 1;
 	  }
 	  str = argv[i++];
 	}
 	else {
-	  fprintf(stderr, NAME_MSG "unrecognised argument to -a\n");
+	  fprintf(stderr, NAME_MSG _("unrecognised argument to -a\n"));
 	  return 1;
 	}
 	add_to_arg_list(r, state, str);
@@ -354,11 +358,11 @@ int handle_arguments(region_t r, struct state *state,
 
     if(!strcmp(arg, "--prog")) {
       if(i + 1 > argc) {
-	fprintf(stderr, NAME_MSG "--prog expects 1 parameter\n");
+	fprintf(stderr, NAME_MSG _("--prog expects 1 parameter\n"));
 	return 1;
       }
       if(state->executable_filename) {
-	fprintf(stderr, NAME_MSG "--prog should be used only once\n");
+	fprintf(stderr, NAME_MSG _("--prog should be used only once\n"));
 	return 1;
       }
       state->executable_filename = argv[i++];
@@ -369,7 +373,7 @@ int handle_arguments(region_t r, struct state *state,
       struct dir_stack *old_cwd = state->cwd;
       const char *pathname;
       if(i + 1 > argc) {
-	fprintf(stderr, NAME_MSG "--cwd expects 1 parameter\n");
+	fprintf(stderr, NAME_MSG _("--cwd expects 1 parameter\n"));
 	return 1;
       }
       pathname = argv[i++];
@@ -379,7 +383,7 @@ int handle_arguments(region_t r, struct state *state,
       dir_stack_free(old_cwd);
       if(!state->cwd) {
 	/* Warning */
-	fprintf(stderr, NAME_MSG "can't set cwd to \"%s\": %s\n",
+	fprintf(stderr, NAME_MSG _("can't set cwd to \"%s\": %s\n"),
 		pathname, strerror(err));
       }
       goto arg_handled;
@@ -394,6 +398,17 @@ int handle_arguments(region_t r, struct state *state,
     if(!strcmp(arg, "--copy-cwd")) {
       dir_stack_free(state->cwd);
       state->cwd = copy_cwd(state->root_dir);
+      goto arg_handled;
+    }
+
+    if(!strcmp(arg, "--env")) {
+      char *env_arg;
+      if(i + 1 > argc) {
+	fprintf(stderr, NAME_MSG _("--env expects 1 parameter\n"));
+	return 1;
+      }
+      env_arg = argv[i++];
+      putenv(env_arg);
       goto arg_handled;
     }
 
@@ -424,6 +439,11 @@ int handle_arguments(region_t r, struct state *state,
       goto arg_handled;
     }
 
+    if(!strcmp(arg, "--debug")) {
+      state->debug = TRUE;
+      goto arg_handled;
+    }
+
     if(!strcmp(arg, "--powerbox")) {
       state->powerbox = TRUE;
       goto arg_handled;
@@ -431,7 +451,7 @@ int handle_arguments(region_t r, struct state *state,
 
     if(!strcmp(arg, "--pet-name")) {
       if(i + 1 > argc) {
-	fprintf(stderr, NAME_MSG "--pet-name expects 1 parameter\n");
+	fprintf(stderr, NAME_MSG _("--pet-name expects 1 parameter\n"));
 	return 1;
       }
       state->pet_name = argv[i++];
@@ -441,7 +461,7 @@ int handle_arguments(region_t r, struct state *state,
 #if 0
     if(!strcmp(arg, "--high-fd")) {
       if(i + 1 > argc) {
-	fprintf(stderr, NAME_MSG "--high-fd expects 1 parameter\n");
+	fprintf(stderr, NAME_MSG _("--high-fd expects 1 parameter\n"));
 	return 1;
       }
       state->comm_fd_number = atoi(argv[i++]);
@@ -452,7 +472,7 @@ int handle_arguments(region_t r, struct state *state,
     if(!strcmp(arg, "--help")) { usage(stdout); return 1; }
 
   unknown:
-    fprintf(stderr, NAME_MSG "error: unrecognised argument: \"%s\"\n", arg);
+    fprintf(stderr, NAME_MSG _("error: unrecognised argument: \"%s\"\n"), arg);
     return 1;
 
   arg_handled:;
@@ -467,12 +487,12 @@ static int ld_library_env = 1;
 static void args_to_exec_elf_program
   (region_t r, const char *executable_filename,
    int argc, const char **argv,
-   const char **cmd_out, int *argc_out, const char ***argv_out)
+   const char **cmd_out, int *argc_out, const char ***argv_out,
+   int debug)
 {
-  int debug = 0;
-  int extra_args = 2 + (debug ? 1:0) + 2;
+  int extra_args = 2 + (debug ? 1:0) + 2 + 2;
   const char **argv2;
-  int i;
+  int i, j;
 
   assert(argc >= 1);
   argv2 = region_alloc(r, (argc + extra_args + 1) * sizeof(char *));
@@ -492,10 +512,20 @@ static void args_to_exec_elf_program
     char *path = getenv("LD_LIBRARY_PATH");
     argv2[i++] = "-s";
     argv2[i++] =
-      flatten0(r, cat2(r, mk_string(r, "LD_LIBRARY_PATH=" LIB_INSTALL),
-		       path ? cat2(r, mk_string(r, ":"),
-				   mk_string(r, path))
-		            : seqt_empty)).data;
+      flatten_str(r, cat2(r, mk_string(r, "LD_LIBRARY_PATH=" LIB_INSTALL),
+			  path ? cat2(r, mk_string(r, ":"),
+				      mk_string(r, path))
+			       : seqt_empty));
+  }
+  /* Make sure LD_PRELOAD is copied through.  It might have been set in
+     our current environment using the --env option. */
+  {
+    char *str = getenv("LD_PRELOAD");
+    if(str) {
+      argv2[i++] = "-s";
+      argv2[i++] = flatten_str(r, cat2(r, mk_string(r, "LD_PRELOAD="),
+				       mk_string(r, str)));
+    }
   }
   argv2[i++] = "/special/ld-linux.so.2";
   if(!ld_library_env) {
@@ -504,9 +534,9 @@ static void args_to_exec_elf_program
   }
   argv2[i++] = executable_filename;
   assert(i <= extra_args + 1);
-  for(i = 1; i < argc; i++) { argv2[extra_args+i] = argv[i]; }
-  argv2[extra_args + argc] = NULL;
-  *argc_out = extra_args + argc;
+  for(j = 1; j < argc; j++) { argv2[i++] = argv[j]; }
+  argv2[i] = NULL;
+  *argc_out = i;
   *argv_out = argv2;
 }
 
@@ -559,6 +589,7 @@ int main(int argc, char **argv)
   state.args_count = 0;
   state.executable_filename = NULL;
   state.log_summary = FALSE;
+  state.debug = FALSE;
   state.pet_name = NULL;
   state.powerbox = FALSE;
 #if 0
@@ -585,7 +616,7 @@ int main(int argc, char **argv)
 	     &result);
     filesys_obj_free(fs_op);
     if(expect_cap1(result, &state.root_dir) < 0) {
-      fprintf(stderr, NAME_MSG "get-root failed\n");
+      fprintf(stderr, NAME_MSG _("get-root failed\n"));
       return 1;
     }
   }
@@ -594,7 +625,7 @@ int main(int argc, char **argv)
     
     state.root_dir = initial_dir("/", &err);
     if(!state.root_dir) {
-      fprintf(stderr, NAME_MSG "can't open root directory: %s\n", strerror(err));
+      fprintf(stderr, NAME_MSG _("can't open root directory: %s\n"), strerror(err));
       return 1;
     }
   }
@@ -607,7 +638,7 @@ int main(int argc, char **argv)
   if(handle_arguments(r, &state, 1, argc, argv)) { return 1; }
 
   if(!state.executable_filename) {
-    fprintf(stderr, NAME_MSG "--prog argument missing, no executable specified\n");
+    fprintf(stderr, NAME_MSG _("--prog argument missing, no executable specified\n"));
     return 1;
   }
   {
@@ -686,7 +717,7 @@ int main(int argc, char **argv)
 			  NULL,
 			  &executable_filename2,
 			  &args_count2, &args_array2, &err) < 0) {
-	fprintf(stderr, NAME_MSG "bad interpreter: %s: %s\n",
+	fprintf(stderr, NAME_MSG _("bad interpreter: %s: %s\n"),
 		state.executable_filename, strerror(err));
 	return 1;
       }
@@ -701,9 +732,11 @@ int main(int argc, char **argv)
 	  return -1;
 	}
 	shared->log = fdopen(fd, "w");
+	setvbuf(shared->log, 0, _IONBF, 0);
       }
       shared->log_summary = state.log_summary;
       shared->log_messages = 0;
+      shared->call_count = 0;
 
       // "fs_op;conn_maker;fs_op_maker;union_dir_maker"
       if(state.powerbox) {
@@ -798,7 +831,7 @@ int main(int argc, char **argv)
 	snprintf(buf, sizeof(buf), "%i", socks[0]);
 	if(setenv("PLASH_COMM_FD", buf, 1) < 0 ||
 	   setenv("PLASH_CAPS", cap_names, 1) < 0) {
-	  fprintf(stderr, NAME_MSG "setenv failed\n");
+	  fprintf(stderr, NAME_MSG _("setenv failed\n"));
 	  return 1;
 	}
       }
@@ -807,7 +840,8 @@ int main(int argc, char **argv)
 	const char *cmd;
 	args_to_exec_elf_program(r, executable_filename2,
 				 args_count2, args_array2,
-				 &cmd, &args_count2, &args_array2);
+				 &cmd, &args_count2, &args_array2,
+				 state.debug);
 #if 0
 	/* We must clear the close-on-exec flag explicitly for the
 	   executable FD. */

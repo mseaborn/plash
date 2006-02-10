@@ -67,7 +67,7 @@ read() and write()) work on kernel-level file descriptors as before.
 
 {\chapter id={man-pages}: \title- Man pages
 \splice name={man_pola-run};
-\splice name={man_plash};
+\splice name={man_pola-shell};
 \splice name={man_plash-opts};
 \splice name={man_exec-object};
 \splice name={man_run-emacs};

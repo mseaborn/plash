@@ -39,7 +39,7 @@ void set_option(region_t r, cap_t opts, const char *name, int v)
 			 argbuf_fds(argbuf)),
 	   &result);
   if(expect_ok(result) < 0) {
-    fprintf(stderr, "error setting option `%s'\n", name);
+    fprintf(stderr, _("error setting option `%s'\n"), name);
   }
 }
 
@@ -67,7 +67,7 @@ int get_option(region_t r, cap_t opts, const char *name)
 	return i;
       }
     }
-    fprintf(stderr, "can't get option `%s'\n", name);
+    fprintf(stderr, _("can't get option `%s'\n"), name);
     caps_free(result.caps);
     close_fds(result.fds);
     return 0;

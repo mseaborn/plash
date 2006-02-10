@@ -251,6 +251,7 @@ static inline seqt_t cat6(region_t r, seqt_t t1, seqt_t t2, seqt_t t3, seqt_t t4
 seqt_t mk_printf(region_t r, const char *fmt, ...);
 seqf_t flatten(region_t r, seqt_t seq);
 seqf_t flatten0(region_t r, seqt_t seq); /* Null-terminates data */
+char *flatten_str(region_t r, seqt_t seq);
 seqf_t flatten_reuse(region_t r, seqt_t seq); /* This will re-use the existing copy if it's already flat */
 void flatten_into(char *out, seqt_t seq);
 void print_data(seqf_t b);

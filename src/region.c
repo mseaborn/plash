@@ -216,6 +216,14 @@ seqf_t flatten0(region_t r, seqt_t seq)
   return flat;
 }
 
+char *flatten_str(region_t r, seqt_t seq)
+{
+  char *buf = region_alloc(r, seq.size + 1);
+  flatten_aux(buf, seq.t);
+  buf[seq.size] = 0;
+  return buf;
+}
+
 seqf_t flatten_reuse(region_t r, seqt_t seq)
 {
   if(seq.t->subtree_count < 0) {

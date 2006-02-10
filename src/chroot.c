@@ -39,7 +39,7 @@ int main(int argc, const char *argv[])
   cap_t fs_server, fs_op_maker, conn_maker;
 
   if(argc < 3) {
-    fprintf(stderr, "Usage: chroot <dir> <executable> <args...>\n");
+    fprintf(stderr, _("Usage: chroot <dir> <executable> <args...>\n"));
     return 1;
   }
 
@@ -59,7 +59,7 @@ int main(int argc, const char *argv[])
 			   caps_empty, fds_empty),
 	     &result);
     if(expect_cap1(result, &root_dir) < 0) {
-      printf("get-root failed\n");
+      printf(_("get-root failed\n"));
       return 1;
     }
     
@@ -68,7 +68,7 @@ int main(int argc, const char *argv[])
 			   mk_caps1(r, root_dir), fds_empty),
 	     &result);
     if(expect_cap1(result, &new_fs_server) < 0) {
-      printf("mkfs failed\n");
+      printf(_("mkfs failed\n"));
       return 1;
     }
 
@@ -88,7 +88,7 @@ int main(int argc, const char *argv[])
       int fd;
       char buf[20];
       if(expect_fd1(result, &fd) < 0) {
-	printf("mkco failed\n");
+	printf(_("mkco failed\n"));
 	return 1;
       }
       snprintf(buf, sizeof(buf), "%i", fd);

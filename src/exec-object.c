@@ -256,9 +256,9 @@ int main(int argc, const char *argv[])
   cap_t fs_server, fs_op_maker, conn_maker, union_dir_maker, return_cont;
 
   if(argc != 3) {
-    printf("exec-object is only useful when run from Plash using the "
-	   "capcmd expression.\n");
-    printf("Usage: %s <executable-pathname> <root-dir>\n", argv[0]);
+    printf(_("exec-object is only useful when run from Plash using the "
+	     "capcmd expression.\n"));
+    printf(_("Usage: %s <executable-pathname> <root-dir>\n"), argv[0]);
     return 1;
   }
 
@@ -281,7 +281,7 @@ int main(int argc, const char *argv[])
 	     &result);
     filesys_obj_free(fs_server);
     if(expect_cap1(result, &root_dir) < 0) {
-      fprintf(stderr, "exec-object: get-root failed\n");
+      fprintf(stderr, _("exec-object: get-root failed\n"));
       return 1;
     }
 
@@ -316,6 +316,6 @@ int main(int argc, const char *argv[])
     }
   }
 
-  printf("exec-object server for `%s' finished\n", argv[1]);
+  printf(_("exec-object server for `%s' finished\n"), argv[1]);
   return 0;
 }

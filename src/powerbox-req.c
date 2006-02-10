@@ -33,20 +33,20 @@ int main(int argc, const char *argv[])
   argmkbuf_t argbuf = argbuf_make(r);
   int args_size = 10;
   bufref_t args[args_size];
-  int arg = 0;
+  int arg_count = 0;
 
   i = 1;
   while(i < argc) {
-    assert(arg < args_size);
+    assert(arg_count < args_size);
     if(!strcmp(argv[i], "--dir") && i + 2 <= argc) {
-      args[arg++] =
+      args[arg_count++] =
 	argmk_pair(argbuf,
 		   argmk_str(argbuf, mk_string(r, "Startdir")),
 		   argmk_str(argbuf, mk_string(r, argv[i+1])));
       i += 2;
     }
     else if(!strcmp(argv[i], "--desc") && i + 2 <= argc) {
-      args[arg++] =
+      args[arg_count++] =
 	argmk_pair(argbuf,
 		   argmk_str(argbuf, mk_string(r, "Desc")),
 		   argmk_str(argbuf, mk_string(r, argv[i+1])));
@@ -54,12 +54,12 @@ int main(int argc, const char *argv[])
     }
     else if(!strcmp(argv[i], "--save")) {
       bufref_t *a;
-      args[arg++] = argmk_array(argbuf, 1, &a);
+      args[arg_count++] = argmk_array(argbuf, 1, &a);
       a[0] = argmk_str(argbuf, mk_string(r, "Save"));
       i++;
     }
     else {
-      fprintf(stderr, "powerbox-req: unknown argument, \"%s\"\n", argv[i]);
+      fprintf(stderr, _("powerbox-req: unknown argument, \"%s\"\n"), argv[i]);
       return 1;
     }
   }
@@ -71,8 +71,8 @@ int main(int argc, const char *argv[])
     struct cap_args result;
     
     bufref_t *a;
-    bufref_t arg_list = argmk_array(argbuf, arg, &a);
-    for(i = 0; i < arg; i++) { a[i] = args[i]; }
+    bufref_t arg_list = argmk_array(argbuf, arg_count, &a);
+    for(i = 0; i < arg_count; i++) { a[i] = args[i]; }
     cap_call(powerbox_req, r,
 	     cap_args_d(cat3(r, mk_int(r, METHOD_POWERBOX_REQ_FILENAME),
 			     mk_int(r, arg_list),

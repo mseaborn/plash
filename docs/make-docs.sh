@@ -15,6 +15,7 @@ set -e
 cd docs && (
 ./parse.pl index.xxml >out-doc.xml
 
+rm -rvf html
 mkdir -p html
 time xmlto html -m config.xsl -o html/ out-doc.xml
 

@@ -527,8 +527,8 @@ put('gensrc/out-vtable-build-fs-dynamic.h',
 	  ['create_file', 'comb_dir_create_file'],
 	  ['mkdir', 'comb_dir_mkdir'],
 	  ['symlink', 'comb_dir_symlink'],
-	  ['rename', 'refuse_rename_or_link'],
-	  ['link', 'refuse_rename_or_link'],
+	  ['rename', 'comb_dir_rename'],
+	  ['link', 'comb_dir_link'],
 	  ['unlink', 'comb_dir_unlink'],
 	  ['rmdir', 'comb_dir_rmdir'],
 	  ['socket_bind', 'comb_dir_socket_bind'],
@@ -578,6 +578,17 @@ put('gensrc/out-vtable-powerbox.h',
          [['free', 'powerbox_free'],
 	  ['mark', 'powerbox_mark'],
 	  ['cap_invoke', 'powerbox_invoke'],
+	 ]
+     }
+    ]);
+
+put('gensrc/out-vtable-powerbox-for-gtk.h',
+    [{ Name => 'pb_return_cont_vtable',
+       Interfaces => [],
+       Contents =>
+         [['free', 'pb_return_cont_free'],
+          ['mark', 'pb_return_cont_mark'],
+	  ['cap_invoke', 'pb_return_cont_invoke']
 	 ]
      }
     ]);

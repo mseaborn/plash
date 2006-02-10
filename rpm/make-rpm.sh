@@ -26,6 +26,10 @@
 # I think the "rpm" tool is really badly designed, but there you go.
 # This script also illustrates what you can do with pola-run!
 
+set -e
+
+cd rpm
+
 . ../src/config.sh
 
 mkdir -vp plash-$PLASH_VERSION
@@ -47,3 +51,5 @@ mkdir -vp tmp
   -tw /usr/src/rpm/BUILD build \
   -tw /usr/src/rpm/RPMS/i386 out \
   -tw /var/tmp tmp
+
+rpm2cpio out/plash-$PLASH_VERSION-1.i386.rpm | cpio -t > out/file-list

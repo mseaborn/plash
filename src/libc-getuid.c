@@ -38,6 +38,7 @@ int new_getuid()
 {
   int uid;
   const char *str = getenv("PLASH_FAKE_UID");
+  libc_log("getuid");
   if(!str) return getuid();
   uid = my_atoi(str);
   if(uid < 0) return getuid();
@@ -49,6 +50,7 @@ int new_getgid()
 {
   int gid;
   const char *str = getenv("PLASH_FAKE_GID");
+  libc_log("getgid");
   if(!str) return getgid();
   gid = my_atoi(str);
   if(gid < 0) return getgid();
@@ -60,6 +62,7 @@ int new_geteuid()
 {
   int euid;
   const char *str = getenv("PLASH_FAKE_EUID");
+  libc_log("geteuid");
   if(!str) return geteuid();
   euid = my_atoi(str);
   if(euid < 0) return geteuid();
@@ -71,6 +74,7 @@ int new_getegid()
 {
   int egid;
   const char *str = getenv("PLASH_FAKE_EGID");
+  libc_log("getegid");
   if(!str) return getegid();
   egid = my_atoi(str);
   if(egid < 0) return getegid();
@@ -79,52 +83,57 @@ int new_getegid()
 
 
 /* These functions simply report success.  I don't see much point in
-   having them check the process's faked UIDs and GIDs.
-   When I add logging facilities, these should output a log message
-   to indicate what the process is doing.  It's not reasonable to
-   output anything to stderr. */
+   having them check the process's faked UIDs and GIDs. */
 
 /* EXPORT: new_setuid => WEAK:setuid __setuid */
 int new_setuid(uid_t uid)
 {
+  libc_log("setuid");
   return 0;
 }
 /* EXPORT: new_setgid => WEAK:setgid __setgid */
 int new_setgid(gid_t gid)
 {
+  libc_log("setgid");
   return 0;
 }
 
 /* EXPORT: new_seteuid => seteuid __GI_seteuid */
 int new_seteuid(uid_t euid)
 {
+  libc_log("seteuid");
   return 0;
 }
 /* EXPORT: new_setegid => setegid __GI_setegid */
 int new_setegid(gid_t egid)
 {
+  libc_log("setegid");
   return 0;
 }
 
 /* EXPORT: new_setreuid => WEAK:setreuid __setreuid */
 int new_setreuid(uid_t ruid, uid_t euid)
 {
+  libc_log("setreuid");
   return 0;
 }
 /* EXPORT: new_setregid => WEAK:setregid __setregid */
 int new_setregid(gid_t rgid, gid_t egid)
 {
+  libc_log("setregid");
   return 0;
 }
 
 /* EXPORT: new_setresuid => WEAK:setresuid __setresuid __GI___setresuid */
 int new_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 {
+  libc_log("setresuid");
   return 0;
 }
 /* EXPORT: new_setresgid => WEAK:setresgid __setresgid __GI___setresgid */
 int new_setresgid(gid_t rgid, gid_t egid, gid_t sgid)
 {
+  libc_log("setresgid");
   return 0;
 }
 

@@ -66,6 +66,9 @@ gzip -9 $DEST/usr/share/man/man1/*.1
 # but this generates an unnecessary dep on libc6 2.3.5.
 # Perhaps generate a "Recommends" field instead?
 
+mkdir -p $DEST/usr/share/lintian/overrides
+cp -av debian/lintian-overrides $DEST/usr/share/lintian/overrides/plash
+
 dpkg-gencontrol -isp
 
 chown -R root.root debian/tmp

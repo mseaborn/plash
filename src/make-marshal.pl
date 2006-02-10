@@ -33,12 +33,14 @@ my $methods =
    ['Gdir', 'fsop_get_dir'],
    ['Grtd', 'fsop_get_root_dir'],
    ['Gobj', 'fsop_get_obj'],
+   ['Logm', 'fsop_log'],
    # These correspond to Unix system calls:
    ['Open', 'fsop_open'],
    ['Stat', 'fsop_stat'],
    ['Rdlk', 'fsop_readlink'],
    ['Chdr', 'fsop_chdir'],
    ['Fchd', 'fsop_fchdir'],
+   ['Dfst', 'fsop_dir_fstat'], # fstat on directory FD objects only
    ['Gcwd', 'fsop_getcwd'],
    ['Dlst', 'fsop_dirlist'],
    ['Accs', 'fsop_access'],

@@ -13,7 +13,7 @@ my $subst =
      'internals',
      'bugs',
      'copyright',
-     'man_plash',
+     'man_pola-shell',
      'man_plash-opts',
      'man_exec-object',
      'man_chroot',

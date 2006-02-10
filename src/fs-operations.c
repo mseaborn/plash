@@ -1,4 +1,4 @@
-/* Copyright (C) 2004 Mark Seaborn
+/* Copyright (C) 2004, 2005 Mark Seaborn
 
    This file is part of Plash, the Principle of Least Authority Shell.
 
@@ -320,9 +320,11 @@ int open_executable_file(struct filesys_obj *obj, seqf_t cmd_filename, int *err)
 	read_perm_missing = 1;
       }
       if(st.st_mode & (S_ISUID | S_ISGID)) {
-	fprintf(stderr, "plash: warning: setuid/gid bit not honoured on `");
-	fprint_d(stderr, cmd_filename);
-	fprintf(stderr, "'\n");
+	region_t r = region_make();
+	fprintf(stderr,
+		_("plash: warning: setuid/gid bit not honoured on `%s'\n"),
+		region_strdup_seqf(r, cmd_filename));
+	region_free(r);
       }
     }
   }
@@ -332,9 +334,10 @@ int open_executable_file(struct filesys_obj *obj, seqf_t cmd_filename, int *err)
      that it can't run executables whose read permission bit is not set.
      Give this warning only if opening the file really does fail. */
   if(fd < 0 && *err == EACCES && read_perm_missing) {
-    fprintf(stderr, "plash: warning: can't execute file without read permission: `");
-    fprint_d(stderr, cmd_filename);
-    fprintf(stderr, "'\n");
+    region_t r = region_make();
+    fprintf(stderr, _("plash: warning: can't execute file without read permission: `%s'\n"),
+	    region_strdup_seqf(r, cmd_filename));
+    region_free(r);
   }
   return fd;
 }
@@ -456,6 +459,295 @@ int exec_for_scripts
     *argv_out = argv;
     return 0;
   }
+}
+
+#define L_READ 0
+#define L_WRITE 1
+static void log_access(region_t r, struct fs_op_object *obj,
+		       seqf_t pathname, int flags)
+{
+  if(obj->shared->log) {
+    fprintf(obj->shared->log, "FILE: %s, %s, #%i, op#%i\n",
+	    region_strdup_seqf(r, pathname),
+	    flags & L_WRITE ? "write" : "read",
+	    obj->id, obj->shared->call_count);
+  }
+}
+
+static void fs_op_log_file_accesses(region_t r, struct fs_op_object *obj,
+				    seqf_t msg)
+{
+  int ok = 1;
+  int method_id;
+  m_int(&ok, &msg, &method_id);
+  if(ok) switch(method_id) {
+  case METHOD_FSOP_FORK: /* scheduled for removal */
+    {
+      return;
+    }
+  case METHOD_FSOP_COPY:
+    {
+      return;
+    }
+  case METHOD_FSOP_GET_ROOT_DIR:
+    {
+      m_end(&ok, &msg);
+      if(ok) {
+	/* This is L_WRITE because although the operation itself does not
+	   cause a write, it returns a reference that can be used to
+	   write without further oversight from the fs_op object. */
+	log_access(r, obj, seqf_string("/"), L_WRITE);
+	return;
+      }
+      break;
+    }
+  case METHOD_FSOP_GET_DIR:
+    {
+      if(ok) {
+	seqf_t pathname = msg;
+	log_access(r, obj, pathname, L_WRITE);
+	return;
+      }
+      break;
+    }
+  case METHOD_FSOP_GET_OBJ:
+    {
+      if(ok) {
+	seqf_t pathname = msg;
+	log_access(r, obj, pathname, L_WRITE);
+	return;
+      }
+      break;
+    }
+  case METHOD_FSOP_EXEC:
+    {
+      int fd_number;
+      seqf_t cmd_filename;
+      bufref_t argv_ref;
+      m_int(&ok, &msg, &fd_number);
+      m_lenblock(&ok, &msg, &cmd_filename);
+      m_int(&ok, &msg, &argv_ref);
+      if(ok) {
+	/* NB. For executable objects, this is potentially L_WRITE. */
+	log_access(r, obj, cmd_filename, L_READ);
+	return;
+      }
+      break;
+    }
+  case METHOD_FSOP_OPEN:
+    {
+      int flags, mode;
+      m_int(&ok, &msg, &flags);
+      m_int(&ok, &msg, &mode);
+      if(ok) {
+	seqf_t pathname = msg;
+	log_access(r, obj, pathname,
+		   (flags & O_ACCMODE) == O_RDONLY ? L_READ : L_WRITE);
+	return;
+      }
+      break;
+    }
+  case METHOD_FSOP_STAT:
+  {
+    int nofollow;
+    m_int(&ok, &msg, &nofollow);
+    if(ok) {
+      seqf_t pathname = msg;
+      log_access(r, obj, pathname, L_READ);
+      return;
+    }
+    break;
+  }
+  case METHOD_FSOP_READLINK:
+  {
+    if(ok) {
+      seqf_t pathname = msg;
+      log_access(r, obj, pathname, L_READ);
+      return;
+    }
+    break;
+  }
+  case METHOD_FSOP_GETCWD:
+  {
+    m_end(&ok, &msg);
+    if(ok) {
+      return;
+    }
+    break;
+  }
+  case METHOD_FSOP_DIRLIST:
+  {
+    if(ok) {
+      seqf_t pathname = msg;
+      log_access(r, obj, pathname, L_READ);
+      return;
+    }
+    break;
+  }
+  case METHOD_FSOP_ACCESS:
+  {
+    int mode;
+    m_int(&ok, &msg, &mode);
+    if(ok) {
+      seqf_t pathname = msg;
+      log_access(r, obj, pathname, L_READ);
+      return;
+    }
+    break;
+  }
+  case METHOD_FSOP_MKDIR:
+  {
+    int mode;
+    m_int(&ok, &msg, &mode);
+    if(ok) {
+      seqf_t pathname = msg;
+      log_access(r, obj, pathname, L_WRITE);
+      return;
+    }
+    break;
+  }
+  case METHOD_FSOP_SYMLINK:
+  {
+    seqf_t newpath;
+    m_lenblock(&ok, &msg, &newpath);
+    if(ok) {
+      /* NB. oldpath is not actually accessed by this operation, so it
+	 is not logged. */
+      seqf_t oldpath = msg;
+      log_access(r, obj, newpath, L_WRITE);
+      return;
+    }
+    break;
+  }
+  case METHOD_FSOP_RENAME:
+  {
+    seqf_t newpath;
+    m_lenblock(&ok, &msg, &newpath);
+    if(ok) {
+      seqf_t oldpath = msg;
+      log_access(r, obj, oldpath, L_WRITE);
+      log_access(r, obj, newpath, L_WRITE);
+      return;
+    }
+    break;
+  }
+  case METHOD_FSOP_LINK:
+  {
+    seqf_t newpath;
+    m_lenblock(&ok, &msg, &newpath);
+    if(ok) {
+      seqf_t oldpath = msg;
+      log_access(r, obj, oldpath, L_READ);
+      log_access(r, obj, newpath, L_WRITE);
+      return;
+    }
+    break;
+  }
+  case METHOD_FSOP_CHMOD:
+  {
+    int mode;
+    m_int(&ok, &msg, &mode);
+    if(ok) {
+      seqf_t pathname = msg;
+      log_access(r, obj, pathname, L_WRITE);
+      return;
+    }
+    break;
+  }
+  case METHOD_FSOP_UTIME:
+  {
+    int nofollow;
+    int atime_sec, atime_usec;
+    int mtime_sec, mtime_usec;
+    m_int(&ok, &msg, &nofollow);
+    m_int(&ok, &msg, &atime_sec);
+    m_int(&ok, &msg, &atime_usec);
+    m_int(&ok, &msg, &mtime_sec);
+    m_int(&ok, &msg, &mtime_usec);
+    if(ok) {
+      seqf_t pathname = msg;
+      log_access(r, obj, pathname, L_WRITE);
+      return;
+    }
+    break;
+  }
+  case METHOD_FSOP_UNLINK:
+  {
+    if(ok) {
+      seqf_t pathname = msg;
+      log_access(r, obj, pathname, L_WRITE);
+      return;
+    }
+    break;
+  }
+  case METHOD_FSOP_RMDIR:
+  {
+    if(ok) {
+      seqf_t pathname = msg;
+      log_access(r, obj, pathname, L_WRITE);
+      return;
+    }
+    break;
+  }
+  case METHOD_FSOP_CONNECT:
+  {
+    if(ok) {
+      seqf_t pathname = msg;
+      log_access(r, obj, pathname, L_WRITE);
+      return;
+    }
+    break;
+  }
+  case METHOD_FSOP_BIND:
+  {
+    if(ok) {
+      seqf_t pathname = msg;
+      log_access(r, obj, pathname, L_WRITE);
+      return;
+    }
+    break;
+  }
+  case METHOD_FSOP_CHDIR:
+  {
+    if(ok) {
+      seqf_t pathname = msg;
+      log_access(r, obj, pathname, L_READ);
+      return;
+    }
+    break;
+  }
+  case METHOD_FSOP_FCHDIR:
+  {
+    return;
+  }
+  case METHOD_FSOP_DIR_FSTAT:
+  {
+    return;
+  }
+  case METHOD_FSOP_LOG:
+  {
+    return;
+  }
+  }
+}
+
+static seqt_t pack_stat_info(region_t r, struct stat *st)
+{
+  return
+    cat3(r,
+	 cat5(r, mk_int(r, st->st_dev),
+	      mk_int(r, st->st_ino),
+	      mk_int(r, st->st_mode),
+	      mk_int(r, st->st_nlink),
+	      mk_int(r, st->st_uid)),
+	 cat5(r, mk_int(r, st->st_gid),
+	      mk_int(r, st->st_rdev),
+	      mk_int(r, st->st_size),
+	      mk_int(r, st->st_blksize),
+	      mk_int(r, st->st_blocks)),
+	 cat3(r, mk_int(r, st->st_atime),
+	      mk_int(r, st->st_mtime),
+	      mk_int(r, st->st_ctime)));
 }
 
 void handle_fs_op_message(region_t r, struct process *proc,
@@ -588,16 +880,13 @@ void handle_fs_op_message(region_t r, struct process *proc,
   {
     int fd_number;
     seqf_t cmd_filename;
-    int argc;
     bufref_t argv_ref;
     m_int(&ok, &msg, &fd_number);
     m_lenblock(&ok, &msg, &cmd_filename);
-    //m_int(&ok, &msg, &argc);
     m_int(&ok, &msg, &argv_ref);
-    if(ok
-       //&& argc >= 1
-       ) {
+    if(ok) {
       struct arg_m_buf argbuf = { msg, caps_empty, fds_empty };
+      int argc;
       int extra_args;
       const char **argv, **argv2;
       seqf_t cmd_filename2;
@@ -613,12 +902,19 @@ void handle_fs_op_message(region_t r, struct process *proc,
       {
 	const bufref_t *a;
 	if(argm_array(&argbuf, argv_ref, &argc, &a)) goto exec_fail;
+	/* We use argv[0] later on, so check that argc >= 1. */
+	if(argc < 1) goto exec_fail;
 	argv = region_alloc(r, argc * sizeof(seqf_t));
 	for(i = 0; i < argc; i++) {
 	  seqf_t arg;
 	  if(argm_str(&argbuf, a[i], &arg)) goto exec_fail;
 	  argv[i] = region_strdup_seqf(r, arg);
 	}
+      }
+
+      /* Log the execve() argument list too. */
+      for(i = 0; i < argc; i++) {
+	*log_msg = cat2(r, *log_msg, mk_printf(r, ", \"%s\"", argv[i]));
       }
 
       obj = resolve_file(r, proc->root, proc->cwd, cmd_filename,
@@ -776,20 +1072,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
 	return;
       }
       filesys_obj_free(obj);
-      *reply = cat4(r, mk_string(r, "RSta"),
-		    cat5(r, mk_int(r, stat.st_dev),
-			 mk_int(r, stat.st_ino),
-			 mk_int(r, stat.st_mode),
-			 mk_int(r, stat.st_nlink),
-			 mk_int(r, stat.st_uid)),
-		    cat5(r, mk_int(r, stat.st_gid),
-			 mk_int(r, stat.st_rdev),
-			 mk_int(r, stat.st_size),
-			 mk_int(r, stat.st_blksize),
-			 mk_int(r, stat.st_blocks)),
-		    cat3(r, mk_int(r, stat.st_atime),
-			 mk_int(r, stat.st_mtime),
-			 mk_int(r, stat.st_ctime)));
+      *reply = cat2(r, mk_string(r, "RSta"), pack_stat_info(r, &stat));
       *log_reply = mk_string(r, "ok");
       return;
     }
@@ -916,13 +1199,15 @@ void handle_fs_op_message(region_t r, struct process *proc,
     if(ok) {
       seqf_t pathname = msg;
       int err = 0;
-      *log_msg = mk_string(r, "mkdir");
+      *log_msg = cat2(r, mk_string(r, "mkdir: "), mk_leaf(r, pathname));
       if(process_mkdir(proc, pathname, mode, &err) < 0) {
 	*reply = cat2(r, mk_int(r, METHOD_FAIL),
 		      mk_int(r, err));
+	*log_reply = mk_string(r, "fail");
       }
       else {
 	*reply = mk_string(r, "RMkd");
+	*log_reply = mk_string(r, "ok");
       }
       return;
     }
@@ -1009,13 +1294,15 @@ void handle_fs_op_message(region_t r, struct process *proc,
     if(ok) {
       seqf_t pathname = msg;
       int err;
-      *log_msg = mk_string(r, "chmod");
+      *log_msg = cat2(r, mk_string(r, "chmod: "), mk_leaf(r, pathname));
       if(process_chmod(proc, pathname, mode, &err) < 0) {
 	*reply = cat2(r, mk_int(r, METHOD_FAIL),
 		      mk_int(r, err));
+	*log_reply = mk_string(r, "fail");
       }
       else {
 	*reply = mk_string(r, "RChm");
+	*log_reply = mk_string(r, "ok");
       }
       return;
     }
@@ -1040,13 +1327,15 @@ void handle_fs_op_message(region_t r, struct process *proc,
       atime.tv_usec = atime_usec;
       mtime.tv_sec = mtime_sec;
       mtime.tv_usec = mtime_usec;
-      *log_msg = mk_string(r, "utime");
+      *log_msg = cat2(r, mk_string(r, "utime: "), mk_leaf(r, pathname));
       if(process_utimes(proc, pathname, nofollow, &atime, &mtime, &err) < 0) {
 	*reply = cat2(r, mk_int(r, METHOD_FAIL),
 		      mk_int(r, err));
+	*log_reply = mk_string(r, "fail");
       }
       else {
 	*reply = mk_string(r, "RUtm");
+	*log_reply = mk_string(r, "ok");
       }
       return;
     }
@@ -1153,11 +1442,12 @@ void handle_fs_op_message(region_t r, struct process *proc,
   }
   case METHOD_FSOP_CHDIR:
   {
+    /* chdir() call */
     if(ok) {
       seqf_t pathname = msg;
       int err = 0;
       int e;
-      *log_msg = mk_string(r, "chdir");
+      *log_msg = cat2(r, mk_string(r, "chdir: "), mk_leaf(r, pathname));
       e = process_chdir(proc, pathname, &err);
       if(e == 0) {
 	*log_reply = mk_string(r, "ok");
@@ -1174,6 +1464,9 @@ void handle_fs_op_message(region_t r, struct process *proc,
   }
   case METHOD_FSOP_FCHDIR:
   {
+    /* fchdir() call.  Takes a dir_stack object (used to represent a
+       directory FD in Plash) rather than a kernel-level file
+       descriptor. */
     m_end(&ok, &msg);
     if(ok && cap_args.size == 1) {
       struct dir_stack *n = dir_stack_upcast(cap_args.caps[0]);
@@ -1193,6 +1486,43 @@ void handle_fs_op_message(region_t r, struct process *proc,
       return;
     }
     break;
+  }
+  case METHOD_FSOP_DIR_FSTAT:
+  {
+    /* fstat() on directory FDs only. */
+    m_end(&ok, &msg);
+    if(ok && cap_args.size == 1) {
+      struct dir_stack *n = dir_stack_upcast(cap_args.caps[0]);
+      *log_msg = mk_string(r, "dir_fstat");
+      if(n) {
+	int err;
+	struct stat st;
+	n->hdr.refcount++;
+	if(n->dir->vtable->stat(n->dir, &st, &err) < 0) {
+	  *reply = cat2(r, mk_int(r, METHOD_FAIL),
+			mk_int(r, ENOTDIR));
+	  *log_reply = mk_string(r, "fail");
+	}
+	else {
+	  *reply = cat2(r, mk_int(r, METHOD_OKAY), pack_stat_info(r, &st));
+	  *log_reply = mk_string(r, "ok");
+	}
+	dir_stack_free(n);
+      }
+      else {
+	*reply = cat2(r, mk_int(r, METHOD_FAIL),
+		      mk_int(r, ENOTDIR));
+	*log_reply = mk_string(r, "fail: not a dir_stack object");
+      }
+      return;
+    }
+  }
+  case METHOD_FSOP_LOG:
+  {
+    if(ok) {
+      *log_msg = cat2(r, mk_string(r, "log: "), mk_leaf(r, msg));
+      return;
+    }
   }
   }
 
@@ -1231,6 +1561,11 @@ void server_shared_free(struct server_shared *s)
 void fs_op_free(struct filesys_obj *obj1)
 {
   struct fs_op_object *obj = (void *) obj1;
+  
+  if(obj->shared->log && obj->shared->log_summary) {
+    fprintf(obj->shared->log, "#%i: end\n", obj->id);
+  }
+  
   filesys_obj_free(obj->p.root);
   if(obj->p.cwd) dir_stack_free(obj->p.cwd);
 
@@ -1257,6 +1592,9 @@ void fs_op_call(struct filesys_obj *obj1, region_t r,
     fprintf(obj->shared->log, "\nmessage from process %i\n", obj->id);
     fprint_data(obj->shared->log, flatten_reuse(r, args.data));
   }
+  if(obj->shared->log_summary) {
+    fs_op_log_file_accesses(r, obj, flatten_reuse(r, args.data));
+  }
 
   result->data = seqt_empty;
   result->caps = caps_empty;
@@ -1274,12 +1612,11 @@ void fs_op_call(struct filesys_obj *obj1, region_t r,
     fprint_data(obj->shared->log, flatten(r, result->data));
   }
   if(obj->shared->log && obj->shared->log_summary) {
-    fprintf(obj->shared->log, "#%i: ", obj->id);
-    fprint_d(obj->shared->log, flatten(r, log_msg));
-    fprintf(obj->shared->log, ": ");
-    fprint_d(obj->shared->log, flatten(r, log_reply));
-    fprintf(obj->shared->log, "\n");
+    fprintf(obj->shared->log, "#%i: %s: %s\n", obj->id,
+	    flatten_str(r, log_msg),
+	    flatten_str(r, log_reply));
   }
+  obj->shared->call_count++;
 }
 
 

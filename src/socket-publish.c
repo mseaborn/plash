@@ -40,7 +40,7 @@ int main(int argc, char *argv[])
   struct cap_args result;
 
   if(argc != 3) {
-    printf("Usage: %s socket-pathname object-pathname\n", argv[0]);
+    printf(_("Usage: %s socket-pathname object-pathname\n"), argv[0]);
     return 1;
   }
 
@@ -54,7 +54,7 @@ int main(int argc, char *argv[])
 	   &result);
   filesys_obj_free(fs_server);
   if(expect_cap1(result, &obj) < 0) {
-    fprintf(stderr, "%s: couldn't get object from pathname `%s'\n",
+    fprintf(stderr, _("%s: couldn't get object from pathname `%s'\n"),
 	    argv[0], argv[2]);
     return 1;
   }
@@ -92,7 +92,7 @@ int main(int argc, char *argv[])
     name.sun_path[len] = 0;
     if(bind(sock_fd, &name,
 	    offsetof(struct sockaddr_un, sun_path) + len + 1) < 0) {
-      fprintf(stderr, "%s: can't bind socket at `%s': %s\n",
+      fprintf(stderr, _("%s: can't bind socket at `%s': %s\n"),
 	      argv[0], pathname, strerror(errno));
       return 1;
     }
@@ -100,7 +100,7 @@ int main(int argc, char *argv[])
       perror("listen");
       return 1;
     }
-    printf("listening...\n");
+    printf(_("listening...\n"));
     while(1) {
       int max_fd;
       fd_set read_fds, write_fds, except_fds;
@@ -131,7 +131,7 @@ int main(int argc, char *argv[])
 
       if(FD_ISSET(sock_fd, &read_fds)) {
 	int fd;
-	printf("getting connection... ");
+	printf(_("getting connection... "));
 	fd = accept(sock_fd, NULL /* address */, NULL);
 	if(fd < 0) {
 	  perror("accept");

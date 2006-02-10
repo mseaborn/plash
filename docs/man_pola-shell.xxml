@@ -1,25 +1,25 @@
 
-\refentry id={plash}:
+\refentry id={pola-shell}:
 
 \refmeta~
-\refentrytitle- plash
+\refentrytitle- pola-shell
 \manvolnum- 1
 
 \refnamediv~
-\refname- plash
+\refname- pola-shell
 \refpurpose- Shell for running programs with minimum authority
 
 {\refsynopsisdiv:
 \synopsis:
-plash {\optional:{\option:--rcfile} {\r:file}}
-      {\optional:{\option:-c} {\r:command}}
+pola-shell {\optional:{\option:--rcfile} {\r:file}}
+           {\optional:{\option:-c} {\r:command}}
 }
 
 
 {\refsect1: \title- Description
 \ps:
 
-Plash is the Principle of Least Authority shell.  It lets you run
+pola-shell is the Principle of Least Authority shell.  It lets you run
 Linux programs with access only to the files and directories they need
 to run.  Programs are given access to files which were passed as
 command line arguments.
@@ -97,7 +97,7 @@ command line arguments.
 \dd\para~
     Arguments that were implicit before must now be made explicit.
     With the Bourne shell or Bash you can write `ls' to list the
-    current directory's contents.  With Plash you must add `.' to
+    current directory's contents.  With pola-shell you must add `.' to
     grant access to the current directory.
 
 \dt\userinput- gcc -c foo.c => -o foo.o + .

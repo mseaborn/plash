@@ -72,6 +72,12 @@ static inline struct cap_args cap_args_d(seqt_t data)
 			{ NULL, 0 } /* fds_empty */ };
   return r;
 }
+/* Constructor for args with data portion and caps portion only. */
+static inline struct cap_args cap_args_dc(seqt_t data, cap_seq_t caps)
+{
+  struct cap_args r = { data, caps, { NULL, 0 } /* fds_empty */ };
+  return r;
+}
 
 
 struct filesys_obj {

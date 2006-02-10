@@ -50,19 +50,19 @@ void w_add_process(int pid, void (*f)(void *x, int status), void *x)
 void print_wait_status(FILE *fp, int status)
 {
   if(WIFEXITED(status)) {
-    fprintf(fp, "normal exit: %i", WEXITSTATUS(status));
+    fprintf(fp, _("normal exit: %i"), WEXITSTATUS(status));
   }
   else if(WIFSIGNALED(status)) {
     const char *desc = strsignal(WTERMSIG(status));
-    fprintf(fp, "uncaught signal: %i (%s)", WTERMSIG(status),
-	    desc ? desc : "unknown signal");
+    fprintf(fp, _("uncaught signal: %i (%s)"), WTERMSIG(status),
+	    desc ? desc : _("unknown signal"));
   }
   else if(WIFSTOPPED(status)) {
     const char *desc = strsignal(WSTOPSIG(status));
-    fprintf(fp, "stopped with signal: %i (%s)", WSTOPSIG(status),
-	    desc ? desc : "unknown signal");
+    fprintf(fp, _("stopped with signal: %i (%s)"), WSTOPSIG(status),
+	    desc ? desc : _("unknown signal"));
   }
-  else fprintf(fp, "unknown");
+  else fprintf(fp, _("unknown"));
 }
 
 void w_handle_process_status(int pid, int status)
@@ -83,7 +83,7 @@ void w_handle_process_status(int pid, int status)
     n = n->next;
   }
   
-  fprintf(stderr, "plash: unknown process, pid %i: ", pid);
+  fprintf(stderr, _("plash: unknown process, pid %i: "), pid);
   print_wait_status(stderr, status);
   fprintf(stderr, "\n");
 }

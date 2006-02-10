@@ -1,0 +1,145 @@
+.TH pola\-shell 1   
+.SH NAME
+pola\-shell \- Shell for running programs with minimum authority
+.SH SYNOPSIS
+.nf
+pola\-shell [\fB\-\-rcfile\fR \fIfile\fR]
+           [\fB\-c\fR \fIcommand\fR]
+.fi
+.SH DESCRIPTION
+pola\-shell is the Principle of Least Authority shell. It lets you run
+Linux programs with access only to the files and directories they need
+to run. Programs are given access to files which were passed as
+command line arguments.
+.SH OPTIONS
+.TP 
+\fB\-\-rcfile \fIfile\fB\fR
+Executes the given script on startup. Does not switch off
+interactive mode.
+
+By default, the shell does not read any scripts on startup.
+.TP 
+\fB\-c \fIcommand\fB\fR
+Execute the given command, and then exit. Disables interactive mode.
+.SH "ARGUMENT LISTS"
+.TP 
+\fB\fIarglist1\fB => \fIarglist2\fB\fR
+By default, files and directories are passed as read\-only. The
+"=>" operator lets you pass files and directories with read\-write
+access. Objects to the right of "=>" are passed as read\-write
+slots, so the object doesn't have to exist in advance.
+.TP 
+\fB\fIarglist1\fB + \fIarglist2\fB\fR
+Files and directories that appear to the right of the "+" operator
+are not included in the argument list (the one used in execve()),
+but they are attached into the file namespace of the process.
+.TP 
+\fB\&'\fIstring\fB'\fR
+.TP 
+\fB"\fIstring\fB"\fR
+.TP 
+\fB\-\fIstring\fB\fR
+Arguments that are not filenames should be quoted, unless they
+begin with '\-'.
+.TP 
+\fB\fIpathname\fB=\fIexpr\fB\fR
+You can attach objects to arbitrary points in the file namespace.
+Here, \fIexpr\fR typically evaluates to a file, directory, or
+executable object. This will include \fIpathname\fR in the argument
+list.
+.TP 
+\fB{ \fIarglist\fB }\fR
+You can limit the scope of "+" or "=>" using curly brackets.
+.TP 
+\fB>\fIpathname\fB\fR
+.TP 
+\fB<\fIpathname\fB\fR
+.TP 
+\fB\fIn\fB>\fIpathname\fB\fR
+.TP 
+\fB\fIn\fB<\fIpathname\fB\fR
+.TP 
+\fB\fIn\fB>&\fIn\fB\fR
+.TP 
+\fB\fIn\fB<&\fIn\fB\fR
+IO redirection. You can change the file descriptors that are
+passed to the process.
+.SH "EXAMPLE COMMANDS"
+.TP 
+\fBls .\fR
+Arguments that were implicit before must now be made explicit.
+With the Bourne shell or Bash you can write `ls' to list the
+current directory's contents. With pola\-shell you must add `.' to
+grant access to the current directory.
+.TP 
+\fBgcc \-c foo.c => \-o foo.o + .\fR
+.TP 
+\fBmake + => .\fR
+.TP 
+\fBtar \-cvzf => foo.tar.gz dir1\fR
+.TP 
+\fBgrep 'pattern' file | less\fR
+Pipes work as in conventional shells.
+.TP 
+\fB!!bash\fR
+If you want to execute a command in the conventional way \-\-
+without running the process with a virtualised filesystem, in a
+chroot jail, etc. \-\- you can prefix it with "!!". This can be
+applied to individual command invocations in a pipeline. The
+syntax for command invocations is the same whether "!!" is used or
+not, but when it is used, files listed after the "+" operator are
+ignored.
+.SH COMMANDS
+.TP 
+\fBcd \fIpathname\fB\fR
+Sets the current directory.
+.TP 
+\fBfg \fIjob\-number\fB\fR
+Puts the given job in the foreground. (Job numbers are not prefixed
+with `%', unlike in Bash.)
+.TP 
+\fBbg \fIjob\-number\fB\fR
+Puts the given job in the background.
+.TP 
+\fBdef \fIvar\fB = \fIexpr\fB\fR
+Binds the object reference returned by the expression to a variable.
+.SH EXPRESSIONS
+.TP 
+\fB\fIvar\fB\fR
+Returns the object reference that is bound to the variable.
+.TP 
+\fBF \fIpathname\fB\fR
+Returns the file or directory object at the given path. Will
+follow symbolic links.
+.TP 
+\fBmkfs \fIargs...\fB\fR
+This expression returns a fabricated directory object containing
+the files listed in \fIargs\fR. The object resides in a server
+process started by the shell.
+
+\fIargs\fR is processed in the same way as argument lists to
+commands, so read\-only access will be given for files that are
+listed unless "=>" is used, and objects can be attached at points
+in the directory tree using \fIpath\fR=\fIexpr\fR.
+.TP 
+\fBcapcmd \fIcommand\fB \fIargs...\fB\fR
+This built\-in expression is similar to a normal command
+invocation, except that it expects the resulting process to return
+an object reference as a result. The shell passes the process a
+return continuation argument (return_cont; see the
+\fBPLASH_CAPS\fR environment variable), which the process
+invokes with the result.
+
+This expression doesn't wait for the process to exit: the process
+will typically act as a server and stay running in the background
+to handle invocations of the object that it returned.
+
+If the process drops the return continuation without invoking it
+(which will happen if it exits without passing the reference on),
+the expression results in an error.
+.SH "SEE ALSO"
+exec\-object, plash\-opts, plash\-socket\-publish, plash\-socket\-connect
+.PP
+/usr/share/doc/plash
+.SH AUTHOR
+Mark Seaborn <mseaborn@onetel.com>

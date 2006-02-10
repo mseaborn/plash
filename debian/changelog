@@ -1,3 +1,49 @@
+plash (1.15) unstable; urgency=low
+
+  * Add gtk-powerbox.c:  an LD_PRELOADed patch to Gtk to replace the
+    GtkFileChooserDialog interface so that it calls Plash's powerbox.
+  * Rename "plash" executable to "pola-shell".
+  * fs-operations.c:  Add log method.  Add an "end" log message when
+    the fs_op object is dropped.
+  * gettextization
+  * make.sh:  Add "-Wl,-z,relro" when linking ld.so.  Fixes obscure
+    problem when dlopen()ing libraries that might require an executable
+    stack.
+  * Intercept getsockname() so that it returns the correct pathname for
+    Unix domain sockets.
+    Extended the g_fds array in libc so that it can contain these
+    pathnames.  It is now an array of "struct libc_fd"s, rather than
+    an array of "cap_t"s.
+    libc-fds.h:  New file.
+    libc-misc.c:  Introduced fds_resize(), fds_slot_clear().
+    Changed open(), close(), dup2(), etc.
+    libc-connect.c:  Add getsockname() and change connect() and bind().
+     * Reason:  I discovered that gconfd2 (or possibly Orbit) was
+       relying on getsockname() returning the pathname that it earlier
+       passed to bind().  This meant that Gnumeric was unable to
+       spawn a gconf process itself, and it produced loads of errors.
+  * fs-operations.c, libc-misc.c:  Fixed fstat() to return the correct
+    information on directory FDs.  Added the fsop_dir_fstat method to
+    implement this.
+  * build-fs-dynamic.c:  Implement link() and rename() methods.  This
+    is needed for when GNOME and KDE apps hard link files inside $HOME.
+  * filesysobj-real.c:  Changes to allow rename and hard link calls of
+    the form rename("dir/foo1", "dir/foo2") to work.
+     * The problem: The real_dir_rename and real_dir_link methods only
+       work in the same-directory case; their test was a pointer
+       comparison on real_dir objects.  However, resolving a directory
+       pathname like "dir" always returns a new real_dir object.  This
+       meant that the rename() call wouldn't work when you use full
+       pathnames.
+     * This was causing some failures.  eg. Konqueror wouldn't start:
+       some code relied on creating "$HOME/.ICEauthority-l" as a hard
+       link to "$HOME/.ICEauthority-c".
+     * The partial solution: Change the same-directory check to
+       compare inode and device number of directory, after trying a
+       pointer comparison.
+
+ -- Mark Seaborn <mseaborn@onetel.com>  Tue,  6 Dec 2005 21:21:55 +0000
+
 plash (1.14) unstable; urgency=low
 
   * Add powerbox:  powerbox.[ch], powerbox-req.c, powerbox.el.
@@ -54,6 +100,7 @@ plash (1.13) unstable; urgency=low
 
 plash (1.12) unstable; urgency=low
 
+  * Added pola-run.c.
   * libc.map, libc-fork-exec.c:  Add plash_libc_kernel_execve.
     Remove the version PLASH_GLIBC:  this causes problems now that I want
     to have weak links to plash_libc_* symbols.  In this case, the linker

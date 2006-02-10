@@ -1813,12 +1813,12 @@ int command_invocation_nosec
       proc->cwd_fd = dir->fd->fd;
     }
     else {
-      printf("plash: current directory does not have valid file descriptor\n");
+      printf(_("plash: current directory does not have valid file descriptor\n"));
       return -1;
     }
   }
   else {
-    printf("plash: current directory is not real\n");
+    printf(_("plash: current directory is not real\n"));
     return -1;
   }
   proc->d.cmd = cmd_filename.data;
@@ -1852,7 +1852,7 @@ int command_invocation
     exec_obj = env_lookup(state->env, cmd_filename2.data);
     if(exec_obj) {
       if(no_sec) {
-	printf("plash: error: can't invoke a variable using `!!'\n");
+	printf(_("plash: error: can't invoke a variable using `!!'\n"));
 	return -1;
       }
       else {
@@ -1863,7 +1863,7 @@ int command_invocation
 
     cmd_filename3 = tilde_expansion(r, cmd_filename2);
     if(resolve_executable(r, cmd_filename3, &cmd_filename) < 0) {
-      printf("plash: not found: %s\n", cmd_filename3.data);
+      printf(_("plash: not found: %s\n"), cmd_filename3.data);
       return -1;
     }
 
@@ -1922,6 +1922,7 @@ struct server_shared *make_server_shared(struct shell_state *state)
   shared->log = 0;
   shared->log_summary = state->log_summary;
   shared->log_messages = state->log_messages;
+  shared->call_count = 0;
 
   if(state->log_messages || state->log_summary) {
     if(state->log_into_xterm) {
@@ -1969,7 +1970,7 @@ cap_t eval_expr(struct shell_state *state, struct shell_expr *expr)
     seqf_t var2 = flatten_charlist(r, var);
     cap_t x = env_lookup(state->env, var2.data);
     if(x) inc_ref(x);
-    else printf("plash: error: unbound variable, `%s'\n", var2.data);
+    else printf(_("plash: error: unbound variable, `%s'\n"), var2.data);
     region_free(r);
     return x;
   }
@@ -1981,9 +1982,9 @@ cap_t eval_expr(struct shell_state *state, struct shell_expr *expr)
       resolve_obj_simple(state->root, state->cwd, pathname, SYMLINK_LIMIT,
 			 0 /* nofollow */, &err);
     if(!x) {
-      printf("plash: `");
-      fprint_d(stdout, pathname);
-      printf("': %s\n", strerror(err));
+      printf("plash: `%s': %s\n",
+	     region_strdup_seqf(r, pathname),
+	     strerror(err));
       region_free(r);
       return 0;
     }
@@ -2012,7 +2013,7 @@ cap_t eval_expr(struct shell_state *state, struct shell_expr *expr)
     
     root = fs_make_root(p.tree);
     free_node(p.tree);
-    if(!root) printf("plash: error constructing directory\n");
+    if(!root) printf(_("plash: error constructing directory\n"));
 
     region_free(r);
     return root;
@@ -2032,7 +2033,7 @@ cap_t eval_expr(struct shell_state *state, struct shell_expr *expr)
 
     cmd_filename2 = tilde_expansion(r, flatten_charlist(r, cmd_filename1));
     if(resolve_executable(r, cmd_filename2, &cmd_filename) < 0) {
-      printf("plash: not found: %s\n", cmd_filename2.data);
+      printf(_("plash: not found: %s\n"), cmd_filename2.data);
       return 0;
     }
 
@@ -2164,7 +2165,7 @@ void shell_command(region_t r, struct shell_state *state, struct command *comman
 	  
 	if(bg_flag) {
 	  if(state->interactive) {
-	    printf("plash: job %i started\n", job->id);
+	    printf(_("plash: job %i started\n"), job->id);
 	  }
 	  /* Used to do remove_job(job) in non-interactive mode, but
 	     that is no longer safe now that the wait handler has
@@ -2190,10 +2191,10 @@ void shell_command(region_t r, struct shell_state *state, struct command *comman
       for(job = state->jobs.next; job->id; job = job->next) {
 	if(job->id == job_id) {
 	  if(job->last_state == ST_STOPPED) {
-	    printf("plash: resuming job %i in foreground\n", job->id);
+	    printf(_("plash: resuming job %i in foreground\n"), job->id);
 	  }
 	  else {
-	    printf("plash: putting job %i in foreground\n", job->id);
+	    printf(_("plash: putting job %i in foreground\n"), job->id);
 	  }
 
 	  /* Restore the job's terminal state. */
@@ -2214,7 +2215,7 @@ void shell_command(region_t r, struct shell_state *state, struct command *comman
 	  return;
 	}
       }
-      printf("plash: Unknown job ID: %i\n", job_id);
+      printf(_("plash: Unknown job ID: %i\n"), job_id);
       return;
     }
   }
@@ -2228,10 +2229,10 @@ void shell_command(region_t r, struct shell_state *state, struct command *comman
       for(job = state->jobs.next; job->id; job = job->next) {
 	if(job->id == job_id) {
 	  if(job->last_state == ST_RUNNING) {
-	    printf("plash: job %i already in background\n", job->id);
+	    printf(_("plash: job %i already in background\n"), job->id);
 	  }
 	  if(job->last_state == ST_STOPPED) {
-	    printf("plash: resuming job %i in background\n", job->id);
+	    printf(_("plash: resuming job %i in background\n"), job->id);
 	    if(kill(-job->pgid, SIGCONT) < 0) {
 	      perror("kill(SIGCONT)");
 	    }
@@ -2240,7 +2241,7 @@ void shell_command(region_t r, struct shell_state *state, struct command *comman
 	  return;
 	}
       }
-      printf("plash: Unknown job ID: %i\n", job_id);
+      printf(_("plash: Unknown job ID: %i\n"), job_id);
       return;
     }
   }
@@ -2252,10 +2253,10 @@ void shell_command(region_t r, struct shell_state *state, struct command *comman
       cap_t c = eval_expr(state, expr);
       if(c) {
 	env_bind(&state->env, var2.data, c);
-	printf("plash: variable `%s' has been bound\n", var2.data);
+	printf(_("plash: variable `%s' has been bound\n"), var2.data);
       }
       else {
-	printf("plash: did not bind variable `%s'\n", var2.data);
+	printf(_("plash: did not bind variable `%s'\n"), var2.data);
       }
       return;
     }
@@ -2269,7 +2270,7 @@ void shell_command(region_t r, struct shell_state *state, struct command *comman
       cap_t obj = resolve_file(r, state->root, state->cwd, filename2,
 			       SYMLINK_LIMIT, 0 /* nofollow */, &err);
       if(!obj) {
-	printf("plash: error: can't resolve `%s': %s\n",
+	printf(_("plash: error: can't resolve `%s': %s\n"),
 	       filename2.data, strerror(err));
       }
       else {
@@ -2295,7 +2296,7 @@ void source_command(region_t r, struct shell_state *state,
   fd = obj->vtable->open(obj, O_RDONLY, &err);
   filesys_obj_free(obj);
   if(fd < 0) {
-    printf("plash: error: can't open `%s': %s\n", filename, strerror(err));
+    printf(_("plash: error: can't open `%s': %s\n"), filename, strerror(err));
     return;
   }
   if(fstat(fd, &st) < 0) { err = errno; goto source_error; }
@@ -2325,18 +2326,18 @@ void source_command(region_t r, struct shell_state *state,
 	}
       }
       else {
-	printf("plash: file parse failed (reached index %i, consumed only %i chars)\n",
+	printf(_("plash: file parse failed (reached index %i, consumed only %i chars)\n"),
 	       err_pos - data, pos_out - data);
       }
     }
     else {
-      printf("plash: file parse failed (reached index %i)\n",
+      printf(_("plash: file parse failed (reached index %i)\n"),
 	     err_pos - data);
     }
   }
   return;
  source_error:
-  printf("plash: error reading `%s': %s\n", filename, strerror(err));
+  printf(_("plash: error reading `%s': %s\n"), filename, strerror(err));
   close(fd);
 }
 
@@ -2353,12 +2354,12 @@ void parse_and_run_shell_command(struct shell_state *state, seqf_t line)
       shell_command(r, state, val_out);
     }
     else {
-      printf("plash: parse failed (consumed only %i chars)\n",
+      printf(_("plash: parse failed (consumed only %i chars)\n"),
 	     pos_out - line.data);
     }
   }
   else {
-    printf("plash: parse failed (reached index %i)\n",
+    printf(_("plash: parse failed (reached index %i)\n"),
 	   err_pos - line.data);
   }
   if(MOD_DEBUG) printf("allocated %i bytes\n", region_allocated(r));
@@ -2383,7 +2384,7 @@ void set_window_title(struct shell_state *state, seqf_t fmt)
 	  region_free(r);
 	}
 	else {
-	  fprintf(stdout, "undefined-cwd");
+	  fprintf(stdout, _("undefined-cwd"));
 	}
 	i += 2;
       }
@@ -2419,7 +2420,7 @@ void interactive_setup(struct shell_state *state)
     if(setpgid(shell_pgid, shell_pgid) < 0) {
       /* This gives an error when the program is started in its own
 	 terminal window.  Don't know why. */
-      /* perror("plash: couldn't put the shell in its own process group"); */
+      /* perror(_("plash: couldn't put the shell in its own process group")); */
     }
       
     /* Grab control of the terminal. */
@@ -2536,7 +2537,7 @@ void handle_gc_uid_locks_exit(void *x, int status)
 
 void handle_server_exit(void *x, int status)
 {
-  printf("plash: server process: ");
+  printf(_("plash: server process: "));
   print_wait_status(stdout, status);
   printf("\n");
 }
@@ -2596,7 +2597,7 @@ int main(int argc, char *argv[])
       caps = region_alloc(r, export_count * sizeof(cap_t));
       caps[0] = initial_dir("/", &err);
       if(!caps[0]) {
-	fprintf(stderr, "plash: can't open root directory: %s\n",
+	fprintf(stderr, _("plash: can't open root directory: %s\n"),
 		strerror(err));
 	exit(1);
       }
@@ -2635,7 +2636,7 @@ int main(int argc, char *argv[])
     int err;
     state.root = initial_dir("/", &err);
     if(!state.root) {
-      fprintf(stderr, "plash: can't open root directory: %s\n", strerror(err));
+      fprintf(stderr, _("plash: can't open root directory: %s\n"), strerror(err));
       return 1;
     }
     state.conn_maker = inc_ref(state.conn_maker_local);
@@ -2726,7 +2727,7 @@ int main(int argc, char *argv[])
   {
     char *cwd_name = getcwd(0, 0);
     if(!cwd_name) {
-      perror("can't get current working directory");
+      perror(_("can't get current working directory"));
     }
     else {
       region_t r = region_make();
@@ -2738,7 +2739,7 @@ int main(int argc, char *argv[])
 	state.cwd = new_cwd;
       }
       else {
-	fprintf(stderr, "plash: can't set current working directory: %s\n",
+	fprintf(stderr, _("plash: can't set current working directory: %s\n"),
 		strerror(err));
       }
       region_free(r);
@@ -2801,11 +2802,11 @@ int main(int argc, char *argv[])
 				 seqf_string(filename),
 				 SYMLINK_LIMIT, 0 /* nofollow */, &err);
 	if(!obj) {
-	  printf("plash: trying config file `%s': %s\n",
+	  printf(_("plash: trying config file `%s': %s\n"),
 		 filename, strerror(err));
 	}
 	else {
-	  printf("plash: running config file `%s'\n", filename);
+	  printf(_("plash: running config file `%s'\n"), filename);
 	  source_command(r, &state, filename, obj);
 	}
 	region_free(r);
@@ -2817,7 +2818,7 @@ int main(int argc, char *argv[])
 	i += 2;
       }
       else {
-	fprintf(stderr, "plash: unknown argument\n");
+	fprintf(stderr, _("plash: unknown argument\n"));
 	return 0;
       }
     }
@@ -2850,7 +2851,7 @@ int main(int argc, char *argv[])
 	report_jobs(&state);
       
 	if(!line1) {
-	  fprintf(stderr, "plash: end of user input\n");
+	  fprintf(stderr, _("plash: end of user input\n"));
 	  break;
 	}
 	if(*line1) {

@@ -6,11 +6,12 @@
 set -e
 
 OUT=shobj
-PKG=glibc-i386-objs-2.3.5_1
+DEST=out-release
+PKG=glibc-i386-objs-2.3.5_2
 
 . ./src/config.sh
 
-mkdir -p $OUT/$PKG
+mkdir -p $DEST/$PKG
 
 LIBS="
   math/libm.so
@@ -38,15 +39,17 @@ for F in \
   libc_pic.a \
   libc_nonshared.a; \
 do
-  mkdir -p `dirname $OUT/$PKG/$F`
+  mkdir -p `dirname $DEST/$PKG/$F`
   echo strip $F
-  strip --strip-debug $GLIBC/$F -o $OUT/$PKG/$F
+  strip --strip-debug $GLIBC/$F -o $DEST/$PKG/$F
 done
 
 for F in `cat $OUT/debian/plash-export-list-nonobj`; do
-  mkdir -p `dirname $OUT/$PKG/$F`
+  mkdir -p `dirname $DEST/$PKG/$F`
   echo copy $F
-  cp -p $GLIBC/$F $OUT/$PKG/$F
+  cp -p $GLIBC/$F $DEST/$PKG/$F
 done
 
-(cd $OUT && tar -cvzf $PKG.tar.gz $PKG)
+cp -pv copyright-for-glibc-objs $DEST/$PKG/COPYRIGHT
+
+(cd $DEST && tar -cvzf $PKG.tar.gz $PKG)

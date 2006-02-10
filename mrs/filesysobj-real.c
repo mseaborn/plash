@@ -612,11 +612,11 @@ int real_symlink_readlink(struct filesys_obj *obj, region_t r, seqf_t *result, i
 
 
 struct filesys_obj_vtable real_dir_vtable = {
-  /* .type = */ OBJT_DIR,
   /* .free = */ real_dir_free,
   /* .cap_invoke = */ 0,
   /* .cap_call = */ 0,
   /* .single_use = */ 0,
+  /* .type = */ objt_dir,
   /* .stat = */ real_dir_stat,
   /* .utimes = */ real_dir_utimes,
   /* .chmod = */ real_dir_chmod,
@@ -637,11 +637,11 @@ struct filesys_obj_vtable real_dir_vtable = {
 };
 
 struct filesys_obj_vtable real_file_vtable = {
-  /* .type = */ OBJT_FILE,
   /* .free = */ real_file_free,
   /* .cap_invoke = */ 0,
   /* .cap_call = */ 0,
   /* .single_use = */ 0,
+  /* .type = */ objt_file,
   /* .stat = */ real_file_stat,
   /* .utimes = */ real_file_utimes,
   /* .chmod = */ real_file_chmod,
@@ -662,11 +662,11 @@ struct filesys_obj_vtable real_file_vtable = {
 };
 
 struct filesys_obj_vtable real_symlink_vtable = {
-  /* .type = */ OBJT_SYMLINK,
   /* .free = */ real_symlink_free,
   /* .cap_invoke = */ 0,
   /* .cap_call = */ 0,
   /* .single_use = */ 0,
+  /* .type = */ objt_symlink,
   /* .stat = */ real_symlink_stat,
   /* .utimes = */ real_symlink_utimes,
   /* .chmod = */ dummy_chmod,

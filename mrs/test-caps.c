@@ -44,13 +44,13 @@ void hellow_obj_free(struct filesys_obj *obj)
 }
 
 struct filesys_obj_vtable hellow_obj_vtable = {
-  /* .type = */ 0,
   /* .free = */ hellow_obj_free,
 
   /* .cap_invoke = */ local_obj_invoke,
   /* .cap_call = */ hellow_obj_call,
   /* .single_use = */ 0,
   
+  /* .type = */ objt_unknown,
   /* .stat = */ dummy_stat,
   /* .utimes = */ dummy_utimes,
   /* .chmod = */ dummy_chmod,

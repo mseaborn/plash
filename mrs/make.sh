@@ -58,6 +58,7 @@ if [ $BUILD_SERVER = yes ]; then
   $CC $OPTS_S -c mrs/filesysobj.c -o mrs/filesysobj.o
   $CC $OPTS_S -c mrs/filesysobj-real.c -o mrs/filesysobj-real.o
   $CC $OPTS_S -c mrs/filesysobj-fab.c -o mrs/filesysobj-fab.o
+  $CC $OPTS_S -c mrs/filesysobj-readonly.c -o mrs/filesysobj-readonly.o
   $CC $OPTS_S -c mrs/filesysslot.c -o mrs/filesysslot.o
   $CC $OPTS_S -c mrs/build-fs.c -o mrs/build-fs.o
   $CC $OPTS_S -DUSE_GTK -c mrs/shell.c -o mrs/shell.o
@@ -73,7 +74,8 @@ if [ $BUILD_SERVER = yes ]; then
   #     $DIET/bin-i386/dietlibc.a -lgcc -o mrs/driver
   SHELL_OBJS="mrs/server.o mrs/fs-operations.o mrs/resolve-filename.o
 	mrs/cap-call-return.o mrs/cap-protocol.o
-	mrs/filesysslot.o mrs/filesysobj-fab.o mrs/filesysobj-real.o
+	mrs/filesysslot.o mrs/filesysobj-fab.o mrs/filesysobj-readonly.o
+	mrs/filesysobj-real.o
 	mrs/filesysobj.o
 	mrs/parse-filename.o mrs/comms.o mrs/region.o mrs/utils.o"
   $CC $OPTS_S  \
@@ -87,6 +89,13 @@ if [ $BUILD_SERVER = yes ]; then
 
   $CC $OPTS_S	\
 	mrs/test-caps.c mrs/filesysobj.o mrs/cap-call-return.o mrs/cap-protocol.o mrs/comms.o mrs/region.o mrs/utils.o -o mrs/test-caps
+
+  # libc.so contains a reference to __libc_stack_end, which ld.so defines.
+  # With a newer `ld', I have to link ld.so here too.  With an older one,
+  # I could leave ld.so out.
+  $CC $OPTS_S	\
+	mrs/chroot.c mrs/libc.so mrs/ld.so \
+	mrs/filesysobj.o mrs/cap-call-return.o mrs/cap-protocol.o mrs/comms.o mrs/region.o mrs/utils.o -o mrs/chroot
 fi
 
 
@@ -337,7 +346,7 @@ case $GLIBC_VERSION in
     $CC -Wl,--stats,--no-keep-memory \
 	-shared -static-libgcc -Wl,-z,defs \
 	-Wl,-dynamic-linker=/usr/local/lib/ld-linux.so.2 \
-	-Wl,--version-script=libc.map \
+	-Wl,--version-script=mrs/libc.map \
 	-Wl,-soname=libc.so.6 \
 	-Wl,-z,combreloc \
 	-nostdlib -nostartfiles -e __libc_main -u __register_frame -L. \

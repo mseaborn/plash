@@ -38,6 +38,38 @@
 #include "fs-operations.h"
 
 
+#define DECLARE_VTABLE(name) \
+extern struct filesys_obj_vtable name
+
+#define OBJECT_VTABLE(name, obj_free, obj_call) \
+struct filesys_obj_vtable name = { \
+  /* .free = */ obj_free, \
+ \
+  /* .cap_invoke = */ local_obj_invoke, \
+  /* .cap_call = */ obj_call, \
+  /* .single_use = */ 0, \
+ \
+  /* .type = */ objt_unknown, \
+  /* .stat = */ dummy_stat, \
+  /* .utimes = */ dummy_utimes, \
+  /* .chmod = */ dummy_chmod, \
+  /* .open = */ dummy_open, \
+  /* .connect = */ dummy_socket_connect, \
+  /* .traverse = */ dummy_traverse, \
+  /* .list = */ dummy_list, \
+  /* .create_file = */ dummy_create_file, \
+  /* .mkdir = */ dummy_mkdir, \
+  /* .symlink = */ dummy_symlink, \
+  /* .rename = */ dummy_rename_or_link, \
+  /* .link = */ dummy_rename_or_link, \
+  /* .unlink = */ dummy_unlink, \
+  /* .rmdir = */ dummy_rmdir, \
+  /* .socket_bind = */ dummy_socket_bind, \
+  /* .readlink = */ dummy_readlink, \
+  1 \
+}
+
+
 int process_chdir(struct process *p, seqf_t pathname, int *err)
 {
   region_t r = region_make();
@@ -86,15 +118,21 @@ int process_open(struct filesys_obj *root, struct dir_stack *cwd,
       return -1;
     }
     else {
-      if(obj->vtable->type == OBJT_FILE) {
-	int fd = obj->vtable->open(obj, flags, err);
-	filesys_obj_free(obj);
-	return fd;
-      }
-      else if(obj->vtable->type == OBJT_SYMLINK) {
-	filesys_obj_free(obj);
-	*err = ELOOP;
-	return -1;
+      switch(obj->vtable->type(obj)) {
+        case OBJT_FILE:
+	  {
+	    int fd = obj->vtable->open(obj, flags, err);
+	    filesys_obj_free(obj);
+	    return fd;
+	  }
+        case OBJT_SYMLINK:
+	  filesys_obj_free(obj);
+	  *err = ELOOP; /* Symlink found when O_NOFOLLOW used */
+	  return -1;
+        default:
+	  filesys_obj_free(obj);
+	  *err = ENOTDIR; /* is there a more appropriate errno? */
+	  return -1;
       }
     }
   }
@@ -231,6 +269,36 @@ int process_utimes(struct process *p, seqf_t pathname, int nofollow,
   return rc;
 }
 
+int process_readlink(region_t r,
+		     struct filesys_obj *root, struct dir_stack *cwd,
+		     seqf_t pathname, seqf_t *result_dest, int *err)
+{
+  void *result;
+  region_t r2 = region_make();
+  int rc = resolve_obj(r2, root, cwd, pathname, SYMLINK_LIMIT,
+		       1 /* nofollow */, 0 /* create */, &result, err);
+  region_free(r2);
+  if(rc == RESOLVED_FILE_OR_SYMLINK) {
+    struct filesys_obj *obj = result;
+    if(obj->vtable->type(obj) == OBJT_SYMLINK) {
+      int x = obj->vtable->readlink(obj, r, result_dest, err);
+      filesys_obj_free(obj);
+      return x;
+    }
+    else {
+      filesys_obj_free(obj);
+      *err = EINVAL; /* not a symlink */
+      return -1;
+    }
+  }
+  else if(rc == RESOLVED_DIR) {
+    dir_stack_free(result);
+    *err = EINVAL; /* not a symlink */
+    return -1;
+  }
+  else return -1; /* `err' already filled out */
+}
+
 
 /* Checks for executables that are scripts using the `#!' syntax. */
 /* This is not done recursively.  If there's a script that says it should
@@ -333,6 +401,7 @@ void handle_fs_op_message1(region_t r, struct process *proc,
 			   struct fs_op_object *obj,
 			   seqf_t msg_orig, fds_t fds_orig,
 			   seqt_t *reply, fds_t *reply_fds,
+			   cap_seq_t *r_caps,
 			   seqt_t *log_msg, seqt_t *log_reply)
 {
   {
@@ -364,6 +433,67 @@ void handle_fs_op_message1(region_t r, struct process *proc,
       *reply_fds = mk_fds1(r, socks[0]);
       *log_reply = mk_printf(r, "ok, created #%i",
 			     ((struct fs_op_object *) new_server)->id);
+      return;
+    }
+  }
+  {
+    seqf_t msg = msg_orig;
+    int ok = 1;
+    m_str(&ok, &msg, "Copy");
+    m_end(&ok, &msg);
+    if(ok) {
+      cap_t new_server;
+      *log_msg = mk_string(r, "copy fs ops object");
+      obj->shared->refcount++;
+      proc->root->refcount++;
+      if(proc->cwd) proc->cwd->refcount++;
+      new_server = make_fs_op_server(obj->shared, proc->root, proc->cwd);
+      *r_caps = mk_caps1(r, new_server);
+      *reply = mk_string(r, "Okay");
+      *log_reply = mk_printf(r, "ok, created #%i",
+			     ((struct fs_op_object *) new_server)->id);
+      return;
+    }
+  }
+  {
+    /* Return a reference to the root directory */
+    seqf_t msg = msg_orig;
+    int ok = 1;
+    m_str(&ok, &msg, "Grtd");
+    m_end(&ok, &msg);
+    if(ok) {
+      *log_msg = mk_string(r, "get root dir");
+      proc->root->refcount++;
+      *r_caps = mk_caps1(r, proc->root);
+      *reply = mk_string(r, "Okay");
+      *log_reply = mk_printf(r, "ok");
+      return;
+    }
+  }
+  {
+    /* Look up a pathname to a directory and return a reference to it */
+    seqf_t msg = msg_orig;
+    int ok = 1;
+    m_str(&ok, &msg, "Gdir");
+    if(ok) {
+      seqf_t pathname = msg;
+      struct dir_stack *ds;
+      int err;
+      
+      *log_msg = cat2(r, mk_string(r, "get dir: "), mk_leaf(r, pathname));
+      ds = resolve_dir(r, proc->root, proc->cwd, pathname, SYMLINK_LIMIT, &err);
+      if(ds) {
+	ds->dir->refcount++;
+	*r_caps = mk_caps1(r, ds->dir);
+	dir_stack_free(ds);
+	*reply = mk_string(r, "Okay");
+	*log_reply = mk_printf(r, "ok");
+      }
+      else {
+	*r_caps = caps_empty;
+	*reply = cat2(r, mk_string(r, "Fail"), mk_int(r, err));
+	*log_reply = mk_printf(r, "fail");
+      }
       return;
     }
   }
@@ -538,42 +668,19 @@ void handle_fs_op_message(region_t r, struct process *proc,
     m_str(&ok, &msg, "Rdlk");
     if(ok) {
       seqf_t pathname = msg;
-      void *result;
-      int rc, err = 0;
-      
-      region_t r2 = region_make();
+      seqf_t link_dest;
+      int err;
       *log_msg = cat2(r, mk_string(r, "readlink: "), mk_leaf(r, pathname));
-      rc = resolve_obj(r2, proc->root, proc->cwd, pathname, SYMLINK_LIMIT,
-		       1 /*nofollow*/, 0 /* create */, &result, &err);
-      region_free(r2);
-      if(rc == RESOLVED_FILE_OR_SYMLINK) {
-	struct filesys_obj *obj = result;
-	if(obj->vtable->type == OBJT_SYMLINK) {
-	  seqf_t link_dest;
-	  if(obj->vtable->readlink(obj, r, &link_dest, &err) >= 0) {
-	    *log_reply = mk_string(r, "ok");
-	    *reply = cat2(r, mk_string(r, "RRdl"),
-			  mk_leaf(r, link_dest));
-	  }
-	  else {
-	    *reply = cat2(r, mk_string(r, "Fail"),
-			  mk_int(r, err));
-	  }
-	}
-	else {
-	  *reply = cat2(r, mk_string(r, "Fail"),
-			mk_int(r, EINVAL)); /* not a symlink */
-	}
-	filesys_obj_free(obj);
-      }
-      else if(rc == RESOLVED_DIR) {
-	dir_stack_free(result);
-	*reply = cat2(r, mk_string(r, "Fail"),
-		      mk_int(r, EINVAL)); /* not a symlink */
-      }
-      else {
+      if(process_readlink(r, proc->root, proc->cwd, pathname,
+			  &link_dest, &err) < 0) {
+	*log_reply = mk_string(r, "fail");
 	*reply = cat2(r, mk_string(r, "Fail"),
 		      mk_int(r, err));
+      }
+      else {
+	*log_reply = mk_string(r, "ok");
+	*reply = cat2(r, mk_string(r, "RRdl"),
+		      mk_leaf(r, link_dest));
       }
       return;
     }
@@ -952,7 +1059,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
 }
 
 
-extern struct filesys_obj_vtable fs_op_vtable;
+DECLARE_VTABLE(fs_op_vtable);
 
 /* Takes owning references. */
 cap_t make_fs_op_server(struct server_shared *shared,
@@ -1001,11 +1108,11 @@ void fs_op_call(struct filesys_obj *obj1, region_t r,
   }
   *r_data = seqt_empty;
   *r_fds = fds_empty;
+  *r_caps = caps_empty;
   caps_free(caps);
   handle_fs_op_message1(r, &obj->p, obj, flatten_reuse(r, data), fds,
-			r_data, r_fds, &log_msg, &log_reply);
+			r_data, r_fds, r_caps, &log_msg, &log_reply);
   close_fds(fds);
-  *r_caps = caps_empty;
   
   if(obj->shared->log && obj->shared->log_messages) {
     fprintf(obj->shared->log, "reply with %i FDs and this data:\n", r_fds->count);
@@ -1020,29 +1127,110 @@ void fs_op_call(struct filesys_obj *obj1, region_t r,
   }
 }
 
-struct filesys_obj_vtable fs_op_vtable = {
-  /* .type = */ 0,
-  /* .free = */ fs_op_free,
+OBJECT_VTABLE(fs_op_vtable, fs_op_free, fs_op_call);
 
-  /* .cap_invoke = */ local_obj_invoke,
-  /* .cap_call = */ fs_op_call,
-  /* .single_use = */ 0,
-  
-  /* .stat = */ dummy_stat,
-  /* .utimes = */ dummy_utimes,
-  /* .chmod = */ dummy_chmod,
-  /* .open = */ dummy_open,
-  /* .connect = */ dummy_socket_connect,
-  /* .traverse = */ dummy_traverse,
-  /* .list = */ dummy_list,
-  /* .create_file = */ dummy_create_file,
-  /* .mkdir = */ dummy_mkdir,
-  /* .symlink = */ dummy_symlink,
-  /* .rename = */ dummy_rename_or_link,
-  /* .link = */ dummy_rename_or_link,
-  /* .unlink = */ dummy_unlink,
-  /* .rmdir = */ dummy_rmdir,
-  /* .socket_bind = */ dummy_socket_bind,
-  /* .readlink = */ dummy_readlink,
-  1
+
+DECLARE_VTABLE(fs_op_maker_vtable);
+struct fs_op_maker {
+  struct filesys_obj hdr;
+  struct server_shared *shared;
 };
+
+cap_t fs_op_maker_make(struct server_shared *shared)
+{
+  struct fs_op_maker *obj = amalloc(sizeof(struct fs_op_maker));
+  obj->hdr.refcount = 1;
+  obj->hdr.vtable = &fs_op_maker_vtable;
+  obj->shared = shared;
+  return (struct filesys_obj *) obj;
+}
+
+void fs_op_maker_free(struct filesys_obj *obj1)
+{
+  struct fs_op_maker *obj = (void *) obj1;
+  server_shared_free(obj->shared);
+}
+
+void fs_op_maker_call(struct filesys_obj *obj1, region_t r,
+		      seqt_t data1, cap_seq_t caps, fds_t fds,
+		      seqt_t *r_data, cap_seq_t *r_caps, fds_t *r_fds)
+{
+  struct fs_op_maker *obj = (void *) obj1;
+  seqf_t data = flatten_reuse(r, data1);
+  int ok = 1;
+  m_str(&ok, &data, "Mkfs");
+  m_end(&ok, &data);
+  if(ok && caps.size == 1 && fds.count == 0) {
+    *r_data = mk_string(r, "Okay");
+    obj->shared->refcount++;
+    *r_caps = mk_caps1(r, make_fs_op_server(obj->shared, caps.caps[0], 0 /* cwd */));
+    *r_fds = fds_empty;
+  }
+  else {
+    caps_free(caps);
+    close_fds(fds);
+    *r_data = mk_string(r, "RMsg");
+    *r_caps = caps_empty;
+    *r_fds = fds_empty;
+  }
+}
+
+OBJECT_VTABLE(fs_op_maker_vtable, fs_op_maker_free, fs_op_maker_call);
+
+
+DECLARE_VTABLE(conn_maker_vtable);
+struct conn_maker {
+  struct filesys_obj hdr;
+};
+
+cap_t conn_maker_make()
+{
+  struct conn_maker *obj = amalloc(sizeof(struct conn_maker));
+  obj->hdr.refcount = 1;
+  obj->hdr.vtable = &conn_maker_vtable;
+  return (struct filesys_obj *) obj;
+}
+
+void conn_maker_free(struct filesys_obj *obj)
+{
+}
+
+void conn_maker_call(struct filesys_obj *obj1, region_t r,
+		     seqt_t data1, cap_seq_t caps, fds_t fds,
+		     seqt_t *r_data, cap_seq_t *r_caps, fds_t *r_fds)
+{
+  seqf_t data = flatten_reuse(r, data1);
+  int ok = 1;
+  int import_count;
+  m_str(&ok, &data, "Mkco");
+  m_int(&ok, &data, &import_count);
+  m_end(&ok, &data);
+  if(ok) {
+    cap_t *import;
+    int socks[2];
+    if(socketpair(AF_LOCAL, SOCK_STREAM, 0, socks) < 0) {
+      caps_free(caps);
+      close_fds(fds);
+      *r_data = cat2(r, mk_string(r, "Fail"), mk_int(r, errno));
+      *r_caps = caps_empty;
+      *r_fds = fds_empty;
+    }
+    set_close_on_exec_flag(socks[0], 1);
+    set_close_on_exec_flag(socks[1], 1);
+    *r_data = mk_string(r, "Okay");
+    import = cap_make_connection(r, socks[1], caps, import_count, "to-client");
+    r_caps->caps = import;
+    r_caps->size = import_count;
+    *r_fds = mk_fds1(r, socks[0]);
+    close_fds(fds);
+  }
+  else {
+    caps_free(caps);
+    close_fds(fds);
+    *r_data = mk_string(r, "RMsg");
+    *r_caps = caps_empty;
+    *r_fds = fds_empty;
+  }
+}
+
+OBJECT_VTABLE(conn_maker_vtable, conn_maker_free, conn_maker_call);

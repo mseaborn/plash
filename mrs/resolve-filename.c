@@ -124,13 +124,16 @@ struct dir_stack *resolve_dir
     else {
       char *name1 = strdup_seqf(name);
       struct filesys_obj *obj = dirstack->dir->vtable->traverse(dirstack->dir, name1);
+      int obj_type;
+
       if(!obj) {
 	free(name1);
 	dir_stack_free(dirstack);
 	*err = ENOENT;
 	return 0; /* Error */
       }
-      else if(obj->vtable->type == OBJT_DIR) {
+      obj_type = obj->vtable->type(obj);
+      if(obj_type == OBJT_DIR) {
 	struct dir_stack *new_d = amalloc(sizeof(struct dir_stack));
 	new_d->refcount = 1;
 	new_d->dir = obj;
@@ -138,7 +141,7 @@ struct dir_stack *resolve_dir
 	new_d->name = name1;
 	dirstack = new_d;
       }
-      else if(obj->vtable->type == OBJT_SYMLINK) {
+      else if(obj_type == OBJT_SYMLINK) {
 	struct dir_stack *new_stack;
 	seqf_t link_dest;
 	free(name1);
@@ -223,7 +226,9 @@ struct filesys_obj *resolve_file
     else {
       char *name1 = strdup_seqf(name);
       struct filesys_obj *obj = dirstack->dir->vtable->traverse(dirstack->dir, name1);
+      int obj_type;
       if(MOD_DEBUG) fprintf(server_log, MOD_MSG "resolve_file: \"%s\": ", name1);
+
       if(!obj) {
 	if(MOD_DEBUG) fprintf(server_log, "not found\n");
 	free(name1);
@@ -231,7 +236,8 @@ struct filesys_obj *resolve_file
 	*err = ENOENT;
 	return 0;
       }
-      else if(obj->vtable->type == OBJT_DIR) {
+      obj_type = obj->vtable->type(obj);
+      if(obj_type == OBJT_DIR) {
 	if(MOD_DEBUG) fprintf(server_log, "dir\n");
 	if(end) {
 	  /* Error: wanted to open a file, not a directory */
@@ -248,7 +254,7 @@ struct filesys_obj *resolve_file
 	  dirstack = new_d;
 	}
       }
-      else if(obj->vtable->type == OBJT_SYMLINK) {
+      else if(obj_type == OBJT_SYMLINK) {
 	seqf_t link_dest;
 	if(MOD_DEBUG) fprintf(server_log, "symlink\n");
 	free(name1);
@@ -288,7 +294,7 @@ struct filesys_obj *resolve_file
 	}
       }
       /* For OBJT_FILE: */
-      else if(obj->vtable->type == OBJT_FILE) {
+      else if(obj_type == OBJT_FILE) {
 	if(MOD_DEBUG) fprintf(server_log, "file\n");
 	free(name1);
 	dir_stack_free(dirstack);
@@ -303,8 +309,10 @@ struct filesys_obj *resolve_file
 	}
       }
       else {
-	if(MOD_DEBUG) fprintf(server_log, "erm?\n");
-	assert(0); *err = EIO; return 0;
+	/* Error */
+	filesys_obj_free(obj);
+	*err = ENOTDIR; /* anything more appropriate? */
+	return 0;
       }
     }
   }
@@ -378,6 +386,7 @@ int resolve_obj(region_t r, struct filesys_obj *root, struct dir_stack *cwd,
     else {
       char *name1 = strdup_seqf(name);
       struct filesys_obj *obj;
+      int obj_type;
       
       if(end && create == CREATE_ONLY) {
 	struct resolved_slot *slot = amalloc(sizeof(struct resolved_slot));
@@ -410,7 +419,8 @@ int resolve_obj(region_t r, struct filesys_obj *root, struct dir_stack *cwd,
 	  return 0;
 	}
       }
-      else if(obj->vtable->type == OBJT_DIR) {
+      obj_type = obj->vtable->type(obj);
+      if(obj_type == OBJT_DIR) {
 	struct dir_stack *new_d = amalloc(sizeof(struct dir_stack));
 	if(MOD_DEBUG) fprintf(server_log, "dir\n");
 	new_d->refcount = 1;
@@ -419,7 +429,7 @@ int resolve_obj(region_t r, struct filesys_obj *root, struct dir_stack *cwd,
 	new_d->name = name1;
 	dirstack = new_d;
       }
-      else if(obj->vtable->type == OBJT_SYMLINK) {
+      else if(obj_type == OBJT_SYMLINK) {
 	seqf_t link_dest;
 	if(MOD_DEBUG) fprintf(server_log, "symlink\n");
 	free(name1);
@@ -469,7 +479,7 @@ int resolve_obj(region_t r, struct filesys_obj *root, struct dir_stack *cwd,
 	  }
 	}
       }
-      else if(obj->vtable->type == OBJT_FILE) {
+      else if(obj_type == OBJT_FILE) {
 	if(MOD_DEBUG) fprintf(server_log, "file\n");
 	free(name1);
 	dir_stack_free(dirstack);
@@ -484,8 +494,9 @@ int resolve_obj(region_t r, struct filesys_obj *root, struct dir_stack *cwd,
 	}
       }
       else {
-	if(MOD_DEBUG) fprintf(server_log, "erm?\n");
-	assert(0);
+	filesys_obj_free(obj);
+	*err = ENOTDIR; /* anything more appropriate? */
+	return 0; /* Error */
       }
     }
   }

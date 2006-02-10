@@ -92,6 +92,11 @@ void filesys_obj_free(struct filesys_obj *obj)
 }
 
 
+int objt_unknown(struct filesys_obj *obj) { return 0; }
+int objt_file(struct filesys_obj *obj) { return OBJT_FILE; }
+int objt_dir(struct filesys_obj *obj) { return OBJT_DIR; }
+int objt_symlink(struct filesys_obj *obj) { return OBJT_SYMLINK; }
+
 int dummy_stat(struct filesys_obj *obj, struct stat *buf, int *err)
 {
   *err = ENOSYS;

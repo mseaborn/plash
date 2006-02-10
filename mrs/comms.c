@@ -174,6 +174,7 @@ void comm_free(struct comm *comm)
    data).  Never shrinks the buffer. */
 static void comm_resize(struct comm *comm, int wastage, int avail)
 {
+  assert(comm);
   if(comm->buf_size - comm->pos < avail || comm->pos > wastage) {
     if(comm->buf_size >= avail) {
       if(MOD_DEBUG) printf(MOD_MSG "data resize: shift\n");
@@ -195,6 +196,7 @@ static void comm_resize(struct comm *comm, int wastage, int avail)
 
 static void comm_fds_resize(struct comm *comm, int avail)
 {
+  assert(comm);
   if(comm->fds_buf_size - comm->fds_pos < avail || comm->fds_pos > 0) {
     if(comm->fds_buf_size >= avail) {
       if(MOD_DEBUG) printf(MOD_MSG "fds resize: shift (%i FDs consumed, %i unconsumed)\n", comm->fds_pos, comm->fds_got);
@@ -219,6 +221,7 @@ static void comm_fds_resize(struct comm *comm, int avail)
 int comm_read(struct comm *comm)
 {
   int bytes_got, fds_got;
+  assert(comm);
 
   /* There is basically a fixed number of FDs we can receive per message,
      because if we don't allocate enough space, recvmsg drops them. */
@@ -292,6 +295,7 @@ int comm_try_get(struct comm *comm, seqf_t *result_data, fds_t *result_fds)
    stream, and >1 for a valid message. */
 int comm_get(struct comm *comm, seqf_t *result_data, fds_t *result_fds)
 {
+  assert(comm);
   while(1) {
     int r = comm_try_get(comm, result_data, result_fds);
     if(r != COMM_UNAVAIL) return r;

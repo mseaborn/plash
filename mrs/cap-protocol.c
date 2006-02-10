@@ -28,8 +28,8 @@
 
 #define CAPP_ID_SHIFT 8
 #define CAPP_NAMESPACE_MASK 0xff
-#define CAPP_NAMESPACE_RECEIVER	0
-#define CAPP_NAMESPACE_SENDER	1
+#define CAPP_NAMESPACE_RECEIVER			0
+#define CAPP_NAMESPACE_SENDER			1
 #define CAPP_NAMESPACE_SENDER_SINGLE_USE	2
 #define CAPP_WIRE_ID(namespace, id)	(((id) << CAPP_ID_SHIFT) | (namespace))
 
@@ -163,12 +163,10 @@ static void init_fd_set(struct c_server_state *state)
 
 static void shut_down_connection(struct connection *conn)
 {
-  /* Free exported references. */
   int i;
-  for(i = 0; i < conn->export_size; i++) {
-    if(conn->export[i].used) filesys_obj_free(conn->export[i].x.cap);
-  }
-  free(conn->export);
+  struct export_entry *export = conn->export;
+  int export_size = conn->export_size;
+  assert(conn->comm); /* Connection should not have been shut down already */
 
   /* Close socket and connection. */
   if(close(conn->sock_fd) < 0) { /* perror("close"); */ }
@@ -195,6 +193,17 @@ static void shut_down_connection(struct connection *conn)
   else {
     free(conn);
   }
+
+  /* Free exported references. */
+  /* This is done last, having shut down the connection, because it may
+     result in arbitrary code being called.  For example, dropping these
+     references can result in other references being dropped, which could
+     result in an attempt to call shut_down_connection() on this same
+     connection recursively. */
+  for(i = 0; i < export_size; i++) {
+    if(export[i].used) filesys_obj_free(export[i].x.cap);
+  }
+  free(export);
 }
 
 static void violation(struct connection *conn)
@@ -276,7 +285,15 @@ void remote_obj_invoke(struct filesys_obj *obj, seqt_t data,
   int *caps;
   region_t r;
   struct connection *conn = dest->conn;
-  if(!conn) return; /* Single-use capability has already been used. */
+  if(!conn) {
+    /* Single-use capability has already been used. */
+#ifdef DO_LOG
+    if(MOD_DEBUG) fprintf(LOG, MOD_MSG "%s: send tried on used single-use cap\n", conn->name);
+#endif
+    caps_free(cap_args);
+    close_fds(fd_args);
+    return;
+  }
   /* If the connection has been closed, this fails silently.  You can
      detect the failure because the refcounts of the arguments will
      not be incremented, so the return continuation would get freed. */
@@ -284,6 +301,8 @@ void remote_obj_invoke(struct filesys_obj *obj, seqt_t data,
 #ifdef DO_LOG
     if(MOD_DEBUG) fprintf(LOG, MOD_MSG "%s: send tried on closed connection\n", conn->name);
 #endif
+    caps_free(cap_args);
+    close_fds(fd_args);
     return;
   }
   r = region_make();
@@ -392,6 +411,9 @@ static void remove_exported_id(struct connection *conn, int id)
   conn->export_next = id;
   assert(conn->export_count > 0);
   conn->export_count--;
+  /* Shutting down will free the export table, but not the object that
+     was just removed from the export table, which becomes owned by
+     the caller. */
   if(conn->export_count == 0 && conn->import_count == 0) {
     /* This could happen if there's a mismatch between what
        the two ends think they've imported and exported. */
@@ -443,13 +465,22 @@ static void handle_msg(struct connection *conn, seqf_t data_orig, fds_t fds)
             }
             args.caps = cap_args;
             args.size = no_caps;
-	    /* This may render `conn' invalid. */
-	    if(single_use) remove_exported_id(conn, id);
+	    /* If the capability is single use, we need to remove it from
+	       the export table before invoking it, because invoking it
+	       can execute arbitrary code which may cause handle_msg to
+	       be called for this connection, or it may cause `conn' to
+	       become invalid. */
+	    /* If the capability is single use, we now own the reference
+	       to it that the export table contained.  If not, we need to
+	       claim ownership to it by incrementing the reference count:
+	       invoking it could cause the export table to be freed,
+	       destroying `dest', but we need to make sure that `dest' is
+	       valid throughout its invocation. */
+	    if(single_use) { remove_exported_id(conn, id); }
+	    else { dest->refcount++; }
             dest->vtable->cap_invoke(dest, mk_leaf(r, data), args, fds);
             region_free(r);
-	    /* The `single_use' flag in the export table may well have been
-	       overwritten by this point, so we've saved a copy. */
-	    if(single_use) filesys_obj_free(dest);
+	    filesys_obj_free(dest);
           }
           else {
 #ifdef DO_LOG
@@ -522,6 +553,7 @@ cap_t *cap_make_connection(region_t r, int sock_fd,
   int i;
   cap_t *import;
   struct connection *conn = amalloc(sizeof(struct connection));
+  assert(sock_fd >= 0);
 
 #ifdef DO_LOG
   if(MOD_DEBUG) fprintf(LOG, MOD_MSG "%s: creating connection from socket %i: import %i, export %i\n", name, sock_fd, import_count, export.size);
@@ -573,11 +605,14 @@ cap_t *cap_make_connection(region_t r, int sock_fd,
 void cap_close_all_connections()
 {
   struct c_server_state *state = &server_state;
-  struct connection *conn = state->list.next;
-  while(!conn->l.head) {
-    struct connection *conn_next = conn->l.next;
+  /* Shutting down one connection frees its export table, which can call
+     arbitrary code, so might result in shutting down of other connections.
+     This means that we can only access the head of the connection list
+     on each iteration. */
+  while(1) {
+    struct connection *conn = state->list.next;
+    if(conn->l.head) break;
     shut_down_connection(conn);
-    conn = conn_next;
   }
 }
 
@@ -590,7 +625,7 @@ static void listen_on_connection(struct connection *conn)
 
   server_state.total_ready_to_read -= conn->ready_to_read;
   conn->ready_to_read = 0;
-    
+
   r = comm_read(conn->comm);
   if(r < 0 || r == COMM_END) {
 #ifdef DO_LOG
@@ -614,12 +649,17 @@ static void listen_on_connection(struct connection *conn)
    change: we can't carry on traversing it, because elements may have
    disappeared.  Furthermore, the input that select() said was ready
    may have now been read. */
-void cap_run_server_step()
+/* Returns 0 when there are no connections left, or if it gets an
+   error from select() (which shouldn't happen). */
+int cap_run_server_step()
 {
   struct c_server_state *state = &server_state;
+  if(state->list.next->l.head) return 0;
+
 #ifdef IN_RTLD
   /* In ld.so, select() is not available. */
   listen_on_connection(state->list.next);
+  return 1;
 #else
   /* See if there is only one active connection.  If so, we don't need
      to use select(), and we save a system call. */
@@ -628,6 +668,7 @@ void cap_run_server_step()
     if(MOD_DEBUG) fprintf(LOG, MOD_MSG "run_server_step: only one connection (\"%s\")\n", state->list.next->name);
 #endif
     listen_on_connection(state->list.next);
+    return 1;
   }
   else {
     struct connection *conn;
@@ -639,7 +680,7 @@ void cap_run_server_step()
       if(MOD_DEBUG) fprintf(LOG, MOD_MSG "run_server_step: calling select()\n");
 #endif
       result = select(state->max_fd, &read_fds, 0, 0, 0 /* &timeout */);
-      if(result < 0) { perror("select"); return; }
+      if(result < 0) { perror("select"); return 0; }
 
       for(conn = state->list.next;
 	  !conn->l.head && result > 0;
@@ -666,10 +707,11 @@ void cap_run_server_step()
 	state->list.prev = conn;
 
 	listen_on_connection(conn);
-	return;
+	return 1;
       }
     }
-    assert(0);
+    assert(0); /* Could happen if select() is returning inconsistent info */
+    return 0;
   }
 #endif
 }
@@ -677,20 +719,18 @@ void cap_run_server_step()
 void cap_run_server()
 {
   /* While the process list is non-empty... */
-  while(!server_state.list.next->l.head) { 
-    cap_run_server_step();
-  }
+  while(cap_run_server_step()) { /* empty */ }
 }
 
 
 struct filesys_obj_vtable remote_obj_vtable = {
-  /* .type = */ 0,
   /* .free = */ remote_obj_free,
 
   /* .cap_invoke = */ remote_obj_invoke,
   /* .cap_call = */ generic_obj_call,
   /* .single_use = */ 0,
   
+  /* .type = */ objt_unknown,
   /* .stat = */ dummy_stat,
   /* .utimes = */ dummy_utimes,
   /* .chmod = */ dummy_chmod,

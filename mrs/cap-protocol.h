@@ -29,7 +29,8 @@ cap_t *cap_make_connection(region_t r, int sock_fd,
 			   cap_seq_t export, int import_count,
 			   const char *name);
 void cap_run_server(void);
-void cap_run_server_step(void);
+/* Returns 0 when there are no connections left to handle: */
+int cap_run_server_step(void);
 void cap_close_all_connections(void);
 
 void local_obj_invoke(struct filesys_obj *obj,

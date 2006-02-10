@@ -46,6 +46,12 @@ int refuse_utimes(struct filesys_obj *obj, const struct timeval *atime,
   return -1;
 }
 
+int refuse_socket_connect(struct filesys_obj *obj, int sock_fd, int *err)
+{
+  *err = EACCES;
+  return -1;
+}
+
 int refuse_create_file(struct filesys_obj *obj, const char *leaf,
 		       int flags, int mode, int *err)
 {
@@ -155,11 +161,11 @@ int fab_dir_list(struct filesys_obj *obj, region_t r, seqt_t *result, int *err)
 }
 
 struct filesys_obj_vtable fab_dir_vtable = {
-  /* .type = */ OBJT_DIR,
   /* .free = */ fab_dir_free,
   /* .cap_invoke = */ 0,
   /* .cap_call = */ 0,
   /* .single_use = */ 0,
+  /* .type = */ objt_dir,
   /* .stat = */ fab_dir_stat,
   /* .utimes = */ refuse_utimes,
   /* .chmod = */ refuse_chmod,
@@ -213,11 +219,11 @@ int fab_symlink_readlink(struct filesys_obj *obj, region_t r, seqf_t *result, in
 }
 
 struct filesys_obj_vtable fab_symlink_vtable = {
-  /* .type = */ OBJT_SYMLINK,
   /* .free = */ fab_symlink_free,
   /* .cap_invoke = */ 0,
   /* .cap_call = */ 0,
   /* .single_use = */ 0,
+  /* .type = */ objt_symlink,
   /* .stat = */ fab_symlink_stat,
   /* .utimes = */ refuse_utimes,
   /* .chmod = */ dummy_chmod,
@@ -386,11 +392,11 @@ int s_fab_dir_socket_bind(struct filesys_obj *obj, const char *leaf,
 }
 
 struct filesys_obj_vtable s_fab_dir_vtable = {
-  /* .type = */ OBJT_DIR,
   /* .free = */ s_fab_dir_free,
   /* .cap_invoke = */ 0,
   /* .cap_call = */ 0,
   /* .single_use = */ 0,
+  /* .type = */ objt_dir,
   /* .stat = */ s_fab_dir_stat,
   /* .utimes = */ refuse_utimes,
   /* .chmod = */ refuse_chmod,

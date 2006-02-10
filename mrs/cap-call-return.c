@@ -73,7 +73,7 @@ void generic_obj_call(struct filesys_obj *obj, region_t r,
   }
 
   while(!state->returned) {
-    cap_run_server_step();
+    if(!cap_run_server_step()) { assert(0); }
   }
   *r_data = state->data;
   *r_cap_args = state->cap_args;
@@ -101,8 +101,19 @@ void local_obj_invoke(struct filesys_obj *obj,
     seqt_t r_data;
     cap_seq_t r_caps;
     fds_t r_fds;
+
+    /* Catch code that forgets to fill out all of the results. */
+    r_data.size = -1;
+    r_caps.size = -1;
+    r_fds.count = -1;
+    
     obj->vtable->cap_call(obj, r, mk_leaf(r, data), cap_args, fd_args,
 			  &r_data, &r_caps, &r_fds);
+
+    assert(r_data.size >= 0);
+    assert(r_caps.size >= 0);
+    assert(r_fds.count >= 0);
+
     return_cont->vtable->cap_invoke(return_cont, r_data, r_caps, r_fds);
     filesys_obj_free(return_cont);
   }
@@ -149,13 +160,13 @@ void return_cont_free(struct filesys_obj *obj1)
 
 
 struct filesys_obj_vtable return_cont_vtable = {
-  /* .type = */ 0,
   /* .free = */ return_cont_free,
 
   /* .cap_invoke = */ return_cont_invoke,
   /* .cap_call = */ generic_obj_call,
   /* .single_use = */ 1,
   
+  /* .type = */ objt_unknown,
   /* .stat = */ dummy_stat,
   /* .utimes = */ dummy_utimes,
   /* .chmod = */ dummy_chmod,

@@ -23,6 +23,8 @@
 #include "server.h"
 #include "parse-filename.h"
 #include "filesysobj-fab.h"
+#include "filesysobj-readonly.h"
+#include "filesysslot.h"
 #include "build-fs.h"
 
 
@@ -223,6 +225,7 @@ int resolve_populate_aux
       struct node *next_node;
       char *name1 = strdup_seqf(name);
       struct filesys_obj *obj;
+      int obj_type;
 
       /* Attach as a writable slot.  NB. This code will attach "foo" as
 	 a writable slot but not do the same for "foo/bar/..".  It won't
@@ -245,8 +248,9 @@ int resolve_populate_aux
       }
       
       next_node = tree_traverse(dirstack->node, name1);
-      
-      if(obj->vtable->type == OBJT_DIR) {
+
+      obj_type = obj->vtable->type(obj);
+      if(obj_type == OBJT_DIR) {
 	struct dirnode_stack *new_d = amalloc(sizeof(struct dirnode_stack));
 	new_d->refcount = 1;
 	new_d->dir = obj;
@@ -255,7 +259,7 @@ int resolve_populate_aux
 	new_d->name = name1;
 	dirstack = new_d;
       }
-      else if(obj->vtable->type == OBJT_SYMLINK) {
+      else if(obj_type == OBJT_SYMLINK) {
 	seqf_t link_dest;
 	free(name1);
 	if(symlink_limit <= 0) {
@@ -297,7 +301,7 @@ int resolve_populate_aux
 	  else { assert(0); *err = EIO; return 0; }
 	}
       }
-      else if(obj->vtable->type == OBJT_FILE) {
+      else if(obj_type == OBJT_FILE) {
 	free(name1);
 	dirnode_stack_free(dirstack);
 	if(end && !(trailing_slash || dir_only)) {
@@ -320,9 +324,16 @@ int resolve_populate_aux
   }
 
   /* Reached a directory */
+  /* This case is used for attaching the pathnames "." and "/".
+     They can be attached as writable, but not as writable slots. */
   if(attach) {
     dirstack->dir->refcount++;
-    dirstack->node->attach_ro_obj = dirstack->dir;
+    if(create) {
+      dirstack->node->attach_rw_obj = make_read_only_slot(dirstack->dir);
+    }
+    else {
+      dirstack->node->attach_ro_obj = dirstack->dir;
+    }
     dirnode_stack_free(dirstack);
     return ATTACHED_OBJ;
   }
@@ -396,7 +407,7 @@ struct filesys_slot *build_fs(struct node *node)
   }
   else if(node->attach_ro_obj) {
     node->attach_ro_obj->refcount++;
-    return make_read_only_slot(node->attach_ro_obj);
+    return make_read_only_slot(make_read_only_proxy(node->attach_ro_obj));
   }
   else {
     /* Construct directory */

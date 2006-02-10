@@ -32,8 +32,9 @@ int new_open(const char *filename, int flags, ...);
 
 extern int comm_sock;
 extern struct comm *comm;
-extern cap_t fs_server;
+extern cap_t fs_server, conn_maker, fs_op_maker;
 
+int plash_init(void);
 int send_req(region_t r, seqt_t msg);
 int get_reply(seqf_t *msg, fds_t *fds);
 int req_and_reply_with_fds(region_t r, seqt_t msg,

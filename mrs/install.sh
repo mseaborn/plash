@@ -50,7 +50,14 @@ fi
 
 inst_cp () {
   echo Installing $PREFIX$2
-  cp $1 $PREFIX$2
+  # The problem with cp is that it rewrites the data on the existing inodes.
+  # If a running program is using the libraries, it will find its code
+  # trampled over and crash (Linux seems to prevent this for executables
+  # but not libraries).
+  # cp $1 $PREFIX$2
+
+  cp $1 $PREFIX$2.new
+  mv $PREFIX$2.new $PREFIX$2
 }
 
 inst_hard_link () {

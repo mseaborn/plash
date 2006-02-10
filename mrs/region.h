@@ -288,6 +288,8 @@ static inline fds_t mk_fds1(region_t r, int fd1)
   return fds;
 }
 
+int seqf_equal(seqf_t str1, seqf_t str2);
+
 void close_fds(fds_t fds);
 
 

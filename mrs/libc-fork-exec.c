@@ -42,7 +42,102 @@
    chosen the latter. */
 pid_t new_fork(void)
 {
-  region_t r = region_make();
+  region_t r;
+
+  cap_t new_fs_server;
+  cap_seq_t caps;
+  seqt_t reply;
+  cap_seq_t reply_caps;
+  fds_t reply_fds;
+
+  int fd;
+  
+  if(plash_init() < 0) return -1;
+  if(!fs_server || !conn_maker || !fs_op_maker) { __set_errno(ENOSYS); return -1; }
+
+  r = region_make();
+  fs_server->vtable->cap_call(fs_server, r,
+			      mk_string(r, "Copy"), caps_empty, fds_empty,
+			      &reply, &reply_caps, &reply_fds);
+  {
+    seqf_t msg = flatten_reuse(r, reply);
+    int ok = 1;
+    m_str(&ok, &msg, "Okay");
+    m_end(&ok, &msg);
+    if(ok && reply_caps.size == 1 && reply_fds.count == 0) {
+      new_fs_server = reply_caps.caps[0];
+    }
+    else {
+      caps_free(reply_caps);
+      close_fds(reply_fds);
+      region_free(r);
+      __set_errno(ENOSYS);
+      return -1;
+    }
+  }
+
+  {
+    int count = 3;
+    cap_t *a = region_alloc(r, count * sizeof(cap_t));
+    a[0] = new_fs_server;
+    a[0]->refcount++;
+    a[1] = conn_maker;
+    a[1]->refcount++;
+    a[2] = fs_op_maker;
+    a[2]->refcount++;
+    caps.caps = a;
+    caps.size = count;
+  }
+  conn_maker->vtable->cap_call(conn_maker, r,
+			       cat2(r, mk_string(r, "Mkco"), mk_int(r, 0)),
+			       caps, fds_empty,
+			       &reply, &reply_caps, &reply_fds);
+  {
+    seqf_t msg = flatten_reuse(r, reply);
+    int ok = 1;
+    m_str(&ok, &msg, "Okay");
+    m_end(&ok, &msg);
+    if(ok && reply_caps.size == 0 && reply_fds.count == 1) {
+      fd = reply_fds.fds[0];
+    }
+    else {
+      caps_free(reply_caps);
+      close_fds(reply_fds);
+      region_free(r);
+      __set_errno(ENOSYS);
+      return -1;
+    }
+  }
+
+  {
+    pid_t pid;
+    region_free(r);
+    pid = fork();
+    if(pid == 0) {
+      cap_close_all_connections();
+      if(fs_server) filesys_obj_free(fs_server);
+      if(conn_maker) filesys_obj_free(conn_maker);
+      fs_server = 0;
+      conn_maker = 0;
+      if(dup2(fd, comm_sock) < 0) {
+	/* Fail quietly at this point. */
+	unsetenv("PLASH_COMM_FD");
+      }
+      close(fd);
+      setenv("PLASH_CAPS", "fs_op;conn_maker;fs_op_maker", 1);
+      return 0;
+    }
+    else if(pid < 0) {
+      close(fd);
+      return -1;
+    }
+    else {
+      close(fd);
+      return pid;
+    }
+  }
+
+#if 0
   seqf_t reply;
   fds_t fds;
   if(req_and_reply_with_fds(r, mk_string(r, "Fork"), &reply, &fds) < 0) goto error;
@@ -74,15 +169,18 @@ pid_t new_fork(void)
 	   Otherwise, dropping this reference could result in sending
 	   a "drop" message which will mess up the parent process's
 	   connection. */
-	filesys_obj_free(fs_server);
+	if(fs_server) filesys_obj_free(fs_server);
+	if(conn_maker) filesys_obj_free(conn_maker);
 	fs_server = 0;
+	conn_maker = 0;
 #endif
 	/* Re-assign the forked FD to the FD slot used by the parent
 	   process.  That saves us having to change the environment
-	   variable COMM_FD. */
+	   variable PLASH_COMM_FD. */
 	if(dup2(fd, comm_sock) < 0) {
 	  /* Fail quietly at this point. */
 	  comm_sock = -2;
+	  unsetenv("PLASH_COMM_FD");
 	}
 	close(fd);
 	return 0;
@@ -102,6 +200,7 @@ pid_t new_fork(void)
  error:
   region_free(r);
   return -1;
+#endif
 }
 
 /* EXPORT: new_execve => WEAK:execve __execve */

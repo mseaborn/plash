@@ -17,35 +17,10 @@
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
    USA.  */
 
-#ifndef fs_operations_h
-#define fs_operations_h
+#ifndef plash_libc_h
+#define plash_libc_h
 
-void handle_fs_op_message(region_t r, struct process *proc,
-			  seqf_t msg_orig, fds_t fds_orig,
-			  seqt_t *reply, fds_t *reply_fds,
-			  seqt_t *log_msg, seqt_t *log_reply);
-
-struct server_shared {
-  int refcount;
-  int next_id;
-
-  FILE *log; /* 0 if not doing logging */
-  int log_summary, log_messages;
-};
-void server_shared_free(struct server_shared *s);
-
-struct fs_op_object {
-  struct filesys_obj hdr;
-  struct process p;
-  struct server_shared *shared;
-  int id;
-};
-
-cap_t make_fs_op_server(struct server_shared *shared,
-			struct filesys_obj *root, struct dir_stack *cwd);
-
-cap_t fs_op_maker_make(struct server_shared *shared);
-
-cap_t conn_maker_make(void);
+int plash_libc_duplicate_connection();
+void plash_libc_reset_connection();
 
 #endif

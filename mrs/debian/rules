@@ -40,6 +40,7 @@ binary-arch:	checkroot
 	# Could use "cp -a A B" instead of "strip A -o B"
 	strip ../mrs/shell -o debian/tmp/usr/bin/plash
 	strip ../mrs/shell-nogtk -o debian/tmp/usr/bin/plash-nogtk
+	strip ../mrs/chroot -o debian/tmp/usr/bin/plash-chroot
 	strip ../mrs/run-as-nobody -o debian/tmp/usr/lib/plash/run-as-nobody
 	strip ../mrs/run-as-nobody+chroot -o debian/tmp/usr/lib/plash/run-as-nobody+chroot
 	strip ../mrs/run-as-anonymous -o debian/tmp/usr/lib/plash/run-as-anonymous

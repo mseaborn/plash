@@ -1,3 +1,25 @@
+plash (1.5) unstable; urgency=low
+
+  * Updated protocols.txt to cover object-capability protocol,
+    conn_maker and fs_op_maker.
+  * Created `chroot' program as a test and example.
+  * Introduced conn_maker and fs_ops_maker objects.  Change the shell
+    to start processes with references to these.  Rename COMM_FD to
+    PLASH_COMM_FD and introduce PLASH_CAPS; libc now reads these to
+    find the indexes of its capabilities, rather than just using
+    index 0.  Introduce `copy' method to fs_ops.  Change fork() to use
+    this instead of fs_op's fork method.
+  * build-fs.c:  now uses read-only proxies.  Changed the resolver so
+    that `.' and `/' can be attached as writable.
+  * Added filesysobj-readonly.c: provides read-only proxies for
+    filesystem objects.  One proxy type is sufficient to handle files,
+    directories and symlinks.
+  * cap-protocol.c:  Fix uses of stale connection references.
+    remote_obj_invoke() now correctly frees its arguments for broken
+    connections, so calls to broken connections will return an error.
+
+ -- Mark Seaborn <mseaborn@jhu.edu>  Fri,  7 Jan 2005 15:32:16 +0000
+
 plash (1.4) unstable; urgency=low
 
   * Implemented an object-capability protocol for use over sockets.

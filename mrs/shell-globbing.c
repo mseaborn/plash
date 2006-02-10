@@ -365,8 +365,10 @@ void glob_aux2(region_t r,
     seqf_t name = seqf_string(name1);
     
     if(slash) {
+      int obj_type = obj->vtable->type(obj);
       /* Check that it's a directory. */
-      if(obj->vtable->type == OBJT_SYMLINK) {
+      if(obj_type == OBJT_SYMLINK) {
+	/* Check that the symlink destination resolves to a directory. */
 	int err;
 	struct dir_stack *new_stack;
 	seqf_t link_dest;
@@ -380,7 +382,7 @@ void glob_aux2(region_t r,
 	if(!new_stack) return; /* Error */
 	dir_stack_free(new_stack);
       }
-      else if(obj->vtable->type != OBJT_DIR) {
+      else if(obj_type != OBJT_DIR) {
 	filesys_obj_free(obj);
 	free(name1);
 	dir_stack_free(dirstack);
@@ -404,7 +406,8 @@ void glob_aux2(region_t r,
   else {
     seqf_t name = region_dup_seqf(r, seqf_string(name1));
     
-    if(obj->vtable->type == OBJT_DIR) {
+    int obj_type = obj->vtable->type(obj);
+    if(obj_type == OBJT_DIR) {
       struct dir_stack *new_d = amalloc(sizeof(struct dir_stack));
       new_d->refcount = 1;
       new_d->dir = obj;
@@ -412,7 +415,7 @@ void glob_aux2(region_t r,
       new_d->name = name1;
       dirstack = new_d;
     }
-    else if(obj->vtable->type == OBJT_SYMLINK) {
+    else if(obj_type == OBJT_SYMLINK) {
       int err;
       struct dir_stack *new_stack;
       seqf_t link_dest;

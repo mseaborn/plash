@@ -85,6 +85,7 @@ struct job {
 struct shell_state {
   struct filesys_obj *root;
   struct dir_stack *cwd;
+  cap_t conn_maker;
 
   int interactive;
   int next_job_id;
@@ -130,7 +131,8 @@ void set_up_sec_process(struct process_desc *desc1) {
   setenv("PLASH_FAKE_EGID", buf, 1);
 
   snprintf(buf, sizeof(buf), "%i", desc->comm_fd);
-  setenv("COMM_FD", buf, 1);
+  setenv("PLASH_COMM_FD", buf, 1);
+  setenv("PLASH_CAPS", "fs_op;conn_maker;fs_op_maker", 1);
 
   /* Necessary for security when using run-as-nobody, otherwise the
      process can be left in a directory with read/write access which
@@ -1031,58 +1033,22 @@ int resolve_executable(region_t r, seqf_t filename, seqf_t *result)
   }
 }
 
-#if 0
-struct filesys_obj *shell_test()
-{
-  struct filesys_obj *root_dir = initial_dir("/");
-  struct dir_stack *cwd = dir_stack_root(root_dir);
-  struct node *tree = make_empty_node();
 
-  int err;
-  resolve_populate(root_dir, tree, cwd, seqf_string("/home/mrs/Mail"), 0 /* create */, &err);
-  resolve_populate(root_dir, tree, cwd, seqf_string("/etc"), 0 /* create */, &err);
-  resolve_populate(root_dir, tree, cwd, seqf_string("/bin"), 0 /* create */, &err);
-  resolve_populate(root_dir, tree, cwd, seqf_string("/usr"), 0 /* create */, &err);
-
-  /*{
-    region_t r = region_make();
-    seqf_t str = seqf_string("ls foo bar 'jim'");
-    const char *pos_out;
-    void *val_out;
-    printf("allocated %i bytes\n", region_allocated(r));
-    if(f_command(r, str.data, str.data + str.size, &pos_out, &val_out) &&
-       pos_out == str.data + str.size) {
-      struct char_cons *f;
-      struct arg_list *args;
-      printf("parsed\n");
-      if(m_command(val_out, &f, &args)) {
-	flatten_args(0, args);
-      }
-    }
-    else {
-      printf("parse failed\n");
-    }
-    printf("allocated %i bytes\n", region_allocated(r));
-    region_free(r);
-    }*/
-
-  print_tree(0, tree);
-  return build_fs(tree);
-}
-#endif
-
+struct job_cons_args {
+  struct server_shared *shared;
+  cap_t fs_op_maker;
+  struct server_desc *conns;
+};
 
 /* Constructs a filesystem for the process being created for the command
    invocation.  Adds a process entry to the server state to handle this
    filesystem. */
 struct process_desc *command_invocation
   (region_t r, struct shell_state *state,
-   struct server_shared *shared,
 #ifdef SIMPLE_SERVER
    struct server_state *server_state,
-#else
-   struct server_desc **server_desc,
 #endif
+   struct job_cons_args *job,
    struct invocation *inv,
    int fd_stdin, int fd_stdout)
 {
@@ -1196,8 +1162,8 @@ struct process_desc *command_invocation
     resolve_populate(state->root, p.tree, p.cwd, seqf_string("/bin/"), 0 /* create */, &err);
     resolve_populate(state->root, p.tree, p.cwd, seqf_string("/lib"), 0 /* create */, &err);
     resolve_populate(state->root, p.tree, p.cwd, seqf_string("/usr"), 0 /* create */, &err);
-    resolve_populate(state->root, p.tree, p.cwd, seqf_string("/dev/tty"), 0 /* create */, &err);
-    resolve_populate(state->root, p.tree, p.cwd, seqf_string("/dev/null"), 0 /* create */, &err);
+    resolve_populate(state->root, p.tree, p.cwd, seqf_string("/dev/tty"), 1 /* create */, &err);
+    resolve_populate(state->root, p.tree, p.cwd, seqf_string("/dev/null"), 1 /* create */, &err);
 
     /* Add the executable:  This is necessary for scripts (using the
        `#!' syntax).  It doesn't hurt for other executables. */
@@ -1288,11 +1254,19 @@ struct process_desc *command_invocation
 #else
       {
 	struct server_desc *desc = region_alloc(r, sizeof(struct server_desc));
-	shared->refcount++;
+	int cap_count = 3;
+	cap_t *caps = region_alloc(r, cap_count * sizeof(cap_t));
+	job->shared->refcount++;
+	caps[0] = make_fs_op_server(job->shared, root, cwd);
+	state->conn_maker->refcount++;
+	caps[1] = state->conn_maker;
+	job->fs_op_maker->refcount++;
+	caps[2] = job->fs_op_maker;
+	desc->export.caps = caps;
+	desc->export.size = cap_count;
 	desc->sock_fd = socks[0];
-	desc->export = mk_caps1(r, make_fs_op_server(shared, root, cwd));
-	desc->next = *server_desc;
-	*server_desc = desc;
+	desc->next = job->conns;
+	job->conns = desc;
       }
 #endif
     
@@ -1334,12 +1308,7 @@ struct process_desc *command_invocation
 /* Returns 0 if there's an error. */
 struct process_desc_list *pipeline_invocation
   (region_t r, struct shell_state *state,
-   struct server_shared *shared,
-#ifdef SIMPLE_SERVER
-   struct server_state *server_state,
-#else
-   struct server_desc **server_state, /* rename this! */
-#endif
+   struct job_cons_args *job,
    struct pipeline *pipeline,
    int fd_stdin, int fd_stdout)
 {
@@ -1348,7 +1317,7 @@ struct process_desc_list *pipeline_invocation
   
   if(m_pipeline_inv(pipeline, &inv)) {
     struct process_desc *proc =
-      command_invocation(r, state, shared, server_state, inv, fd_stdin, fd_stdout);
+      command_invocation(r, state, job, inv, fd_stdin, fd_stdout);
     struct process_desc_list *list =
       region_alloc(r, sizeof(struct process_desc_list));
     if(!proc) return 0; /* Error */
@@ -1367,9 +1336,9 @@ struct process_desc_list *pipeline_invocation
     region_add_finaliser(r, finalise_close_fd, (void *) pipe_fd[0]);
     region_add_finaliser(r, finalise_close_fd, (void *) pipe_fd[1]);
 
-    proc = command_invocation(r, state, shared, server_state, inv, fd_stdin, pipe_fd[1]);
+    proc = command_invocation(r, state, job, inv, fd_stdin, pipe_fd[1]);
     if(!proc) return 0; /* Error */
-    list1 = pipeline_invocation(r, state, shared, server_state, rest, pipe_fd[0], fd_stdout);
+    list1 = pipeline_invocation(r, state, job, rest, pipe_fd[0], fd_stdout);
     if(!list1) return 0; /* Error */
     list2 = region_alloc(r, sizeof(struct process_desc_list));
     list2->proc = proc;
@@ -1522,22 +1491,20 @@ void shell_command(struct shell_state *state, seqf_t line)
 	region_free(sock_r);
       }
       else {
-#ifdef SIMPLE_SERVER
-	struct server_state server_state;
-#else
-	struct server_desc *server_state = 0; /* rename! */
-#endif
 	struct process_desc_list *procs;
-	struct server_shared *shared = amalloc(sizeof(struct server_shared));
-	shared->refcount = 1;
-	shared->next_id = 1;
-	shared->log = 0;
-	shared->log_summary = state->log_summary;
-	shared->log_messages = state->log_messages;
+	struct job_cons_args job;
+	job.shared = amalloc(sizeof(struct server_shared));
+	job.shared->refcount = 1;
+	job.shared->next_id = 1;
+	job.shared->log = 0;
+	job.shared->log_summary = state->log_summary;
+	job.shared->log_messages = state->log_messages;
+	
+	job.shared->refcount++;
+	job.fs_op_maker = fs_op_maker_make(job.shared);
+	
+	job.conns = 0;
 
-#ifdef SIMPLE_SERVER
-	init_server_state(&server_state);
-#endif
 	if(state->log_messages || state->log_summary) {
 	  if(state->log_into_xterm) {
 	    int pipe_fd[2];
@@ -1562,14 +1529,14 @@ void shell_command(struct shell_state *state, seqf_t line)
 	    region_add_finaliser(r, finalise_close_fd, (void *) pipe_fd[1]);
 	    server_state.log = fdopen(pipe_fd[1], "w");
 #else
-	    shared->log = fdopen(pipe_fd[1], "w");
+	    job.shared->log = fdopen(pipe_fd[1], "w");
 #endif
 	  }
 	  else {
 #ifdef SIMPLE_SERVER
 	    server_state.log = fdopen(STDERR_FILENO, "w");
 #else
-	    shared->log = fdopen(dup(STDERR_FILENO), "w");
+	    job.shared->log = fdopen(dup(STDERR_FILENO), "w");
 #endif
 	  }
 #ifdef SIMPLE_SERVER
@@ -1582,19 +1549,14 @@ void shell_command(struct shell_state *state, seqf_t line)
 	server_state.log_messages = state->log_messages;
 #endif
 	
-	procs = pipeline_invocation(sock_r, state, shared, &server_state, pipeline,
+	procs = pipeline_invocation(sock_r, state, &job, pipeline,
 				    STDIN_FILENO, STDOUT_FILENO);
-	server_shared_free(shared);
+	server_shared_free(job.shared);
+	filesys_obj_free(job.fs_op_maker);
 	if(procs) {
 	  /* Region sock_r is freed inside the forked server process
 	     and before waiting for the child processes. */
-	  spawn_job(sock_r, state,
-#ifdef SIMPLE_SERVER
-		    &server_state,
-#else
-		    server_state,
-#endif
-		    procs, !bg_flag);
+	  spawn_job(sock_r, state, job.conns, procs, !bg_flag);
 	}
 	else {
 	  region_free(sock_r);
@@ -1712,6 +1674,8 @@ int main(int argc, char *argv[])
   state.log_messages = 0;
   state.log_into_xterm = 0;
   state.print_fs_tree = 0;
+
+  state.conn_maker = conn_maker_make();
 
   assert(argc >= 1);
   shell_pathname = argv[0];

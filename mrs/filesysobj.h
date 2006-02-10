@@ -56,7 +56,6 @@ struct filesys_obj {
 #define OBJT_DIR 2
 #define OBJT_SYMLINK 3
 struct filesys_obj_vtable {
-  int type;
   void (*free)(struct filesys_obj *obj);
 
   void (*cap_invoke)(struct filesys_obj *obj,
@@ -67,6 +66,7 @@ struct filesys_obj_vtable {
   int single_use; /* A hint to cap-protocol.c */
 
   /* Files, directories and symlinks: */
+  int (*type)(struct filesys_obj *obj); /* returns an OBJT_* value */
   int (*stat)(struct filesys_obj *obj, struct stat *buf, int *err);
   int (*utimes)(struct filesys_obj *obj, const struct timeval *atime,
 		const struct timeval *mtime, int *err);
@@ -133,6 +133,12 @@ void filesys_obj_free(struct filesys_obj *obj);
 
 struct filesys_obj *initial_dir(const char *pathname, int *err);
 
+
+int objt_unknown(struct filesys_obj *obj);
+int objt_file(struct filesys_obj *obj);
+int objt_dir(struct filesys_obj *obj);
+int objt_symlink(struct filesys_obj *obj);
+
 int dummy_stat(struct filesys_obj *obj, struct stat *buf, int *err);
 int dummy_utimes(struct filesys_obj *obj, const struct timeval *atime,
 		 const struct timeval *mtime, int *err);
@@ -153,6 +159,24 @@ int dummy_socket_bind(struct filesys_obj *obj, const char *leaf, int sock_fd, in
 int dummy_readlink(struct filesys_obj *obj, region_t r, seqf_t *result, int *err);
 int dummy_open(struct filesys_obj *obj, int flags, int *err);
 int dummy_socket_connect(struct filesys_obj *obj, int sock_fd, int *err);
+
+int refuse_chmod(struct filesys_obj *obj, int mode, int *err);
+int refuse_utimes(struct filesys_obj *obj, const struct timeval *atime,
+		  const struct timeval *mtime, int *err);
+int refuse_socket_connect(struct filesys_obj *obj, int sock_fd, int *err);
+int refuse_create_file(struct filesys_obj *obj, const char *leaf,
+		       int flags, int mode, int *err);
+int refuse_mkdir(struct filesys_obj *obj, const char *leaf,
+		 int mode, int *err);
+int refuse_symlink(struct filesys_obj *obj, const char *leaf,
+		   const char *oldpath, int *err);
+int refuse_rename_or_link
+  (struct filesys_obj *obj, const char *leaf,
+   struct filesys_obj *dest_dir, const char *dest_leaf, int *err);
+int refuse_unlink(struct filesys_obj *obj, const char *leaf, int *err);
+int refuse_rmdir(struct filesys_obj *obj, const char *leaf, int *err);
+int refuse_socket_bind(struct filesys_obj *obj, const char *leaf,
+		       int sock_fd, int *err);
 
 
 /* Capability sequences */

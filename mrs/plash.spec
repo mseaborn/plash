@@ -1,6 +1,6 @@
 Summary: Principle of Least Authority Shell (Plash)
 Name: plash
-Version: 1.4
+Version: 1.5
 Release: 1
 Packager: Mark Seaborn <mseaborn@jhu.edu>
 Copyright: GPL and LGPL
@@ -41,6 +41,8 @@ cp -v glibc/mrs/debian/changelog %{buildroot}/usr/share/doc/plash-%{version}/
 cp -v glibc/mrs/inst_stripped/lib/* %{buildroot}/usr/lib/plash/lib/
 cp -v glibc/mrs/inst_stripped/ld-linux.so.2 %{buildroot}/usr/lib/plash-chroot-jail/special/
 cp -v glibc/mrs/shell %{buildroot}/usr/bin/plash
+cp -v glibc/mrs/shell-nogtk %{buildroot}/usr/bin/plash-nogtk
+cp -v glibc/mrs/chroot %{buildroot}/usr/bin/plash-chroot
 cp -v glibc/mrs/run-as-nobody %{buildroot}/usr/lib/plash/
 cp -v glibc/mrs/run-as-nobody+chroot %{buildroot}/usr/lib/plash/
 cp -v glibc/mrs/run-as-anonymous %{buildroot}/usr/lib/plash/
@@ -50,7 +52,7 @@ cp -v glibc/mrs/gc-uid-locks %{buildroot}/usr/lib/plash/
 
 %files
 # -f glibc/mrs/installed-file-list
-/usr/bin/plash
+/usr/bin
 /usr/lib/plash
 /usr/lib/plash-chroot-jail
 /usr/share/doc/plash-%{version}

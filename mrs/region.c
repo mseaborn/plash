@@ -223,6 +223,23 @@ seqf_t flatten_reuse(region_t r, seqt_t seq)
   }
 }
 
+int seqf_equal(seqf_t str1, seqf_t str2)
+{
+  if(str1.size == str2.size) {
+#if 0
+    return !memcmp(str1.data, str2.data, str1.size);
+#else
+    /* memcmp not available in ld.so, so use this: */
+    int i;
+    for(i = 0; i < str1.size; i++) {
+      if(str1.data[i] != str2.data[i]) { return 0; }
+    }
+    return 1;
+#endif
+  }
+  else return 0;
+}
+
 void close_fds(fds_t fds)
 {
   int i;

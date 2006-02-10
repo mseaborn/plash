@@ -1,0 +1,65 @@
+
+Programs that don't work:
+
+mkisofs:
+/usr/bin/mkisofs: Operation not permitted. Panic cannot set back efective uid.
+It does the following:
+setreuid32(0xffffffff, 0x1f6)           = -1 EPERM (Operation not permitted)
+where 0x1f6 = 502 (mrs), the UID it believes it already has
+
+mailq
+
+
+Bugs in Plash:
+
+Race conditions in gc-uid-locks:
+This race means that run-as-anonymous could assign a process a UID that
+*is* currently in use.  If a process manages to get the same UID as
+another, it can kill the other process, or worse, ptrace() it and gain
+its authority.  The risk is very low, because a program inside the
+chroot() environment can't run run-as-anonymous or gc-uid-locks.
+ * If gc-uid-locks runs between run-as-anonymous claiming the lock file
+   and changing its uid, gc-uid-locks will delete the lock file
+    * Solution:  run-as-anonymous should set its group before claiming
+      the lock file
+ * gc-uid-locks reads uids first then locks.  Consider:
+    * gc-uid-locks reads uids
+    * run-as-anonymous sets uids, claims lock
+    * gc-uid-locks reads lock files -> deletes lock that actually in use
+   Solution:  read lock files first.
+ * gc-uid-locks deletes lock file after checks:
+    * gc-uid-locks[1] determines that lock file F is to be deleted
+    * gc-uid-locks[2] deletes F
+    * run-as-anonymous claims lock file F
+    * gc-uid-locks[1] deletes F, but it's actually in use
+   Solution:  gc-uid-locks should have its own mutual exclusion lock
+Assumptions:  that /proc/ is a reliable, *atomic* way of reading uid/gids
+
+Re-entrancy: run_server_step() is called while waiting for a reply on
+a return continuation object.  It will handle incoming requests --
+these should be queued instead.
+ * I don't think this actually causes any bugs, since there are no
+   TOCTTOU problems in the code.  (There aren't really any invariants
+   that are broken during a method call.)
+
+Running as root:  /dev/tty is a writable slot; it should be a writable
+object in a read-only slot
+ * The same applies to /tmp/.X11-unix
+
+No thread safety in libc
+
+No resource accountability (not really a bug)
+
+stat64 doesn't work
+
+Sending on a socket is never queued.  This could lead to DoS of
+servers.  It could potentially lead to deadlocks.
+
+
+
+Fixed
+
+Now works:
+
+xemacs
+(uses open() on directories)

@@ -1,0 +1,167 @@
+
+Version 1.8:
+
+New build system
+----------------
+
+You can now build glibc for Plash automatically.  (Previously,
+building glibc involved manually intervening in the build process.)
+
+Syntax change
+-------------
+
+I have swapped the precedences of the "+" and "=>" argument list
+operators in the shell.  "=>" now binds more tightly than "+".  This
+means that:
+
+  command a => b + c => d
+
+means the same as:
+
+  command { a => b } + { c => d }
+
+Enabling X11 access
+-------------------
+
+The shell now has an option for automatically granting programs access
+to the X11 Window System.  When this is switched on, a command such
+as:
+
+  xpdf foo.pdf
+
+is equivalent to:
+
+  xpdf foo.pdf + ~/.Xauthority => /tmp/.X11-lock
+
+This option is switched off by default because X11 is not secure!  X
+servers provide no isolation between the clients connected to them.
+One client can read keyboard input that goes to other clients, grab
+the screen's contents, and feed events to other clients, including
+keypress events.  So *potentially*, an X client can gain the full
+authority of the user.
+
+The solution to this will be to write a proxy, through which an X
+client will connect to the X server, which will prevent it from
+interfering with other X clients.
+
+How to switch on this option (short version):
+
+Either:  From the shell, enter:
+
+  plash-opts /x=options 'enable_x11' 'on'
+
+Or:  To enable it for all shell sessions, you can create a file
+"~/.plashrc" file containing this (note the semicolon):
+
+  plash-opts /x=options 'enable_x11' 'on';
+
+and start the Plash shell with the command:
+
+  plash --rcfile ~/.plashrc
+
+(In order to make it as predictable as possible, Plash doesn't read
+any options files by default, so you have to specify options files
+explicitly.)
+
+Shell options
+-------------
+
+I have removed the "opts" command from the shell, which used to open
+an options window using Gtk.  There is now an external program which
+does the same thing, which you can run from the shell (so the shell is
+no longer linked with Gtk).  You can run this program with the command:
+
+  plash-opts-gtk /x=options
+
+The shell creates an object -- which it binds to the "options"
+variable -- for setting and getting options.
+
+
+
+Version 1.7:
+
+This version adds a major new feature, executable objects.  See
+NOTES.exec.
+
+
+Version 1.6:
+
+The shell now lets you start processes with existing files and
+directories attached to arbitrary points in the filesystem tree.  For
+example:
+
+  gcc -c /arg/foo.c=(F bar.c) => -o out.o
+
+The directory `/arg' does not need to exist in the real filesystem.
+It will be created in the fabricated filesystem that `gcc' receives.
+
+The general form of this new kind of argument is "PATHNAME = EXPR",
+where the pathname may be relative to the root directory or the
+current directory.  At present, the only kind of expression is
+"F PATHNAME", which returns the file or directory object at that
+pathname (following symlinks if necessary).
+
+The command also receives the pathname being assigned to ("/arg/foo.c"
+in the example) as an argv argument, unless the argument occurs to the
+right of a "+" operator.  For example, you can give a process a
+different /tmp directory using:
+
+  blah + /tmp=(F ~/new-tmp)
+
+The difference between writing
+
+  blah a/b/c
+and
+  blah a/b/c=(F a/b/c)
+
+is that if any of the components of the path `a/b/c' are symbolic
+links, in the first case the constructed filesystem will include those
+symbolic links and the objects they point to, whereas in the second
+case, `a', `a/b' and `a/b/c' will appear as directories and files.
+
+The `=' argument syntax does not force the object being attached to be
+read-only, even if the argument appears to the left of `=>'.  A
+future extension will be to let you write "(read_only(F file))" as an
+expression.
+
+This only lets you attach existing files.  A future extension will be
+to let you write "path $= (S file)", where the "S" expression returns
+a slot object, and "$=" attaches a slot to the filesystem.  (Slots
+represent a location in which a file, directory or symlink may be
+created or deleted.)
+
+One caveat is that if you do
+  blah + /a/b=EXPR1 /a=EXPR2
+the binding for `/a/b' does not appear; it is overridden by `/a'.
+The directories `/bin', `/usr', `/etc' and `/lib' are implicitly
+attached to the filesystem that is constructed, so this means you
+can't yet attach new objects within these directories.
+
+
+Version 1.5:
+
+Recursive read-only objects are now implemented, and the shell will
+pass objects as read-only by default.  There is one caveat to this.
+If you enter a command like this:
+
+  blah a => a/b
+
+then `blah' will get read-only access to `a' but it won't get writable
+access to `a/b'.  Fixing this requires a new kind of proxy object
+which I'll implement in a later version.
+
+It's now possible for a process to use the object-capability protocol
+that I introduced in the previous version to create a restricted
+environment to run a child process in.  As an example, there's a
+"chroot" program.  It basically asks the server to return a reference
+to the directory it wants to chroot into, given a pathname for it.
+Then it creates a new fs_op object (which resides in the server
+process) for handling filesystem requests, using that directory as the
+root, and replaces its existing fs_op object with that one.
+
+Normally, use of "chroot" is restricted to root under Unix, because
+it's dangerous in the presence of setuid executables.  (You can hard
+link a setuid executable into your chroot directory and replace the
+libraries it uses with your own code.)  But Plash doesn't provide
+setuid executables, so it's safe.  Another mechanism will be provided
+instead of setuid.

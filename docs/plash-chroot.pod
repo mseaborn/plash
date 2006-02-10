@@ -1,0 +1,28 @@
+
+=head1 NAME
+
+plash-chroot - chroot program, for use under Plash
+
+=head1 SYNOPSIS
+
+B<plash-chroot> I<root-dir> I<command> [I<args...>]
+
+=head1 DESCRIPTION
+
+Runs the command with the root directory set to I<root-dir>.
+
+This program is a version of B<chroot> which works under Plash.
+Unlike the normal B<chroot>, use of B<plash-chroot> isn't restricted
+to the superuser.
+
+exec-object(1) may be more useful.
+
+=head1 SEE ALSO
+
+plash(1), exec-object(1)
+
+/usr/share/doc/plash
+
+=head1 AUTHOR
+
+Mark Seaborn <mseaborn@onetel.com>

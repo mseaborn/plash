@@ -1,0 +1,175 @@
+plash (1.8) unstable; urgency=low
+
+  * Add man pages (using Perl's POD format).
+  * Swapped the precedences of "+" and "=>" arglist operators.
+    "=>" now binds more tightly than "+".
+  * Changed packaging and build system so that glibc can be built fully
+    automatically.
+  * fs-operations.c, libc-misc.c:  open() now has limited functionality
+    for opening directories.  It will return a dummy FD (actually for
+    /dev/null).  This means you can call close() on it; this is
+    sufficient to run XEmacs.
+  * Added the "Gobj" method to fs-operations.c.
+    Changed resolve_obj() in resolve-filename.c so that it treats objects
+    as files as a fallback, even if they don't return OBJT_FILE.
+    This enables us to attach things like the options object into the
+    filesystem tree, so that we can pass them as arguments with the
+    shell's "/x=EXPR" syntax.
+  * Moved shell.c's Gtk code into shell-options.c, which is for a
+    separate executable.  Added an object to the shell for getting and
+    setting options; it is bound to the variable "options".
+  * The shell will now give a warning about running setuid/gid executables,
+    just as the server does (the code is now shared).  Also, if opening
+    an executable fails because its read permission was not set, it gives
+    a warning (to explain this difference from Unix).
+  * Added a warning message, printed by the server, when a process tries
+    to use open() on a directory.  XEmacs does this.
+
+ -- Mark Seaborn <mseaborn@onetel.com>  Sun, 15 May 2005 14:44:56 -0400
+
+plash (1.7) unstable; urgency=low
+
+  * Added `Pgid' parameter to exec object invocation.
+  * Changed cap_run_server() so that it exits when there are no exports,
+    not when the connection list is empty.  If imports remain, gives a
+    warning.
+  * Added vtable_name to filesys_obj vtable for debugging purposes.
+  * Added environment to the shell state and implemented variable
+    expressions and finished `def' bindings.
+  * Added `mkfs' expression.
+  * Added d_conn to shell.c and change the code to use it.  This is a more
+    general way of starting a server, but the generalisation turned out
+    not to be necessary.
+  * shell.c runs gc-uid-locks on startup.
+  * shell.c now creates a single server process on startup.
+  * Add reconnectable-obj.[ch]
+  * Merged filesys_slot objects into filesys_obj.  The purpose of this
+    was to allow slots to be passed between processes in order to
+    construct filesystems on another server, but this turned out not to
+    be immediately necessary.
+  * Add methods:  make_conn
+  * Add log-proxy.[ch]
+  * Add make-vtables.pl
+  * Add make-marshall.pl
+  * filesys_obj_free() now changes the vtable to one whose functions
+    do assert(0) before freeing the object, to catch uses of freed objects.
+
+ -- Mark Seaborn <mseaborn@onetel.com>  Sun, 01 May 2005 16:45:28 -0400
+
+plash (1.6) unstable; urgency=low
+
+  * Added the "pathname=expr" syntax to the shell.  Added "F pathname"
+    expression syntax for resolving pathnames.  Binding a pathname uses
+    an addition to build-fs.c, attach_at_pathname().
+  * shell.c:  factored a lot of code into separate functions.
+    Added "def x = EXPR" binding command, and added a "capcmd" expression.
+    Extended `server_desc' so that the server can import capabilities
+    from one connection, and export the imported capabilities on another
+    connection.  This is used for the return continuation that cap_cmd
+    passes from the shell to the client (via the forked server).
+  * Added marshalling for the `type' and `stat' methods.
+  * Added gcc-object.c/exec-object.c.
+  * Added filesysobj-union.c:  provides recursive union directories.
+  * Change the directory `list' method to return number of entries.
+    Change `list' in filesysobj-real.c to use cbuf to return data (much
+    more space efficient).
+  * Fixed fork() so that libc's connection info is properly reinitialised.
+  * Add object version of `exec':  modified fs-operations.c and
+    libc-fork-exec.c.
+  * Add serialise.[ch].  The exec call has been partially changed to
+    use these.
+  * Change cap_invoke and cap_call so that they take (and return) values
+    in `struct cap_args', rather than taking loads of arguments.
+    Added cap-utils.c.
+  * fs-operations.c: add warning to exec call about setuid bit not being
+    honoured.
+
+ -- Mark Seaborn <mseaborn@jhu.edu>  Tue, 18 Jan 2005 13:45:18 +0000
+
+plash (1.5) unstable; urgency=low
+
+  * Updated protocols.txt to cover object-capability protocol,
+    conn_maker and fs_op_maker.
+  * Created `chroot' program as a test and example.
+  * Introduced conn_maker and fs_ops_maker objects.  Change the shell
+    to start processes with references to these.  Rename COMM_FD to
+    PLASH_COMM_FD and introduce PLASH_CAPS; libc now reads these to
+    find the indexes of its capabilities, rather than just using
+    index 0.  Introduce `copy' method to fs_ops.  Change fork() to use
+    this instead of fs_op's fork method.
+  * build-fs.c:  now uses read-only proxies.  Changed the resolver so
+    that `.' and `/' can be attached as writable.
+  * Added filesysobj-readonly.c: provides read-only proxies for
+    filesystem objects.  One proxy type is sufficient to handle files,
+    directories and symlinks.
+  * cap-protocol.c:  Fix uses of stale connection references.
+    remote_obj_invoke() now correctly frees its arguments for broken
+    connections, so calls to broken connections will return an error.
+
+ -- Mark Seaborn <mseaborn@jhu.edu>  Fri,  7 Jan 2005 15:32:16 +0000
+
+plash (1.4) unstable; urgency=low
+
+  * Implemented an object-capability protocol for use over sockets.
+    This is another layer that I have put between the existing
+    filesystem requests and the comms.c layer.  It allows references
+    to objects to be transferred.  It's symmetric: the core protocol
+    does not distinguish between the client and the server.  The
+    ability to transfer references is not used yet, but in the future
+    it will provide a way for applications to construct filesystem
+    structures on the server.  A C API will be provided to do this.
+
+ -- Mark Seaborn <mseaborn@jhu.edu>  Mon,  3 Jan 2005 22:42:21 +0000
+
+plash (1.3) unstable; urgency=low
+
+  * Implemented FD redirection in the shell.
+  * Implemented rename() and link() for the same-directory case.
+    (The cross-directory case is trickier, 1. because it's hard to do
+    under Unix without race conditions in the presence of symlinks, and
+    2. it's complicated by directory proxy objects.)
+  * Improved one-line logging in the server.  Every call to the server
+    now produces a log line (though some are not fully filled out).
+  * Implemented bind().
+  * Implemented symlink() and utime()/utimes().
+  * Changed getuid() and getgid() so that they can take the uid/gid from
+    the environment variables PLASH_FAKE_UID/GID.  Some programs cannot
+    cope when they have a uid that does not have an entry in /etc/passwd.
+  * Added run-as-anonymous.
+  * Implemented globbing in the shell.  Pathnames now have structure in
+    the grammar; their components are separated by the parser.
+    When a pathname doesn't contain any wildcards, it is converted back
+    into a string.  It is canonicalised in the process; duplicate '/'s
+    are collapsed.
+  * Fixed FD leak:  the fabricated directory structure is now freed.
+
+ -- Mark Seaborn <mseaborn@jhu.edu>  Wed, 29 Dec 2004 17:10:41 +0000
+
+plash (1.2) unstable; urgency=low
+
+  * Added support for `#!' scripts (to both the shell and the server).
+  * Add the ability to run programs conventionally with the `!!' prefix.
+  * Add pipes.
+  * Fix bug in server that caused it to ignore processes when there are
+    multiple processes.
+  * Added options window that can be used to turn debugging output on.
+    Can be opened using the "opts" command.
+  * Build libpthread.so so that it doesn't contain filesystem syscalls.
+    The relevant functions are now forwarded to libc.so.
+  * Remove glibc's io/open64.os from the link.  This includes a syscall,
+    but didn't in an earlier glibc.  This is a rather embarrassing bug
+    because it shows I didn't do much testing -- even cat uses open64().
+
+ -- Mark Seaborn <mseaborn@jhu.edu>  Fri, 17 Dec 2004 04:15:08 +0000
+
+plash (1.1) unstable; urgency=low
+
+  * Added job control.
+
+ -- Mark Seaborn <mseaborn@jhu.edu>  Fri, 10 Dec 2004 04:15:08 +0000
+
+plash (1.0) unstable; urgency=low
+
+  * Initial release.
+
+ -- Mark Seaborn <mseaborn@jhu.edu>  Thu,  2 Dec 2004 04:15:08 +0000

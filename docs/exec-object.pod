@@ -1,0 +1,64 @@
+
+=head1 NAME
+
+exec-object - Creates executable objects for use under Plash
+
+=head1 SYNOPSIS
+
+B<exec-object> I<executable-pathname> I<root-directory>
+
+B<def> I<var> =
+  B<capcmd> B<exec-object> /bin/foo
+    /x=(B<mkfs> /bin/foo /usr ...)
+
+=head1 DESCRIPTION
+
+This is a command that is only useful when called using a B<capcmd>
+expression from Plash.
+
+This command returns an executable object E.  When E is invoked with a
+root directory I<dir2> as an argument, it forks a new process whose
+root directory is set to be a union of I<root-directory> and I<dir2>,
+and that new process execve()s I<executable-pathname>.
+
+This is commonly used with the shell's I<mkfs> expression, which will
+construct the root directory.
+
+=head1 RETURN VALUE
+
+The return value given by exit() isn't used.  This program returns an
+object reference using the B<return_cont> mechanism.  It doesn't exit
+until all the references to the object have been dropped.
+
+=head1 EXAMPLES
+
+  def my_oggenc =
+    capcmd exec-object '/usr/bin/oggenc'
+      /x=(mkfs /usr/bin/oggenc /usr/lib /lib)
+
+  def my_oggenc =
+    capcmd exec-object '/usr/bin/oggenc'
+      /x=(mkfs
+            /usr/bin/oggenc=(F /debian/usr/bin/oggenc)
+            /usr/lib=(F /debian/usr/lib)
+            /lib=(F /debian/lib))
+
+  def my_oggenc =
+    capcmd exec-object '/usr/bin/oggenc'
+      /x=(mkfs
+            /usr/bin/oggenc
+            /usr/lib/libvorbisenc.so.0
+            /usr/lib/libvorbis.so.0
+            /lib/i686/libm.so.6
+            /usr/lib/libogg.so.0
+            /usr/lib/plash/lib/libc.so.6)
+
+=head1 SEE ALSO
+
+plash(1)
+
+/usr/share/doc/plash
+
+=head1 AUTHOR
+
+Mark Seaborn <mseaborn@onetel.com>

@@ -174,30 +174,32 @@ void exec_obj_invoke(struct filesys_obj *obj1, struct cap_args args)
 
 	sock_fd_no = array_get_free_index(&fds2);
 	array_set_fd(r, &fds2, sock_fd_no, sock_fd);
-	{
-	  char buf[20];
-	  snprintf(buf, sizeof(buf), "%i", sock_fd_no);
-	  setenv("PLASH_COMM_FD", buf, 1);
-	  setenv("PLASH_CAPS", "fs_op;conn_maker;fs_op_maker", 1);
-	}
 
 	pid = fork();
 	if(pid == 0) {
 	  fds_t inst_fds = { fds2.fds, fds2.count };
+	  
+	  char buf[20];
+	  snprintf(buf, sizeof(buf), "%i", sock_fd_no);
+	  if(setenv("PLASH_COMM_FD", buf, 1) < 0 ||
+	     setenv("PLASH_CAPS", "fs_op;conn_maker;fs_op_maker", 1) < 0) {
+	    fprintf(stderr, "setenv failed");
+	    exit(1);
+	  }
 	  
 	  /* Close sockets */
 	  cap_close_all_connections();
 	  assert(plash_libc_reset_connection);
 	  plash_libc_reset_connection();
 	  
-	  install_fds(inst_fds);
+	  if(install_fds(inst_fds) < 0) { exit(1); }
 
 	  if(ea.pgid > 0) {
 	    if(setpgid(0, ea.pgid) < 0) perror("exec-object: setpgid");
 	  }
 	  
 	  execve(obj->cmd, ea.argv, environ /* FIXME */);
-	  fprintf(stderr, "exec-object: %s: %s\n", obj->cmd, strerror(errno));
+	  fprintf(stderr, "exec-object: exec(\"%s\"): %s\n", obj->cmd, strerror(errno));
 	  exit(1);
 	}
 	if(pid < 0) { err = errno; goto exec_error; }

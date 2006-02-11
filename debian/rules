@@ -1,6 +1,6 @@
 #!/usr/bin/make -f
 
-# Copyright (C) 2004 Mark Seaborn
+# Copyright (C) 2004, 2005 Mark Seaborn
 #
 # This file is part of Plash, the Principle of Least Authority Shell.
 #
@@ -22,15 +22,55 @@
 
 package=plash
 
-binary-arch:	checkroot
-	echo This needs updating -- please fix; exit 1
+GLIBC_DIR		= glibc-2.3.5
+GLIBC_ARCHIVE		= glibc-2.3.5.tar.bz2
+LINUXTHREADS_ARCHIVE	= glibc-linuxthreads-2.3.5.tar.gz
+
+stamp-dir/unpack-patch-glibc:
+	if [ ! -e $(GLIBC_ARCHIVE) ]; then \
+	  echo File $(GLIBC_ARCHIVE) not present; \
+	  echo Try downloading ftp://ftp.gnu.org/gnu/glibc/$(GLIBC_ARCHIVE); \
+	fi
+	if [ ! -e $(LINUXTHREADS_ARCHIVE) ]; then \
+	  echo File $(LINUXTHREADS_ARCHIVE) not present; \
+	  echo Try downloading ftp://ftp.gnu.org/gnu/glibc/$(LINUXTHREADS_ARCHIVE); \
+	fi
+	if [ ! -e $(GLIBC_ARCHIVE) ] || [ ! -e $(LINUXTHREADS_ARCHIVE) ]; then exit 1; fi
+	# Unpack
+	mkdir -p tmp
+	bzip2 -cd $(GLIBC_ARCHIVE) | tar -C tmp -xf -
+	gzip -cd $(LINUXTHREADS_ARCHIVE) | tar -C tmp/$GLIBC_DIR -xf -
+	# Apply patch
+	patch -p1 -d tmp/$GLIBC_DIR <patches/glibc-2005-10-04.diff
+	# Move into place
+	mv -v tmp/$GLIBC_DIR .
+	mkdir -p stamp-dir
+	touch stamp-dir/unpack-patch-glibc
+
+stamp-dir/configure-glibc: stamp-dir/unpack-patch-glibc
+	mkdir -p glibc-objs
+	# Use --disable-profile to save disc space
+	( cd glibc-objs && \
+	  ../$GLIBC_DIR/configure \
+		--prefix=/usr \
+		--enable-add-ons=linuxthreads \
+		--without-selinux --enable-kernel=2.2.0 \
+		--with-tls --without-__thread \
+		--disable-profile \
+	)
+	mkdir -p stamp-dir
+	touch stamp-dir/configure-glibc
+
+stamp-dir/build-glibc: stamp-dir/configure-glibc
+	cd glibc-objs && make
+	cd glibc-objs && ../make-glibc-extra.sh
+	mkdir -p stamp-dir
+	touch stamp-dir/build-glibc
+
+binary-arch:	checkroot stamp-dir/build-glibc
 	$(checkdir)
-	./make-glibc.sh
-	./make-dirs.sh
-	CC=gcc-3.3 ./make.sh libc
-	CC=gcc-3.3 ./make.sh shell
-	./docs/make-docs.sh
-	(cd setuid && CC=gcc-3.3 ./make-setuid.sh)
+	./configure GLIBC_DIR=glibc-objs
+	./make.sh
 	./debian/make-package.sh
 
 define checkdir

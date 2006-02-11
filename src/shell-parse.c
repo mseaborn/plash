@@ -55,6 +55,7 @@ int f_arglist1(const char **err_pos, region_t r, const char *pos_in1, const char
 int f_invocation(const char **err_pos, region_t r, const char *pos_in1, const char *end, const char **pos_out_p, void **ok_val_p);
 int f_pipeline(const char **err_pos, region_t r, const char *pos_in1, const char *end, const char **pos_out_p, void **ok_val_p);
 int f_command(const char **err_pos, region_t r, const char *pos_in1, const char *end, const char **pos_out_p, void **ok_val_p);
+int f_command_list1(const char **err_pos, region_t r, const char *pos_in1, const char *end, const char **pos_out_p, void **ok_val_p);
 int f_command_list(const char **err_pos, region_t r, const char *pos_in1, const char *end, const char **pos_out_p, void **ok_val_p);
 int f_fail(const char **err_pos, region_t r, const char *pos_in1, const char *end, const char **pos_out_p, void **ok_val_p);
 int f_null(const char **err_pos, region_t r, const char *pos_in1, const char *end, const char **pos_out_p, void **ok_val_p);
@@ -2025,7 +2026,7 @@ int f_command(const char **err_pos, region_t r, const char *pos_in1, const char 
   return 0;
 }
 
-int f_command_list(const char **err_pos, region_t r, const char *pos_in1, const char *end, const char **pos_out_p, void **ok_val_p)
+int f_command_list1(const char **err_pos, region_t r, const char *pos_in1, const char *end, const char **pos_out_p, void **ok_val_p)
 {
   const char *pos_out1;
   void *ok_val1;
@@ -2033,24 +2034,51 @@ int f_command_list(const char **err_pos, region_t r, const char *pos_in1, const 
   void *result750;
   const char *pos751;
   void *result753;
-  const char *pos754;
-  void *result756;
   const char *pos745;
   void *result747;
-  { const char *pos_out; void *ok_val; if(f_command(err_pos, r, pos_in1, end, &pos_out, &ok_val)) { pos748 = pos_out; result750 = ok_val; goto label749; } else goto label744; }
+  { const char *pos_out; void *ok_val; if(f_semicolon(err_pos, r, pos_in1, end, &pos_out, &ok_val)) { pos748 = pos_out; result750 = ok_val; goto label749; } else goto label744; }
  label749:
-  { const char *pos_out; void *ok_val; if(f_semicolon(err_pos, r, pos748, end, &pos_out, &ok_val)) { pos751 = pos_out; result753 = ok_val; goto label752; } else goto label744; }
+  { const char *pos_out; void *ok_val; if(f_command_list(err_pos, r, pos748, end, &pos_out, &ok_val)) { pos751 = pos_out; result753 = ok_val; goto label752; } else goto label744; }
  label752:
-  { const char *pos_out; void *ok_val; if(f_command_list(err_pos, r, pos751, end, &pos_out, &ok_val)) { pos754 = pos_out; result756 = ok_val; goto label755; } else goto label744; }
- label755:
-  pos_out1 = pos754;
-  { void *rest = result756; void *c = result750; ok_val1 = mk_commands_cons(r, c, rest); }
+  pos_out1 = pos751;
+  { void *rest = result753; ok_val1 = rest; }
   goto ok;
  label744:
   { const char *pos_out; void *ok_val; if(f_null(err_pos, r, pos_in1, end, &pos_out, &ok_val)) { pos745 = pos_out; result747 = ok_val; goto label746; } else goto fail; }
  label746:
   pos_out1 = pos745;
-  { ok_val1 = 0; }
+  { ok_val1 = NULL; }
+  goto ok;
+ ok:
+  *pos_out_p = pos_out1;
+  *ok_val_p = ok_val1;
+  return 1;
+ fail:
+  return 0;
+}
+
+int f_command_list(const char **err_pos, region_t r, const char *pos_in1, const char *end, const char **pos_out_p, void **ok_val_p)
+{
+  const char *pos_out1;
+  void *ok_val1;
+  const char *pos758;
+  void *result760;
+  const char *pos761;
+  void *result763;
+  const char *pos755;
+  void *result757;
+  { const char *pos_out; void *ok_val; if(f_command(err_pos, r, pos_in1, end, &pos_out, &ok_val)) { pos758 = pos_out; result760 = ok_val; goto label759; } else goto label754; }
+ label759:
+  { const char *pos_out; void *ok_val; if(f_command_list1(err_pos, r, pos758, end, &pos_out, &ok_val)) { pos761 = pos_out; result763 = ok_val; goto label762; } else goto label754; }
+ label762:
+  pos_out1 = pos761;
+  { void *rest = result763; void *c = result760; ok_val1 = mk_commands_cons(r, c, rest); }
+  goto ok;
+ label754:
+  { const char *pos_out; void *ok_val; if(f_null(err_pos, r, pos_in1, end, &pos_out, &ok_val)) { pos755 = pos_out; result757 = ok_val; goto label756; } else goto fail; }
+ label756:
+  pos_out1 = pos755;
+  { ok_val1 = NULL; }
   goto ok;
  ok:
   *pos_out_p = pos_out1;

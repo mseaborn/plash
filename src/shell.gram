@@ -20,8 +20,11 @@
 
 # This is used by the `source' command
 command_list =
-    c:command semicolon rest:command_list {{ mk_commands_cons(r, c, rest) }}
-  / null {{ 0 }};
+    c:command rest:command_list1 {{ mk_commands_cons(r, c, rest) }}
+  / null {{ NULL }};
+command_list1 =
+    semicolon rest:command_list {{ rest }}
+  / null {{ NULL }};
 
 command =
     "cd" ws dir:pathname {{ mk_chdir(r, dir) }}

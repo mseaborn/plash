@@ -1474,7 +1474,7 @@ struct process_desc_sec {
 };
 void set_up_sec_process(struct process_desc *desc1) {
   struct process_desc_sec *desc = (void *) desc1;
-  char buf[10];
+  char buf[20];
 
   snprintf(buf, sizeof(buf), "%i", getuid());
   setenv("PLASH_FAKE_UID", buf, 1);
@@ -2253,10 +2253,14 @@ void shell_command(region_t r, struct shell_state *state, struct command *comman
       cap_t c = eval_expr(state, expr);
       if(c) {
 	env_bind(&state->env, var2.data, c);
-	printf(_("plash: variable `%s' has been bound\n"), var2.data);
       }
-      else {
-	printf(_("plash: did not bind variable `%s'\n"), var2.data);
+      if(state->interactive) {
+	if(c) {
+	  printf(_("plash: variable `%s' has been bound\n"), var2.data);
+	}
+	else {
+	  printf(_("plash: did not bind variable `%s'\n"), var2.data);
+	}
       }
       return;
     }
@@ -2282,63 +2286,48 @@ void shell_command(region_t r, struct shell_state *state, struct command *comman
   printf("plash: command not handled\n");
 }
 
-/* Takes owning reference obj. */
-void source_command(region_t r, struct shell_state *state,
-		    const char *filename, cap_t obj)
+/* Reads the contents of file `obj' into a buffer.
+   `obj' is an owning reference.
+   `filename' is used for error reporting.
+   Returns -1 on error. */
+int read_file(region_t r, const char *filename, cap_t obj, seqf_t *data)
 {
-  int fd;
-  struct stat st;
-  int size;
-  char *data;
-  int i;
+  char *buf = NULL;
+  int size_alloc, size_got;
   int err;
-      
-  fd = obj->vtable->open(obj, O_RDONLY, &err);
+  struct stat st;
+  int fd = obj->vtable->open(obj, O_RDONLY, &err);
   filesys_obj_free(obj);
   if(fd < 0) {
     printf(_("plash: error: can't open `%s': %s\n"), filename, strerror(err));
-    return;
+    return -1;
   }
   if(fstat(fd, &st) < 0) { err = errno; goto source_error; }
-  size = st.st_size;
-  data = region_alloc(r, size);
-  i = 0;
-  while(i < size) {
-    int got = read(fd, data + i, size - i);
+  size_alloc = st.st_size;
+  size_got = 0;
+  buf = amalloc(size_alloc);
+  while(1) {
+    int got;
+    if(size_got == size_alloc) {
+      size_alloc += 1024;
+      buf = realloc(buf, size_alloc);
+      assert(buf);
+    }
+    got = read(fd, buf + size_got, size_alloc - size_got);
     if(got < 0) { err = errno; goto source_error; }
-    if(got == 0) { err = EIO; goto source_error; }
-    i += got;
+    if(got == 0) { break; }
+    size_got += got;
   }
   close(fd);
-  {
-    const char *pos_out;
-    void *val_out;
-    const char *err_pos = data;
-    if(f_command_list(&err_pos, r,
-		      data, data + size,
-		      &pos_out, &val_out)) {
-      if(pos_out == data + size) {
-	struct command_list *l = val_out;
-	while(l) {
-	  struct command *cmd;
-	  if(!m_commands_cons(l, &cmd, &l)) assert(0);
-	  shell_command(r, state, cmd);
-	}
-      }
-      else {
-	printf(_("plash: file parse failed (reached index %i, consumed only %i chars)\n"),
-	       err_pos - data, pos_out - data);
-      }
-    }
-    else {
-      printf(_("plash: file parse failed (reached index %i)\n"),
-	     err_pos - data);
-    }
-  }
-  return;
+  region_add_finaliser(r, free, buf);
+  data->data = buf;
+  data->size = size_got;
+  return 0;
  source_error:
   printf(_("plash: error reading `%s': %s\n"), filename, strerror(err));
   close(fd);
+  free(buf);
+  return -1;
 }
 
 void parse_and_run_shell_command(struct shell_state *state, seqf_t line)
@@ -2347,15 +2336,20 @@ void parse_and_run_shell_command(struct shell_state *state, seqf_t line)
   const char *pos_out;
   void *val_out;
   const char *err_pos = line.data;
-  if(f_command(&err_pos, r,
-	       line.data, line.data + line.size,
-	       &pos_out, &val_out)) {
+  if(f_command_list(&err_pos, r,
+		    line.data, line.data + line.size,
+		    &pos_out, &val_out)) {
     if(pos_out == line.data + line.size) {
-      shell_command(r, state, val_out);
+      struct command_list *l = val_out;
+      while(l) {
+	struct command *cmd;
+	if(!m_commands_cons(l, &cmd, &l)) assert(0);
+	shell_command(r, state, cmd);
+      }
     }
     else {
-      printf(_("plash: parse failed (consumed only %i chars)\n"),
-	     pos_out - line.data);
+      printf(_("plash: parse failed (consumed only %i chars, reached index %i)\n"),
+	     pos_out - line.data, err_pos - line.data);
     }
   }
   else {
@@ -2364,6 +2358,16 @@ void parse_and_run_shell_command(struct shell_state *state, seqf_t line)
   }
   if(MOD_DEBUG) printf("allocated %i bytes\n", region_allocated(r));
   region_free(r);
+}
+
+/* Takes owning reference obj. */
+void source_command(region_t r, struct shell_state *state,
+		    const char *filename, cap_t obj)
+{
+  seqf_t data;
+  if(read_file(r, filename, obj, &data) == 0) {
+    parse_and_run_shell_command(state, data);
+  }
 }
 
 /* Substitutions:

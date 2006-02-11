@@ -111,11 +111,35 @@ int real_symlink_stat(struct filesys_obj *obj1, struct stat *buf, int *err)
 int real_file_chmod(struct filesys_obj *obj, int mode, int *err)
 {
   struct real_file *file = (void *) obj;
+  
   /* Couldn't open the directory; we don't have an FD for it. */
   if(!file->dir_fd) { *err = EIO; return -1; }
   if(fchdir(file->dir_fd->fd) < 0) { *err = errno; return -1; }
+
+#if 1
   if(chmod(file->leaf, mode) < 0) { *err = errno; return -1; }
   return 0;
+#else
+  {
+    int inode_fd;
+    int rc;
+    /* We can't use chmod() because it follows symlinks, which would
+       make this code subject to symlink race conditions.  glibc exports
+       an lchmod() function, but it isn't implemented (it always returns
+       ENOSYS).  We do the equivalent of lchmod() by opening the file
+       and doing fchmod(). */
+    /* Problem:  open() fails if read permissions aren't set (even if the
+       user owns the file).  So this call can't re-enable read
+       permissions. */
+    inode_fd = open(file->leaf, O_RDONLY | O_NOFOLLOW);
+    if(inode_fd < 0) { *err = errno; return -1; }
+    if(fchmod(inode_fd, mode) < 0) { *err = errno; rc = -1; }
+    else { rc = 0; }
+  
+    close(inode_fd);
+    return rc;
+  }
+#endif
 }
 
 int real_dir_chmod(struct filesys_obj *obj, int mode, int *err)
@@ -127,23 +151,39 @@ int real_dir_chmod(struct filesys_obj *obj, int mode, int *err)
   return 0;
 }
 
-/* NB. This is vulnerable to race conditions.  The utimes() syscall will
-   follow symlinks, so someone could replace a file with a symlink.
-   This is not a serious problem, as it won't grant access to files
-   (except under contrived circumstances).
-   This could be fixed by using lutimes(), but that syscall is not
-   implemented. */
 int real_file_utimes(struct filesys_obj *obj, const struct timeval *atime,
 		     const struct timeval *mtime, int *err)
 {
   struct real_file *file = (void *) obj;
   struct timeval times[2];
+
+  times[0] = *atime;
+  times[1] = *mtime;
+
   /* Couldn't open the directory; we don't have an FD for it. */
   if(!file->dir_fd) { *err = EIO; return -1; }
   if(fchdir(file->dir_fd->fd) < 0) { *err = errno; return -1; }
-  times[0] = *atime;
-  times[1] = *mtime;
-#ifdef HAVE_LUTIMES
+
+#if 1
+  /* Note that glibc's futimes() call does utime() on /proc/self/fd/N.
+     Linux does not have a utimes() syscall. */
+  {
+    int rc;
+    int inode_fd = open(file->leaf, O_RDONLY | O_NOFOLLOW);
+    if(inode_fd < 0) { *err = errno; return -1; }
+    rc = futimes(inode_fd, times);
+    if(rc < 0) { *err = errno; }
+    close(inode_fd);
+    return rc;
+  }
+#else
+  /* NB. This is vulnerable to race conditions.  The utimes() syscall will
+     follow symlinks, so someone could replace a file with a symlink.
+     This is not a serious problem, as it won't grant access to files
+     (except under contrived circumstances).
+     This could be fixed by using lutimes(), but that syscall is not
+     implemented in glibc: it just returns ENOSYS. */
+# ifdef HAVE_LUTIMES
   if(lutimes(file->leaf, times) < 0) {
     if(errno == ENOSYS) {
       if(utimes(file->leaf, times) < 0) { *err = errno; return -1; }
@@ -152,9 +192,10 @@ int real_file_utimes(struct filesys_obj *obj, const struct timeval *atime,
     *err = errno;
     return -1;
   }
-#else
+# else
   if(utimes(file->leaf, times) < 0) { *err = errno; return -1; }
   return 0;
+# endif
 #endif
   return 0;
 }
@@ -241,7 +282,7 @@ struct filesys_obj *real_dir_traverse(struct filesys_obj *obj, const char *leaf)
       /* Dir changed to a symlink underneath us; could retry -- FIXME */
       return 0;
     }
-    set_close_on_exec_flag(fd, 1);
+    if(fd >= 0) { set_close_on_exec_flag(fd, 1); }
     new_obj = filesys_obj_make(sizeof(struct real_dir), &real_dir_vtable);
     new_obj->stat = stat;
     new_obj->fd = fd < 0 ? 0 : make_fd(fd);
@@ -472,6 +513,7 @@ int real_dir_create_file(struct filesys_obj *obj, const char *leaf,
      it didn't change to a directory.  We must never pass the process a
      FD for a directory, because it could use it to break out of a chroot
      jail.  Passing devices is okay, though. */
+  /* This shouldn't happen, though, because we used O_EXCL. */
   /* We could also check that the inode number didn't change. */
   if(fstat(fd, &st) < 0) { close(fd); *err = errno; return -1; }
   if(S_ISDIR(st.st_mode)) {
@@ -526,21 +568,130 @@ int real_file_socket_connect(struct filesys_obj *obj, int sock_fd, int *err)
   struct real_file *file = (void *) obj;
   struct sockaddr_un name;
 
-  int len = strlen(file->leaf);
-  if(len + 1 > sizeof(name.sun_path)) {
-    *err = ENAMETOOLONG;
+  /* First, don't go through the hassle below if the object is not a
+     Unix domain socket.  We don't really want to hard link ordinary
+     files into /tmp. */
+  if(!S_ISSOCK(file->stat.st_mode)) {
+    *err = ECONNREFUSED;
     return -1;
   }
+
+#if 0
+  {
+    /* We assume that the absolute pathname /tmp/plash-sock-XXXXXX is
+       safe, and that neither this directory nor its contents can be
+       replaced with symlinks by programs running under Plash.
+       This may not be true if a program is given access to /tmp. */
+    char tmp_dir[] = "/tmp/plash-sock-XXXXXX";
+    char tmp_filename[100];
+    int len;
+    int result;
+    struct stat st;
+
+    if(!mkdtemp(tmp_dir)) { *err = errno; return -1; }
+    
+    /* Create a temporary directory.  Hard link the Unix domain socket
+       into it, and check that it was linked correctly. */
+    if(fchdir(file->dir_fd->fd) < 0) {
+      *err = errno;
+      result = -1;
+      goto remove_dir;
+    }
+
+    len = snprintf(tmp_filename, sizeof(tmp_filename),
+		   "%s/socket", tmp_dir);
+    assert(len >= 0 && len + 1 <= sizeof(tmp_filename));
+
+    if(link(file->leaf, tmp_filename) < 0) {
+      if(0) {
+	struct stat st;
+	if(stat(tmp_dir, &st) >= 0) {
+	  fprintf(stderr, MOD_MSG "connect: tmp dev=0x%x\n", file->stat.st_dev);
+	}
+	fprintf(stderr, MOD_MSG "connect: link() failed: %s\n", strerror(errno));
+	fprintf(stderr, MOD_MSG "connect: socket dev=0x%x\n", file->stat.st_dev);
+      }
+      result = -1;
+      *err = errno;
+      goto remove_dir;
+    }
+    if(stat(tmp_filename, &st) < 0) {
+      if(0) fprintf(stderr, MOD_MSG "connect: stat() failed: %s\n", strerror(errno));
+      result = -1;
+      *err = errno;
+      goto remove_both;
+    }
+    if(!(st.st_dev == file->stat.st_dev &&
+	 st.st_ino == file->stat.st_ino)) {
+      /* We hard linked the wrong object.  This was presumably the
+	 result of a race condition.  Should log a warning somewhere. */
+      if(0) fprintf(stderr, MOD_MSG "connect: dev/ino info does not match\n");
+      result = -1;
+      *err = EIO; /* Any better error codes? */
+      goto remove_both;
+    }
+    
+    name.sun_family = AF_LOCAL;
+    memcpy(name.sun_path, tmp_filename, len + 1);
+    if(connect(sock_fd, &name,
+	       offsetof(struct sockaddr_un, sun_path) + len + 1) < 0) {
+      result = -1;
+      *err = errno;
+      goto remove_both;
+    }
+    result = 0;
+
+  remove_both:
+    unlink(tmp_filename);
+  remove_dir:
+    rmdir(tmp_dir);
+    return result;
+  }
+#else
+  {
+    /* This code is vulnerable to symlink race conditions. */
+    int len = strlen(file->leaf);
+    if(len + 1 > sizeof(name.sun_path)) {
+      *err = ENAMETOOLONG;
+      return -1;
+    }
   
-  if(fchdir(file->dir_fd->fd) < 0) { *err = errno; return -1; }
-  name.sun_family = AF_LOCAL;
-  memcpy(name.sun_path, file->leaf, len);
-  name.sun_path[len] = 0;
-  if(connect(sock_fd, &name,
-	     offsetof(struct sockaddr_un, sun_path) + len + 1) < 0) {
-    *err = errno;
-    return -1;
+    if(fchdir(file->dir_fd->fd) < 0) { *err = errno; return -1; }
+    name.sun_family = AF_LOCAL;
+    memcpy(name.sun_path, file->leaf, len);
+    name.sun_path[len] = 0;
+    if(connect(sock_fd, &name,
+	       offsetof(struct sockaddr_un, sun_path) + len + 1) < 0) {
+      *err = errno;
+      return -1;
+    }
   }
+#endif
+  
+#if 0
+  /* This code doesn't work. */
+  {
+    int inode_fd, rc;
+    if(fchdir(file->dir_fd->fd) < 0) { *err = errno; return -1; }
+    inode_fd = open(file->leaf, O_RDONLY | O_NOFOLLOW);
+    if(inode_fd < 0) { *err = errno; return -1; }
+    set_close_on_exec_flag(inode_fd, 1);
+
+    name.sun_family = AF_LOCAL;
+    rc = snprintf(name.sun_path, sizeof(name.sun_path),
+		  "/proc/self/fd/%i", inode_fd);
+    assert(rc >= 0 && rc + 1 <= sizeof(name.sun_path));
+    if(connect(sock_fd, &name,
+	       offsetof(struct sockaddr_un, sun_path)
+	       + strlen(name.sun_path) + 1) < 0) {
+      *err = errno;
+      close(inode_fd);
+      return -1;
+    }
+    close(inode_fd);
+  }
+#endif
+  
   return 0;
 }
 
@@ -565,6 +716,8 @@ int real_dir_socket_bind(struct filesys_obj *obj, const char *leaf,
   name.sun_family = AF_LOCAL;
   memcpy(name.sun_path, leaf, len);
   name.sun_path[len] = 0;
+  /* Note that bind() should not follow symlinks when creating the
+     Unix domain socket, so there should be no symlink race condition. */
   if(bind(sock_fd, &name,
 	  offsetof(struct sockaddr_un, sun_path) + len + 1) < 0) {
     *err = errno;

@@ -113,10 +113,17 @@ int main(int argc, char *argv[])
 	 we don't get any notification (whether as read/write/except).
 	 So there is no way to terminate this loop.
 	 You have to kill the process.
+	 
 	 I suppose I could have it stat() the socket file every so
 	 often, and if the inode number has changed, that means someone
 	 has unlinked our socket and replaced it with a new one.
-	 But it could just mean our socket has been rename()'d. */
+	 But it could just mean our socket has been rename()'d.
+
+	 Another possibility is to hard link the socket somewhere else
+	 (eg. into /tmp) and stat() it every so often.  When st_nlink
+	 drops to 1, there are no other references, and we can delete
+	 the socket and exit. */
+      
       max_fd = sock_fd + 1;
       FD_SET(sock_fd, &read_fds);
 

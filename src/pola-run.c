@@ -634,6 +634,19 @@ int main(int argc, char **argv)
 
   state.root_node = fs_make_empty_node();
   assert(state.root_node);
+
+  /* Set up the PLASH_FAKE_{E,}[UG]ID environment variables so that the
+     process sees a sensible UID.  This is done before processing the
+     arguments so that it can be overridden with --env. */
+  if(!under_plash) {
+    char buf[20];
+    snprintf(buf, sizeof(buf), "%i", getuid());
+    setenv("PLASH_FAKE_UID", buf, 1);
+    setenv("PLASH_FAKE_EUID", buf, 1);
+    snprintf(buf, sizeof(buf), "%i", getgid());
+    setenv("PLASH_FAKE_GID", buf, 1);
+    setenv("PLASH_FAKE_EGID", buf, 1);
+  }
   
   if(handle_arguments(r, &state, 1, argc, argv)) { return 1; }
 
@@ -649,24 +662,7 @@ int main(int argc, char **argv)
     int args_count2;
     int socks[2];
     int pid;
-    
     struct filesys_obj *obj;
-    obj = resolve_file(r, state.root_dir, state.cwd,
-		       seqf_string(state.executable_filename),
-		       SYMLINK_LIMIT, 0 /* nofollow */, &err);
-    if(!obj) {
-      fprintf(stderr, NAME_MSG "open/exec: %s: %s\n",
-	      state.executable_filename, strerror(err));
-      return 1;
-    }
-    /* This function gives warnings about setuid/gid executables. */
-    executable_fd = open_executable_file(obj, seqf_string(state.executable_filename), &err);
-    filesys_obj_free(obj);
-    if(executable_fd < 0) {
-      fprintf(stderr, NAME_MSG "open/exec: %s: %s\n",
-	      state.executable_filename, strerror(err));
-      return 1;
-    }
     
     {
       struct arg_list *l;
@@ -706,6 +702,23 @@ int main(int argc, char **argv)
 	int err;
 	child_cwd = resolve_dir(r, child_root, NULL /* cwd */, cwd_path,
 				SYMLINK_LIMIT, &err);
+      }
+    
+      obj = resolve_file(r, child_root, child_cwd,
+			 seqf_string(state.executable_filename),
+			 SYMLINK_LIMIT, 0 /* nofollow */, &err);
+      if(!obj) {
+	fprintf(stderr, NAME_MSG "open/exec: %s: %s\n",
+		state.executable_filename, strerror(err));
+	return 1;
+      }
+      /* This function gives warnings about setuid/gid executables. */
+      executable_fd = open_executable_file(obj, seqf_string(state.executable_filename), &err);
+      filesys_obj_free(obj);
+      if(executable_fd < 0) {
+	fprintf(stderr, NAME_MSG "open/exec: %s: %s\n",
+		state.executable_filename, strerror(err));
+	return 1;
       }
     
       /* Handle scripts using the `#!' syntax. */

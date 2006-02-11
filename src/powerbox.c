@@ -181,6 +181,7 @@ void powerbox_invoke(struct filesys_obj *obj1, struct cap_args args)
       GtkFileChooserAction action;
       const char *title;
       const char *button_text;
+      int parent_window_id = 0;
 
       if(argm_array(&argbuf, args_ref, &size, &a)) goto error;
       for(i = 0; i < size; i++) {
@@ -225,6 +226,9 @@ void powerbox_invoke(struct filesys_obj *obj1, struct cap_args args)
 	}
 	else if(arity == 1 && seqf_equal(tag, seqf_string("Wantdir"))) {
 	  want_dir = TRUE;
+	}
+	else if(arity == 2 && seqf_equal(tag, seqf_string("Transientfor"))) {
+	  if(argm_int(&argbuf, args[1], &parent_window_id)) goto error;
 	}
 	else {
 	  fprintf(stderr, "powerbox: unknown arg \"%s\"\n",
@@ -308,6 +312,17 @@ void powerbox_invoke(struct filesys_obj *obj1, struct cap_args args)
 
       g_signal_connect(G_OBJECT(w->window), "response",
 		       G_CALLBACK(dialog_response), w);
+
+      /* Widget needs to be realized:  X window must be created before
+	 we can set the property on it. */
+      gtk_widget_realize(w->window);
+      if(parent_window_id) {
+	gdk_property_change(GTK_WIDGET(w->window)->window,
+			    gdk_atom_intern("WM_TRANSIENT_FOR", FALSE),
+			    gdk_atom_intern("WINDOW", FALSE), 32,
+			    GDK_PROP_MODE_REPLACE,
+			    (guchar *) &parent_window_id, 1);
+      }
       
       gtk_widget_show(w->window);
 

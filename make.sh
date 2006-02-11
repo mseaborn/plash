@@ -207,7 +207,7 @@ build_libc_ldso_extras () {
 
   echo Linking $OUT/combined-rtld.os
   ld -r obj/rtld-libc-misc.os obj/libc-getuid.os \
-	obj/libc-comms.os \
+	obj/rtld-libc-comms.os \
 	obj/cap-utils.os \
 	obj/cap-call-return.os \
 	obj/rtld-cap-protocol.os \

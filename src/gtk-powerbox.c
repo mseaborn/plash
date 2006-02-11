@@ -28,7 +28,9 @@
 #include <gtk/gtkdialog.h>
 
 #include <gtk/gtkmessagedialog.h>
-#include <gtk/gtklabel.h>
+
+#include <gdk/gdkwindow.h>
+#include <gdk/gdkx.h>
 
 #include "region.h"
 #include "filesysobj.h"
@@ -38,6 +40,8 @@
 
 
 #define MOD_MSG "gtk-powerbox: "
+
+#define LOG_NO_OP(name) fprintf(stderr, MOD_MSG "NO-OP: " name "\n");
 
 
 #define TYPE_FILE_POWERBOX    (file_powerbox_get_type())
@@ -49,15 +53,13 @@ typedef struct _FilePowerbox FilePowerbox;
 
 struct _FilePowerboxClass
 {
-  GtkObjectClass parent_class;
-
-  /* Copied from GtkDialog */
-  void (* response) (FilePowerbox *dialog, gint response_id);
+  GtkDialogClass parent_class;
 };
 
 enum FilePowerboxProp {
   PROP_ACTION = 1,
-  PROP_LAST = PROP_ACTION
+  PROP_LOCAL_ONLY,
+  PROP_LAST = PROP_LOCAL_ONLY
 };
 
 enum PowerboxState {
@@ -68,57 +70,39 @@ enum PowerboxState {
 
 struct _FilePowerbox
 {
-  GtkObject parent_instance;
-
+  GtkDialog parent_instance;
+  
   enum PowerboxState state;
   GtkFileChooserAction action;
-  /* Filled out when state == STATE_SENT: */
-  GMainLoop *loop;
   /* Filled out when state == STATE_GOT_REPLY: */
   char *filename;
 };
 
-guint sig_response;
-
 GType file_powerbox_get_type(void);
 
+static GObjectClass *parent_class;
 
-static GType (*orig_gtk_file_chooser_dialog_get_type)(void);
-static void (*orig_gtk_widget_show)(GtkWidget *widget);
-static void (*orig_gtk_widget_show_all)(GtkWidget *widget);
-static gint (*orig_gtk_dialog_run)(GtkDialog *dialog);
-static GtkWidget* (*orig_gtk_message_dialog_new)(GtkWindow *parent, GtkDialogFlags flags, GtkMessageType type, GtkButtonsType buttons, const gchar *message_format, ...);
+static void
+file_powerbox_set_property (GObject      *object,
+			    guint         prop_id,
+			    const GValue *value,
+			    GParamSpec   *pspec);
+static void
+file_powerbox_get_property (GObject    *object,
+			    guint       prop_id,
+			    GValue     *value,
+			    GParamSpec *pspec);
+static void file_powerbox_map(GtkWidget *widget);
+
 
 static cap_t powerbox_req = NULL;
 
 
-static void lookup_sym(const char *name, void *fun_ptr)
-{
-  void **ptr = fun_ptr;
-  void *val = dlsym(RTLD_NEXT, name);
-  if(!val) {
-    fprintf(stderr, MOD_MSG "symbol \"%s\" not defined\n", name);
-    exit(1);
-  }
-  *ptr = val;
-}
-
-void init()
+static void init()
 {
   static int initialised = 0;
   if(!initialised) {
-    fprintf(stderr, MOD_MSG "init\n");
-    
-    lookup_sym("gtk_file_chooser_dialog_get_type",
-	       &orig_gtk_file_chooser_dialog_get_type);
-    lookup_sym("gtk_widget_show",
-	       &orig_gtk_widget_show);
-    lookup_sym("gtk_widget_show_all",
-	       &orig_gtk_widget_show_all);
-    lookup_sym("gtk_dialog_run",
-	       &orig_gtk_dialog_run);
-    lookup_sym("gtk_message_dialog_new",
-	       &orig_gtk_message_dialog_new);
+    fprintf(stderr, MOD_MSG "get_process_caps\n");
 
     if(get_process_caps("powerbox_req_filename", &powerbox_req,
 			NULL) < 0) {
@@ -133,39 +117,19 @@ void init()
 static void
 file_powerbox_init(FilePowerbox *pb)
 {
+  fprintf(stderr, MOD_MSG "init instance\n");
   pb->state = STATE_UNSENT;
   pb->action = GTK_FILE_CHOOSER_ACTION_OPEN;
-  pb->loop = NULL;
   pb->filename = NULL;
-  
-  // GtkFileChooserDialogPrivate *priv = G_TYPE_INSTANCE_GET_PRIVATE (dialog,
-  //                                                                  GTK_TYPE_FILE_CHOOSER_DIALOG,
-  //                                                                  GtkFileChooserDialogPrivate);
-  // dialog->priv = priv;
-  // dialog->priv->default_width = -1;
-  // dialog->priv->default_height = -1;
-  // dialog->priv->resize_horizontally = TRUE;
-  // dialog->priv->resize_vertically = TRUE;
-
-  // gtk_dialog_set_has_separator (GTK_DIALOG (dialog), FALSE);
-
-  /* We do a signal connection here rather than overriding the method in
-   * class_init because GtkDialog::response is a RUN_LAST signal.  We want *our*
-   * handler to be run *first*, regardless of whether the user installs response
-   * handlers of his own.
-   */
-  // g_signal_connect (dialog, "response",
-  //                   G_CALLBACK (response_cb), NULL);
 }
 
 static void
 file_powerbox_finalize(GObject *object)
 {
   FilePowerbox *pb = FILE_POWERBOX(object);
-  fprintf(stderr, MOD_MSG "finalize\n");
+  fprintf(stderr, MOD_MSG "finalize instance\n");
   g_free(pb->filename);
-  g_main_loop_unref (pb->loop);
-  // G_OBJECT_CLASS(parent_class)->finalize(object);
+  G_OBJECT_CLASS(parent_class)->finalize(object);
 }
 
 static void
@@ -173,7 +137,6 @@ file_powerbox_set_property (GObject      *object,
 			    guint         prop_id,
 			    const GValue *value,
 			    GParamSpec   *pspec)
-
 {
   FilePowerbox *pb = FILE_POWERBOX(object);
   switch(prop_id) {
@@ -215,22 +178,16 @@ file_powerbox_class_init (FilePowerboxClass *class)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (class);
   GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (class);
+  fprintf(stderr, MOD_MSG "init class\n");
+
+  parent_class = g_type_class_peek_parent (class);
 
   // gobject_class->constructor = file_powerbox_constructor;
   gobject_class->set_property = file_powerbox_set_property;
   gobject_class->get_property = file_powerbox_get_property;
   gobject_class->finalize = file_powerbox_finalize;
 
-  /* See GtkDialog */
-  sig_response =
-    g_signal_new ("response",
-                  G_OBJECT_CLASS_TYPE (class),
-                  G_SIGNAL_RUN_LAST,
-                  G_STRUCT_OFFSET (FilePowerboxClass, response),
-                  NULL, NULL,
-                  gtk_marshal_NONE__INT, /* was _gtk_marshal_NONE__INT */
-                  G_TYPE_NONE, 1,
-                  G_TYPE_INT);
+  widget_class->map = file_powerbox_map;
 
   /* See gtkfilechooser.c */
   g_object_class_install_property (gobject_class,
@@ -241,19 +198,14 @@ file_powerbox_class_init (FilePowerboxClass *class)
 						      GTK_TYPE_FILE_CHOOSER_ACTION,
 						      GTK_FILE_CHOOSER_ACTION_OPEN,
 						      GTK_PARAM_READWRITE));
-  
-  // parent_class = g_type_class_peek_parent (class);
-
-  // _file_powerbox_install_properties (gobject_class);
-
-  // g_type_class_add_private (class, sizeof (GtkFileChooserDialogPrivate));
+  g_object_class_install_property (gobject_class,
+				   PROP_LOCAL_ONLY,
+				   g_param_spec_boolean ("local-only",
+							 P_("Local Only"),
+							 P_("Whether the selected file(s) should be limited to local file: URLs"),
+							 TRUE,
+							 GTK_PARAM_READWRITE));
 }
-
-// static void
-// file_powerbox_dialog_iface_init (GtkFileChooserIface *iface)
-// {
-//   // ...
-// }
 
 GType file_powerbox_get_type(void)
 {
@@ -281,7 +233,7 @@ GType file_powerbox_get_type(void)
 //         NULL                                                        /* interface_data */
 //       };
 
-      type = g_type_register_static (GTK_TYPE_OBJECT, "FilePowerbox",
+      type = g_type_register_static (GTK_TYPE_DIALOG, "FilePowerbox",
 				     &info, 0);
 //       g_type_add_interface_static (type,
 //                                    GTK_TYPE_FILE_CHOOSER,
@@ -294,8 +246,6 @@ GType gtk_file_chooser_dialog_get_type(void)
 {
   fprintf(stderr, MOD_MSG "gtk_file_chooser_dialog_get_type\n");
   return file_powerbox_get_type();
-  // init();
-  // return orig_gtk_file_chooser_dialog_get_type();
 }
 
 GType gtk_file_chooser_get_type(void)
@@ -306,18 +256,29 @@ GType gtk_file_chooser_get_type(void)
 
 static GtkWidget *
 file_powerbox_new(const char *title, GtkWindow *parent,
-		  GtkFileChooserAction action)
+		  GtkFileChooserAction action,
+		  const char *button_text,
+		  va_list args)
 {
-  GtkObject *result = g_object_new(TYPE_FILE_POWERBOX,
+  GtkWidget *result = g_object_new(TYPE_FILE_POWERBOX,
+				   "title", title,
 				   "action", action,
 				   NULL);
-    fprintf(stderr, MOD_MSG "new\n");
+  fprintf(stderr, MOD_MSG "new\n");
 
-  /* NB. It's not really a GtkWidget. */
-  return (GtkWidget *) result;
+  if (parent)
+    gtk_window_set_transient_for (GTK_WINDOW (result), parent);
+  
+  while(button_text) {
+    int response_id = va_arg(args, gint);
+    fprintf(stderr, MOD_MSG "arg: %s, %i\n", button_text, response_id);
+    gtk_dialog_add_button (GTK_DIALOG (result), button_text, response_id);
+    button_text = va_arg(args, const char *);
+  }
+
+  return result;
 }
 
-/* 'parent' is ignored */
 /* button text and argument list is ignored. */
 /* 'action' determines whether we're opening or saving, and whether we want
    a file or directory. */
@@ -329,16 +290,12 @@ gtk_file_chooser_dialog_new (const gchar         *title,
                              const gchar         *first_button_text,
                              ...)
 {
-  const char *button_text;
+  GtkWidget *result;
   va_list args;
   va_start(args, first_button_text);
-  while(button_text) {
-    int id = va_arg(args, gint);
-    fprintf(stderr, MOD_MSG "arg: %s, %i\n", button_text, id);
-    button_text = va_arg(args, const char *);
-  }
+  result = file_powerbox_new(title, parent, action, first_button_text, args);
   va_end(args);
-  return file_powerbox_new(title, parent, action);
+  return result;
 }
 
 GtkWidget *
@@ -349,7 +306,12 @@ gtk_file_chooser_dialog_new_with_backend (const gchar          *title,
                                           const gchar          *first_button_text,
                                           ...)
 {
-  return file_powerbox_new(title, parent, action);
+  GtkWidget *result;
+  va_list args;
+  va_start(args, first_button_text);
+  result = file_powerbox_new(title, parent, action, first_button_text, args);
+  va_end(args);
+  return result;
 }
 
 gboolean
@@ -357,8 +319,17 @@ gtk_file_chooser_set_current_folder (GtkFileChooser *chooser,
                                      const gchar    *filename)
 {
   g_return_val_if_fail(IS_FILE_POWERBOX(chooser), FALSE);
-  fprintf(stderr, MOD_MSG "set_folder\n");
+  LOG_NO_OP("set_folder");
   return TRUE; /* successful */
+}
+
+void
+gtk_file_chooser_set_current_name  (GtkFileChooser *chooser,
+				    const gchar    *name)
+{
+  g_return_if_fail (GTK_IS_FILE_CHOOSER (chooser));
+  g_return_if_fail (name != NULL);
+  LOG_NO_OP("set_current_name");
 }
 
 void
@@ -366,7 +337,28 @@ gtk_file_chooser_add_filter (GtkFileChooser *chooser,
                              GtkFileFilter  *filter)
 {
   g_return_if_fail(IS_FILE_POWERBOX(chooser));
-  fprintf(stderr, MOD_MSG "add_filter: NO-OP\n");
+  LOG_NO_OP("add_filter");
+}
+
+void
+gtk_file_chooser_remove_filter (GtkFileChooser *chooser,
+				GtkFileFilter  *filter)
+{
+  LOG_NO_OP("remove_filter");
+}
+
+GSList*
+gtk_file_chooser_list_filters (GtkFileChooser *chooser)
+{
+  LOG_NO_OP("list_filters");
+  return NULL;
+}
+
+void
+gtk_file_chooser_set_filter (GtkFileChooser *chooser,
+			     GtkFileFilter  *filter)
+{
+  LOG_NO_OP("set_filter");
 }
 
 void
@@ -374,7 +366,7 @@ gtk_file_chooser_set_extra_widget (GtkFileChooser *chooser,
                                    GtkWidget      *extra_widget)
 {
   g_return_if_fail(IS_FILE_POWERBOX(chooser));
-  fprintf(stderr, MOD_MSG "set_extra_widget: NO-OP\n");
+  LOG_NO_OP("set_extra_widget");
 }
 
 gchar *
@@ -407,37 +399,136 @@ gtk_file_chooser_get_uri (GtkFileChooser *chooser)
   }
 }
 
+gboolean
+gtk_file_chooser_set_uri (GtkFileChooser *chooser,
+			  const char     *uri)
+{
+  g_return_val_if_fail (IS_FILE_POWERBOX (chooser), FALSE);
+  LOG_NO_OP("set_uri");
+  return FALSE;
+}
+
+gboolean
+gtk_file_chooser_select_uri (GtkFileChooser *chooser,
+			     const char     *uri)
+{
+  g_return_val_if_fail (GTK_IS_FILE_CHOOSER (chooser), FALSE);
+  g_return_val_if_fail (uri != NULL, FALSE);
+  LOG_NO_OP("select_uri");
+  return FALSE;
+}
+
+void
+gtk_file_chooser_unselect_uri (GtkFileChooser *chooser,
+			       const char     *uri)
+{
+  g_return_if_fail (GTK_IS_FILE_CHOOSER (chooser));
+  g_return_if_fail (uri != NULL);
+  LOG_NO_OP("unselect_uri");
+}
+
+void
+gtk_file_chooser_unselect_all (GtkFileChooser *chooser)
+{
+
+  g_return_if_fail (GTK_IS_FILE_CHOOSER (chooser));
+  LOG_NO_OP("unselect_all");
+}
+
+gboolean
+gtk_file_chooser_add_shortcut_folder (GtkFileChooser    *chooser,
+				      const char        *folder,
+				      GError           **error)
+{
+  g_return_val_if_fail (GTK_IS_FILE_CHOOSER (chooser), FALSE);
+  g_return_val_if_fail (folder != NULL, FALSE);
+  LOG_NO_OP("add_shortcut_folder");
+  return FALSE;
+}
+
+gboolean
+gtk_file_chooser_remove_shortcut_folder (GtkFileChooser    *chooser,
+					 const char        *folder,
+					 GError           **error)
+{
+  g_return_val_if_fail (GTK_IS_FILE_CHOOSER (chooser), FALSE);
+  g_return_val_if_fail (folder != NULL, FALSE);
+  LOG_NO_OP("remove_shortcut_folder");
+  return FALSE;
+}
+
+#if 1
+/* Not available before 2.8, so supply our own.
+   Makes assumptions about GtkDialog's private data. */
+typedef struct _ResponseData ResponseData;
+struct _ResponseData
+{
+  gint response_id;
+};
+
+static gint
+gtk_dialog_get_response_for_widget(GtkDialog *dialog, GtkWidget *widget)
+{
+  ResponseData *rd = g_object_get_data (G_OBJECT (widget),
+                                        "gtk-dialog-response-data");
+  return rd ? rd->response_id : GTK_RESPONSE_NONE;
+}
+#endif
+
+static GtkResponseType get_response_code(FilePowerbox *pb)
+{
+  GList *children, *list;
+  GtkResponseType rc = GTK_RESPONSE_NONE;
+  g_return_val_if_fail(IS_FILE_POWERBOX(pb), GTK_RESPONSE_NONE);
+  g_return_val_if_fail(GTK_IS_DIALOG(pb), GTK_RESPONSE_NONE);
+
+  fprintf(stderr, MOD_MSG "response codes:\n");
+  children = gtk_container_get_children(GTK_CONTAINER(GTK_DIALOG(pb)->action_area));
+  for(list = children; list; list = list->next) {
+    GtkResponseType rc2 = gtk_dialog_get_response_for_widget(GTK_DIALOG(pb), GTK_WIDGET(list->data));
+    fprintf(stderr, MOD_MSG "response code %i\n", rc);
+
+    /* Use the first widget's response code.  This seems to be the
+       rightmost widget.  Is this right? */
+    if(rc == GTK_RESPONSE_NONE) { rc = rc2; }
+  }
+  g_list_free(children);
+  return rc;
+}
+
 DECLARE_VTABLE(pb_return_cont_vtable);
 struct pb_return_cont {
   struct filesys_obj hdr;
   FilePowerbox *pb;
 };
-void pb_return_cont_free(struct filesys_obj *obj)
+static void pb_return_cont_free(struct filesys_obj *obj)
 {
   struct pb_return_cont *c = (void *) obj;
-  g_object_unref(c->pb);
+  if(c->pb) {
+    fprintf(stderr, MOD_MSG "cont_free: got no reply\n");
+    gtk_dialog_response(GTK_DIALOG(c->pb), GTK_RESPONSE_CANCEL);
+    g_object_unref(c->pb);
+  }
 }
-void pb_return_cont_invoke(struct filesys_obj *obj, struct cap_args args)
+static void pb_return_cont_invoke(struct filesys_obj *obj, struct cap_args args)
 {
   struct pb_return_cont *c = (void *) obj;
   region_t r = region_make();
-  {
+  if(c->pb) {
     seqf_t data = flatten_reuse(r, args.data);
     int ok = 1;
     m_int_const(&ok, &data, METHOD_POWERBOX_RESULT_FILENAME);
     if(ok) {
       fprintf(stderr, MOD_MSG "got reply\n");
-      
       c->pb->filename = strdup_seqf(data);
-      if(c->pb->loop) { g_main_loop_quit(c->pb->loop); }
-      g_signal_emit(c->pb, sig_response, 0, GTK_RESPONSE_OK);
-
-      g_object_unref(c->pb);
-      c->pb = NULL;
-      
-      region_free(r);
-      return;
+      gtk_dialog_response(GTK_DIALOG(c->pb), get_response_code(c->pb));
     }
+    else {
+      fprintf(stderr, MOD_MSG "got unrecognised reply\n");
+      gtk_dialog_response(GTK_DIALOG(c->pb), GTK_RESPONSE_CANCEL);
+    }
+    g_object_unref(c->pb);
+    c->pb = NULL;
   }
   region_free(r);
 }
@@ -489,7 +580,25 @@ static void file_powerbox_send_request(FilePowerbox *pb)
     a[0] = argmk_str(argbuf, mk_string(r, "Wantdir"));
   }
 
+  /* If the GtkDialog is a transient window, find its parent.  Tell
+     the powerbox manager to mark its window with WM_TRANSIENT_FOR
+     instead. */
+  {
+    GtkWindow *parent = GTK_WINDOW(pb)->transient_parent;
+    if(parent) {
+      int window_id = GDK_WINDOW_XID(GTK_WIDGET(parent)->window);
+      args[arg_count++] =
+	argmk_pair(argbuf, argmk_str(argbuf, mk_string(r, "Transientfor")),
+		   argmk_int(argbuf, window_id));
+    }
+    else {
+      fprintf(stderr, MOD_MSG "transient_parent is NULL\n");
+    }
+  }
+
+  assert(arg_count < args_size);
   init();
+  get_response_code(pb); // call for debugging output only
   {
     int i;
     bufref_t *a;
@@ -505,113 +614,13 @@ static void file_powerbox_send_request(FilePowerbox *pb)
   region_free(r);
 }
 
-/* We treat the gtk_widget_show() method as opening the powerbox and
-   assume that all the powerbox request's parameters have been filled
-   out by this point.  Send the powerbox request message.  For other
-   objects, fall through to the usual case. */
-void
-gtk_widget_show (GtkWidget *widget)
+static void
+file_powerbox_map (GtkWidget *widget)
 {
-  if(IS_FILE_POWERBOX(widget)) {
-    FilePowerbox *pb = FILE_POWERBOX(widget);
-    fprintf(stderr, MOD_MSG "show\n");
-    file_powerbox_send_request(pb);
-  }
-  else {
-    init();
-    orig_gtk_widget_show(widget);
-  }
-}
+  /* Normally we'd do the following, but we aim to prevent the real
+     window from being opened! */
+  /* GTK_WIDGET_CLASS (parent_class)->map (widget); */
 
-void
-gtk_widget_show_all (GtkWidget *widget)
-{
-  if(IS_FILE_POWERBOX(widget)) {
-    FilePowerbox *pb = FILE_POWERBOX(widget);
-    fprintf(stderr, MOD_MSG "show_all\n");
-    file_powerbox_send_request(pb);
-  }
-  else {
-    init();
-    orig_gtk_widget_show_all(widget);
-  }
-}
-
-gint
-gtk_dialog_run (GtkDialog *dialog)
-{
-  if(IS_FILE_POWERBOX(dialog)) {
-    FilePowerbox *pb = FILE_POWERBOX(dialog);
-
-    fprintf(stderr, MOD_MSG "dialog_run\n");
-    pb->loop = g_main_loop_new (NULL, FALSE);
-    GDK_THREADS_LEAVE ();  
-    g_main_loop_run (pb->loop);
-    fprintf(stderr, MOD_MSG "loop exited\n");
-    GDK_THREADS_ENTER ();
-    
-    return GTK_RESPONSE_ACCEPT; // GTK_RESPONSE_CANCEL
-  }
-  else {
-    init();
-    return orig_gtk_dialog_run(dialog);
-  }
-}
-
-
-/* Copied from gtkmessagedialog.c */
-GtkWidget*
-gtk_message_dialog_new (GtkWindow     *parent,
-                        GtkDialogFlags flags,
-                        GtkMessageType type,
-                        GtkButtonsType buttons,
-                        const gchar   *message_format,
-                        ...)
-{
-  GtkWidget *widget;
-  GtkDialog *dialog;
-  gchar* msg = NULL;
-  va_list args;
-
-  if(IS_FILE_POWERBOX(parent)) { parent = NULL; }
-  g_return_val_if_fail (parent == NULL || GTK_IS_WINDOW (parent), NULL);
-
-  widget = g_object_new (GTK_TYPE_MESSAGE_DIALOG,
-                         "message-type", type,
-                         "buttons", buttons,
-                         NULL);
-  dialog = GTK_DIALOG (widget);
-
-  if (flags & GTK_DIALOG_NO_SEPARATOR)
-    {
-      g_warning ("The GTK_DIALOG_NO_SEPARATOR flag cannot be used for GtkMessageDialog");
-      flags &= ~GTK_DIALOG_NO_SEPARATOR;
-    }
-
-  if (message_format)
-    {
-      va_start (args, message_format);
-      msg = g_strdup_vprintf (message_format, args);
-      va_end (args);
-
-      gtk_label_set_text (GTK_LABEL (GTK_MESSAGE_DIALOG (widget)->label),
-                          msg);
-
-      g_free (msg);
-    }
-
-  if (parent != NULL)
-    gtk_window_set_transient_for (GTK_WINDOW (widget),
-                                  GTK_WINDOW (parent));
-  
-  if (flags & GTK_DIALOG_MODAL)
-    gtk_window_set_modal (GTK_WINDOW (dialog), TRUE);
-
-  if (flags & GTK_DIALOG_DESTROY_WITH_PARENT)
-    gtk_window_set_destroy_with_parent (GTK_WINDOW (dialog), TRUE);
-
-  if (flags & GTK_DIALOG_NO_SEPARATOR)
-    gtk_dialog_set_has_separator (dialog, FALSE);
-
-  return widget;
+  fprintf(stderr, MOD_MSG "map window\n");
+  file_powerbox_send_request(FILE_POWERBOX(widget));
 }

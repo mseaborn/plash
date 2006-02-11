@@ -63,6 +63,7 @@ cap_seq_t process_caps = { 0, 0 }; /* uses a malloc'd block */
 cap_t fs_server = 0;
 cap_t conn_maker = 0;
 cap_t fs_op_maker = 0; /* not used by libc itself, but needs to be passed on by fork() */
+int libc_debug = FALSE;
 
 int plash_init()
 {
@@ -72,13 +73,28 @@ int plash_init()
     char *var;
     int count, i;
     seqf_t cap_list, elt, list;
+
+    var = glibc_getenv("PLASH_LIBC_DEBUG");
+    if(var) { libc_debug = TRUE; }
     
     var = glibc_getenv("PLASH_COMM_FD");
-    if(!var) { __set_errno(ENOSYS); return -1; }
+    if(!var) {
+#ifndef IN_RTLD
+      if(libc_debug) fprintf(stderr, "libc: PLASH_COMM_FD not set\n");
+#endif
+      __set_errno(ENOSYS);
+      return -1;
+    }
     comm_sock = my_atoi(var);
 
     var = glibc_getenv("PLASH_CAPS");
-    if(!var) { __set_errno(ENOSYS); return -1; }
+    if(!var) {
+#ifndef IN_RTLD
+      if(libc_debug) fprintf(stderr, "libc: PLASH_CAPS not set\n");
+#endif
+      __set_errno(ENOSYS);
+      return -1;
+    }
     process_caps_names = my_strdup(var);
 
     cap_list = seqf_string(var);
@@ -143,6 +159,10 @@ void plash_libc_reset_connection()
     free_slot(&conn_maker);
     free_slot(&fs_op_maker);
 
+    /* This allows dup2() and close() to clobber the file descriptor
+       from this point on. */
+    comm_sock = -1;
+    
     initialised = 0;
   }
 }

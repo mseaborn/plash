@@ -35,6 +35,7 @@ extern struct comm *comm;
 extern cap_seq_t process_caps;
 extern char *process_caps_names;
 extern cap_t fs_server, conn_maker, fs_op_maker;
+extern int libc_debug;
 
 int plash_init(void);
 int send_req(region_t r, seqt_t msg);

@@ -371,6 +371,7 @@ int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
   region_t r = region_make();
   struct cap_args result;
   int exec_fd = -1;
+  if(libc_debug) fprintf(stderr, "libc: execve()\n");
 
   /* Pack the arguments. */
   argmkbuf_t argbuf = argbuf_make(r);
@@ -391,13 +392,20 @@ int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
      will fail. */
   /* This part is scheduled for removal; the FD isn't needed any more. */
   exec_fd = dup(0);
-  if(exec_fd < 0) goto error;
+  if(exec_fd < 0) {
+    if(libc_debug) fprintf(stderr, "libc: execve: could not dup slot\n");
+    goto error;
+  }
 
-  if(plash_init() < 0) return -1;
-  if(!fs_server) { __set_errno(ENOSYS); return -1; }
+  if(plash_init() < 0) { goto error; }
+  if(!fs_server) {
+    if(libc_debug) fprintf(stderr, "libc: execve: fs_server not defined\n");
+    __set_errno(ENOSYS);
+    goto error;
+  }
 
   /* Unset the close-on-exec flag. */
-  if(fcntl(comm_sock, F_SETFD, 0) < 0) { return -1; }
+  if(fcntl(comm_sock, F_SETFD, 0) < 0) { goto error; }
       
   cap_call(fs_server, r,
 	   cap_args_make(cat6(r, mk_string(r, "Exec"),
@@ -478,6 +486,7 @@ int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
     }
   }
 
+  if(libc_debug) fprintf(stderr, "libc: execve: bad response\n");
   __set_errno(ENOSYS);
  error:
   region_free(r);

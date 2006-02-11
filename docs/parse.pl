@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 
-use XXMLParse;
+use IO::File;
+use XXMLParse qw(tag);
 
 
 my $subst =
@@ -25,9 +26,6 @@ my $subst =
      'man_pola-run',
     ) };
 
-if(scalar(@ARGV) != 1) { die }
-my $got = XXMLParse::read_file($ARGV[0]);
-
 # use Data::Dumper;
 # print Dumper($got);
 
@@ -39,6 +37,25 @@ my $aliases =
     'f' => 'function',
     'pre' => 'programlisting',
   };
+
+sub transform {
+  my ($t, $map) = @_;
+
+  if(!ref($t)) { $t }
+  elsif(ref($t) eq ARRAY) { [map { transform($_, $map) } @$t] }
+  elsif(ref($t) eq HASH) {
+    my $fun = $map->{$t->{T}};
+    if(defined $fun) {
+      transform(&$fun($t), $map);
+    }
+    else {
+      { T => $t->{T},
+	A => $t->{A},
+        B => transform($t->{B}, $map) }
+    }
+  }
+  else { die }
+}
 
 sub traverse {
   my ($t) = @_;
@@ -131,26 +148,51 @@ sub traverse {
   }
 }
 
-sub tag {
-  my $tag = shift;
-  { T => $tag, A => [], B => [@_] }
-}
-
-sub tagp {
-  my $tag = shift;
-  my $attrs = shift;
-  { T => $tag, A => $attrs, B => [@_] }
-}
-
 # Remove whitespace elements from a list
 sub remove_ws {
   grep { /\S/ } @_
 }
 
-print
-'<?xml version="1.0" encoding="UTF-8"?>
+
+sub show_tags {
+  my ($data) = @_;
+  my $tags = {};
+  my $f;
+  $f = sub {
+    my ($t) = @_;
+    if(ref($t) eq ARRAY) { foreach(@$t) { &$f($_) } }
+    elsif(ref($t) eq HASH) {
+      push(@{$tags->{$t->{T}}}, join(' ', map { $_->[0] } @{$t->{A}}));
+      &$f($t->{B});
+    }
+  };
+  &$f($data);
+  foreach my $tag (sort(keys(%$tags))) { print "$tag\n"; }
+}
+
+my $expand =
+  { 'splice' =>
+    sub {
+      my ($t) = @_;
+      my $n = XXMLParse::get_attr($t, 'name');
+      $subst->{$n} || die "$n not defined"
+    },
+  };
+
+
+my $in_file = 'index.xxml';
+my $got = XXMLParse::read_file($in_file);
+$got = transform($got, $expand);
+
+show_tags($got);
+
+my $out_file = 'out-test.xml';
+my $out = IO::File->new($out_file, 'w') || die "Can't open \"$out_file\"";
+
+print $out <<'END';
+<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE book PUBLIC "-//OASIS//DTD DocBook XML V4.2//EN"
      "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
-';
-
-XXMLParse::to_html(STDOUT, traverse($got));
+END
+XXMLParse::to_html($out, traverse($got));
+$out->close();

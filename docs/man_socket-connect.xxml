@@ -49,15 +49,15 @@ The process has to stick around as a proxy to forward method calls.
 {\refsect1: \title- Examples
 \ps:
 
-\pre~
-def edit_file = capcmd plash-run-emacs ...
-plash-socket-publish => ~/tmp/emacs /x=edit_file
+\pre
+>>def edit_file = capcmd plash-run-emacs ...
+>>plash-socket-publish => ~/tmp/emacs /x=edit_file
 
 Then in another shell:
 
-\pre~
-def edit_file = capcmd plash-socket-connect => ~/tmp/emacs
-edit_file => some-file.txt
+\pre
+>>def edit_file = capcmd plash-socket-connect => ~/tmp/emacs
+>>edit_file => some-file.txt
 
 }
 

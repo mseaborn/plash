@@ -213,10 +213,9 @@ if the current working directory is renamed or moved, the result of
 getcwd() will not reflect this.
 
 This approach means that doing:
-{\pre:
-  chdir("leafname")
-  chdir("..")
-}
+\pre
+>>chdir("leafname");
+>>chdir("..");
 has no effect (provided that the first call succeeds).  This contrasts
 with the usual Unix semantics, where the "leafname" directory could
 be moved between the two calls, giving it a different parent directory.

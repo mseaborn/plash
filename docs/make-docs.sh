@@ -13,7 +13,7 @@ fi
 set -e
 
 cd docs && (
-./parse.pl index.xxml >out-doc.xml
+./parse.pl index.xxml
 
 rm -rvf html
 mkdir -p html

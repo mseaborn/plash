@@ -68,8 +68,8 @@ write access to those files.
 By default, the Plash shell doesn't grant access to the X Window
 System.  You'll have to enable that with the command:
 
-\pre~
-plash-opts /x=options 'enable_x11' 'on'
+\pre
+>>plash-opts /x=options 'enable_x11' 'on'
 }
 
 
@@ -141,13 +141,13 @@ start XEmacs under a different UID.
 {\refsect1: \title- Examples
 \ps:
 
-\pre~
-def edit =
-  capcmd ~/projects/plash/bin/run-emacs
-     -iconic
-     -l ~/projects/plash/src/plash-gnuserv.el
-     + ~/config ~/.emacs
-       => ~/Mail ~/.im /tmp);
+\pre
+>>def edit =
+>>  capcmd ~/projects/plash/bin/run-emacs
+>>     -iconic
+>>     -l ~/projects/plash/src/plash-gnuserv.el
+>>     + ~/config ~/.emacs
+>>       => ~/Mail ~/.im /tmp);
 
 }
 

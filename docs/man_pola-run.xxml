@@ -205,12 +205,12 @@ argument also sets the process's cwd.
 Grant access to a default installation endowment.  This is equivalent
 to the options:
 
-\pre~
--fl /usr
--fl /bin
--fl /lib
--fl,objrw /dev/null
--fl,objrw /dev/tty
+\pre
+>>-fl /usr
+>>-fl /bin
+>>-fl /lib
+>>-fl,objrw /dev/null
+>>-fl,objrw /dev/tty
 
 }
 
@@ -220,9 +220,9 @@ to the options:
 Grant access to the X11 Window System.  This is currently equivalent
 to the options:
 
-\pre~
--fl,socket /tmp/.X11-unix/
--fl ~/.Xauthority
+\pre
+>>-fl,socket /tmp/.X11-unix/
+>>-fl ~/.Xauthority
 
 In the future, {\option:--x11} may work using an X11 proxy.
 
@@ -238,10 +238,10 @@ access on to the callee.
 
 Currently, this is equivalent to:
 
-\pre~
--fl /etc/resolv.conf
--fl /etc/hosts
--fl /etc/services
+\pre
+>>-fl /etc/resolv.conf
+>>-fl /etc/hosts
+>>-fl /etc/services
 
 }
 

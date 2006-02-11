@@ -62,8 +62,8 @@ options.  {\command:plash-opts} works just via the command line.
 
 {\refsect1: \title- Examples
 
-\pre:
-plash-opts /x=options 'enable_x11' 'on'
+\pre
+>>plash-opts /x=options 'enable_x11' 'on'
 }
 
 {\refsect1: \title- See also

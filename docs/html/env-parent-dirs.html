@@ -16,10 +16,9 @@ leave `/a/g' (the result) at the top.</p><p>The server represents the current wo
 directory stacks.  One of the consequences of these semantics is that
 if the current working directory is renamed or moved, the result of
 getcwd() will not reflect this.</p><p>This approach means that doing:
-</p><pre class="programlisting">chdir("leafname")
-  chdir("..")
-</pre><p>
-has no effect (provided that the first call succeeds).  This contrasts
+</p><pre class="programlisting">chdir("leafname");
+chdir("..");
+</pre><p>has no effect (provided that the first call succeeds).  This contrasts
 with the usual Unix semantics, where the "leafname" directory could
 be moved between the two calls, giving it a different parent directory.
 This is partly why programs like "rm" use <code class="function">fchdir()</code> -- to avoid this

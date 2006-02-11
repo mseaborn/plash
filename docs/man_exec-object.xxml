@@ -49,27 +49,27 @@ have been dropped.
 
 {\refsect1: \title- Examples
 
-\pre:{}
-  def my_oggenc =
-    capcmd exec-object '/usr/bin/oggenc'
-      /x=(mkfs /usr/bin/oggenc /usr/lib /lib)
-
-  def my_oggenc =
-    capcmd exec-object '/usr/bin/oggenc'
-      /x=(mkfs
-            /usr/bin/oggenc=(F /debian/usr/bin/oggenc)
-            /usr/lib=(F /debian/usr/lib)
-            /lib=(F /debian/lib))
-
-  def my_oggenc =
-    capcmd exec-object '/usr/bin/oggenc'
-      /x=(mkfs
-            /usr/bin/oggenc
-            /usr/lib/libvorbisenc.so.0
-            /usr/lib/libvorbis.so.0
-            /lib/i686/libm.so.6
-            /usr/lib/libogg.so.0
-            /usr/lib/plash/lib/libc.so.6)
+\pre
+>>def my_oggenc =
+>>  capcmd exec-object '/usr/bin/oggenc'
+>>    /x=(mkfs /usr/bin/oggenc /usr/lib /lib)
+>>
+>>def my_oggenc =
+>>  capcmd exec-object '/usr/bin/oggenc'
+>>    /x=(mkfs
+>>          /usr/bin/oggenc=(F /debian/usr/bin/oggenc)
+>>          /usr/lib=(F /debian/usr/lib)
+>>          /lib=(F /debian/lib))
+>>
+>>def my_oggenc =
+>>  capcmd exec-object '/usr/bin/oggenc'
+>>    /x=(mkfs
+>>          /usr/bin/oggenc
+>>          /usr/lib/libvorbisenc.so.0
+>>          /usr/lib/libvorbis.so.0
+>>          /lib/i686/libm.so.6
+>>          /usr/lib/libogg.so.0
+>>          /usr/lib/plash/lib/libc.so.6)
 }
 
 {\refsect1: \title- See also

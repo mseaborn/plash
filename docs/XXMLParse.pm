@@ -19,6 +19,10 @@
 
 package XXMLParse;
 
+require Exporter;
+@ISA = qw(Exporter);
+@EXPORT_OK = qw(tag tagp);
+
 # \tag;
 # \tag: greedy
 # \tag- single line
@@ -27,6 +31,7 @@ package XXMLParse;
 # \tag attr1=text1 attr2={text};
 # \tag1\tag2: ...
 # \Elt; becomes &lt;
+# \tag >>text lines...
 # {...}  these don't affect structure of data on their own (they interpolate)
 
 # Perhaps add a special indicator when the tag uses para separators?
@@ -52,6 +57,7 @@ sub read_file {
   if(!defined $f) { die "Can't open file `$file'" }
   my $data = join('', <$f>);
   if($data =~ /\t/) { warn "File `$file' contains tabs" }
+  print STDERR "Parse file $file\n";
   my $x = parse($data, Filename => $file);
   $f->close();
   $x;
@@ -60,7 +66,11 @@ sub read_file {
 sub parse {
   my ($data, @args) = @_;
   my $got = [];
-  parse_greedy({ Data => $data, @args }, $got);
+  my $a = { Data => $data, @args };
+  parse_greedy($a, $got);
+  if(pos($a->{Data}) < length($a->{Data})) {
+    die "Text remaining to parse at pos ".pos($a->{Data})
+  }
   $got
 }
 
@@ -88,6 +98,45 @@ sub flatten_attr {
   else { die "Tags not allowed in attributes" }
 }
 
+# Indent according to the structure
+sub pretty_print {
+  my ($out, $t) = @_;
+  pretty_print_aux($out, $t, '');
+}
+sub pretty_print_aux {
+  my ($out, $t, $indent, $in_attr) = @_;
+  if(!ref($t)) {
+    if($t =~ /\S/) {
+      $t =~ s/^\s*(.*?)\s*$/$1/;
+      $t =~ s/&/&amp;/g;
+      if($in_attr) { $t =~ s/"/&quot;/g; }
+      $t =~ s/</&lt;/g;
+      $t =~ s/>/&gt;/g;
+      print $out "$indent$t\n";
+    }
+  }
+  elsif(ref($t) eq ARRAY) {
+    foreach(@$t) { pretty_print_aux($out, $_, $indent, $in_attr); }
+  }
+  elsif($t->{T} =~ /^E(.*)$/) { print $out "&$1;" }
+  else {
+    if($in_attr) { warn "Tag inside attribute"; }
+    if(scalar(@{$t->{B}}) > 0) {
+      print $out "$indent<$t->{T}";
+      attrs_to_html($out, $t->{A});
+      print $out ">\n";
+      pretty_print_aux($out, $t->{B}, $indent.'  ');
+      print $out "$indent</$t->{T}>\n";
+    }
+    else {
+      print $out "$indent<$t->{T}";
+      pretty_print_aux($out, $t->{A}, $indent.'  ');
+      print $out " />\n";
+    }
+  }
+}
+
+# Output without any indentation
 sub to_html {
   my ($out, $t, $in_attr) = @_;
   
@@ -102,7 +151,6 @@ sub to_html {
     foreach(@$t) { to_html($out, $_, $in_attr); }
   }
   elsif($t->{T} =~ /^E(.*)$/) { print $out "&$1;" }
-  elsif($t->{T} eq 'ps') { to_html($out, paras(@{$t->{B}})) }
   else {
     if($in_attr) { warn "Tag inside attribute"; }
     if(scalar(@{$t->{B}}) > 0) {
@@ -231,6 +279,12 @@ sub parse_tag {
       elsif($a->{Data} =~ /\G~[ \t]*/gc) { parse_para($a, $body); last }
       elsif($a->{Data} =~ /\G\+/gc)      { parse_to_whitespace($a, $body); last }
       elsif($a->{Data} =~ /\G\\/gc)      { parse_tag($a, $body); last }
+      elsif($a->{Data} =~ /\G>>(.*\n)/gc) {
+	do {
+	  push(@$body, $1);
+	} while($a->{Data} =~ /\G\s*>>(.*\n)/gc);
+	last;
+      }
       elsif($a->{Data} =~ /\G([a-zA-Z_][a-zA-Z_0-9]*)(=?)/gc) {
 	my $attr_name = $1;
 	my $got = [];
@@ -265,7 +319,7 @@ sub parse_greedy {
     if($a->{Data} =~ /\G\}/gc) { pos($a->{Data}) = $i; last }
     elsif($a->{Data} =~ /\G\{/gc) { parse_upto_brace($a, $got) }
     elsif($a->{Data} =~ /\G\\/gc) { parse_tag($a, $got) }
-    elsif($a->{Data} =~ /\G([^\n{}\\]*|\n([ \t]*\n)*)/gc) { push(@$got, $1) }
+    elsif($a->{Data} =~ /\G([^\n{}\\]+|\n([ \t]*\n)*)/gc) { push(@$got, $1) }
     elsif($i == length($a->{Data})) { last }
     else { parse_error($a); die "Parse error" }
   }
@@ -278,7 +332,7 @@ sub parse_line {
     if($a->{Data} =~ /\G[}\n]/gc) { pos($a->{Data}) = $i; last }
     elsif($a->{Data} =~ /\G\{/gc) { parse_upto_brace($a, $got) }
     elsif($a->{Data} =~ /\G\\/gc) { parse_tag($a, $got) }
-    elsif($a->{Data} =~ /\G([^\n{}\\]*)/gc) { push(@$got, $1) }
+    elsif($a->{Data} =~ /\G([^\n{}\\]+)/gc) { push(@$got, $1) }
     elsif($i == length($a->{Data})) { last }
     else { parse_error($a); die "Parse error" }
   }
@@ -291,7 +345,7 @@ sub parse_para {
     if($a->{Data} =~ /\G(\}|\n[ \t]*\n)/gc) { pos($a->{Data}) = $i; last }
     elsif($a->{Data} =~ /\G\{/gc) { parse_upto_brace($a, $got) }
     elsif($a->{Data} =~ /\G\\/gc) { parse_tag($a, $got) }
-    elsif($a->{Data} =~ /\G([^\n{}\\]*|\n([ \t]*\n)*)/gc) { push(@$got, $1) }
+    elsif($a->{Data} =~ /\G([^\n{}\\]+|\n([ \t]*\n)*)/gc) { push(@$got, $1) }
     elsif($i == length($a->{Data})) { last }
     else { parse_error($a); die "Parse error" }
   }
@@ -304,7 +358,7 @@ sub parse_to_whitespace {
     if($a->{Data} =~ /\G[} \t\n]/gc) { pos($a->{Data}) = $i; last }
     elsif($a->{Data} =~ /\G\{/gc) { parse_upto_brace($a, $got) }
     elsif($a->{Data} =~ /\G\\/gc) { parse_tag($a, $got) }
-    elsif($a->{Data} =~ /\G([^\n{}\\ \t]*)/gc) { push(@$got, $1) }
+    elsif($a->{Data} =~ /\G([^\n{}\\ \t]+)/gc) { push(@$got, $1) }
     elsif($i == length($a->{Data})) { last }
     else { parse_error($a); die "Parse error" }
   }
@@ -328,6 +382,17 @@ sub parse_error {
     print STDERR "Error in file \"$a->{Filename}\":\n";
   }
   print STDERR "Error at: ".substr($a->{Data}, pos($a->{Data}))."\n";
+}
+
+sub tag {
+  my $tag = shift;
+  { T => $tag, A => [], B => [@_] }
+}
+
+sub tagp {
+  my $tag = shift;
+  my $attrs = shift;
+  { T => $tag, A => $attrs, B => [@_] }
 }
 
 1;

@@ -169,8 +169,8 @@ Extra Medium Large).
 Here's an example:
 
 {\xxmlexample:
-\xxml~
-\{\\tag attr=\{value\}: body\}
+\xxml
+>>{\tag attr={value}: body}
 
 \xml~
 <tag attr="value">body</tag>
@@ -182,8 +182,8 @@ terminated with a colon, the tag works greedily: it applies to all of
 the text up to the end of the block.
 
 {\xxmlexample:
-\xxml~
-\{\\tag1: \\tag2: body\}
+\xxml
+>>{\tag1: \tag2: body}
 
 \xml~
 <tag1><tag2>body</tag2></tag1>
@@ -194,12 +194,12 @@ If you end a tag's attributes with a hyphen "-" rather than a colon
 because no closing bracket is required.
 
 {\xxmlexample:
-\xxml~
-\{\\ul:
-\\li- list item 1
-\\li- list item 2
-\\li- list item 3
-\}
+\xxml
+>>{\ul:
+>>\li- list item 1
+>>\li- list item 2
+>>\li- list item 3
+>>}
 
 \xml~
 <ul>
@@ -213,17 +213,16 @@ Ending a tag with a tilde "~" will consume the following paragraph,
 ie. upto the next empty line.
 
 {\xxmlexample:
-{\xxml:
-\{\\ul:
-\\li~ blah
-blah
-blah
-
-\\li~ paragraph
-list
-entry
-\}
-}
+\xxml
+>>{\ul:
+>>\li~ blah
+>>blah
+>>blah
+>>
+>>\li~ paragraph
+>>list
+>>entry
+>>}
 
 {\xml:
 <ul>
@@ -243,12 +242,12 @@ longer names for the same thing, "itemizedlist" and "listitem", and it
 also requires you to use "para" tags in the "listitem"s.
 
 {\xxmlexample:
-\xxml~
-\{\\itemizedlist:
-\\listitem\\para- list item 1
-\\listitem\\para- list item 2
-\\listitem\\para- list item 3
-\}
+\xxml
+>>{\itemizedlist:
+>>\listitem\para- list item 1
+>>\listitem\para- list item 2
+>>\listitem\para- list item 3
+>>}
 
 \xml~
 <itemizedlist>
@@ -259,11 +258,11 @@ also requires you to use "para" tags in the "listitem"s.
 }
 
 Note that
-{\pre:
-\\listitem\\para- text}
+\pre
+>>\listitem\para- text
 is an abbreviation for
-{\pre:
-\\listitem- \\para- text}
+\pre
+>>\listitem- \para- text
 
 XXML provides some help in writing paragraphs, so you don't have to
 write "p" or "para" tags explicitly.  The "ps" tag will treat empty
@@ -272,13 +271,12 @@ postprocessor.  This is similar to how you write paragraph breaks in
 TeX.
 
 {\xxmlexample:
-{\xxml:
-\{\\ps:
-A paragraph.
-
-Another paragraph.
-\}
-}
+\xxml
+>>{\ps:
+>>A paragraph.
+>>
+>>Another paragraph.
+>>}
 
 {\xml:
 <para>A paragraph.</para>
@@ -290,8 +288,8 @@ Another paragraph.
 A tag without a body can be terminated with a semicolon ";".
 
 {\xxmlexample:
-\xxml~
-\\hr size=4;
+\xxml
+>>\hr size=4;
 
 \xml~
 <hr size=4>
@@ -302,8 +300,8 @@ whose name begins with "E" is converted into an entity.  It should not
 have attributes or a body.  (Note that tag names are case sensitive.)
 
 {\xxmlexample:
-\xxml~
-\\Eamp;
+\xxml
+>>\Eamp;
 
 \xml~
 &amp;

@@ -30,6 +30,10 @@
 #define _(x) x
 
 
+#define FALSE 0
+#define TRUE 1
+
+
 typedef struct region *region_t;
 region_t region_make();
 void region_free(region_t r);

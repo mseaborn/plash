@@ -74,7 +74,8 @@ int install_fds(fds_t array)
     if(array.fds[i] >= 0) {
       /* printf("dup2(%i, %i)\n", array.fds[i], max_fd + i); */
       if(dup2(array.fds[i], max_fd + i) < 0) {
-	perror("plash/client: dup2 (first)");
+	fprintf(stderr, "plash/client: dup2(%i, %i) (first): %s\n",
+		array.fds[i], max_fd + i, strerror(errno));
 	return -1;
       }
       if(set_close_on_exec_flag(max_fd + i, 1) < 0) perror("plash: cloexec");
@@ -86,7 +87,9 @@ int install_fds(fds_t array)
     if(array.fds[i] >= 0) {
       /* printf("dup2(%i, %i)\n", max_fd + i, i); */
       if(dup2(max_fd + i, i) < 0) {
-	perror("plash/client: dup2 (second)");
+	/* Printing should still be fairly safe. */
+	fprintf(stderr, "plash/client: dup2(%i, %i) (second): %s\n",
+		max_fd + i, i, strerror(errno));
 	return -1;
       }
     }

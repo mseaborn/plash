@@ -30,8 +30,13 @@
 #define _(x) x
 
 
-#define FALSE 0
-#define TRUE 1
+#if !defined(FALSE)
+#  define FALSE 0
+#endif
+
+#if !defined(TRUE)
+#  define TRUE 1
+#endif
 
 
 typedef struct region *region_t;

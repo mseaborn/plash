@@ -47,9 +47,6 @@
 #define NAME "pola-run"
 #define NAME_MSG NAME ": "
 
-#define FALSE 0
-#define TRUE 1
-
 
 int under_plash = FALSE;
 

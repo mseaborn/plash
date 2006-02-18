@@ -18,7 +18,7 @@
 # USA.
 
 
-PLASH_VERSION=@VERSION@
+PLASH_VERSION=@PACKAGE_VERSION@
 
 # Where to find partially-built glibc.
 # Used when building.

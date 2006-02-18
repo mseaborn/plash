@@ -241,12 +241,18 @@ int new_close(int fd)
 {
   log_msg(MOD_MSG "close\n");
   log_fd(fd, "close");
+  /* Make sure that comm_sock has been initialised */
+  plash_init();
+
   if(fd == comm_sock) {
     /* Pretend that this file descriptor slot is empty.  As far as the
        application knows, it *is* empty.  The chances are that the
        application is just closing all file descriptor numbers in a
        range.  Giving an error is the correct response in that
        case. */
+#if !defined(IN_RTLD)
+    if(libc_debug) fprintf(stderr, "libc: close(): refused to clobber fd %i\n", fd);
+#endif
     __set_errno(EBADF);
     return -1;
 
@@ -268,6 +274,8 @@ int new_dup2(int source_fd, int dest_fd)
   log_msg(MOD_MSG "dup2\n");
   log_fd(source_fd, "dup2 source");
   log_fd(dest_fd, "dup2 dest");
+  /* Make sure that comm_sock has been initialised */
+  plash_init();
 
   if(dest_fd == comm_sock) {
     /* Don't allow the socket file descriptor to be clobbered.  This
@@ -275,6 +283,9 @@ int new_dup2(int source_fd, int dest_fd)
        going any further, assuming they check the return value for an
        error.  This should be better than clobbering the socket and
        getting a failure later. */
+#if !defined(IN_RTLD)
+    if(libc_debug) fprintf(stderr, "libc: dup2(): refused to clobber fd %i\n", dest_fd);
+#endif
     __set_errno(EINVAL);
     return -1;
 

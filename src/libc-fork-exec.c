@@ -98,8 +98,13 @@ pid_t new_fork(void)
     region_free(r);
     pid = fork();
     if(pid == 0) {
+      int comm_sock_saved = comm_sock;
+      /* This sets comm_sock to -1.  We save comm_sock and restore it. */
       plash_libc_reset_connection();
+      comm_sock = comm_sock_saved;
+      
       if(dup2(fd, comm_sock) < 0) {
+	if(libc_debug) fprintf(stderr, "libc: fork(): dup2() failed\n");
 	/* Fail quietly at this point. */
 	unsetenv("PLASH_COMM_FD");
       }

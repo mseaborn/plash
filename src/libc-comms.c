@@ -86,6 +86,9 @@ int plash_init()
       return -1;
     }
     comm_sock = my_atoi(var);
+#ifndef IN_RTLD
+    if(libc_debug) fprintf(stderr, "libc: init: comm_sock=%i\n", comm_sock);
+#endif
 
     var = glibc_getenv("PLASH_CAPS");
     if(!var) {

@@ -177,22 +177,24 @@ void exec_obj_invoke(struct filesys_obj *obj1, struct cap_args args)
 
 	pid = fork();
 	if(pid == 0) {
+	  char buf[20];
 	  fds_t inst_fds = { fds2.fds, fds2.count };
 	  
-	  char buf[20];
+	  /* Close sockets */
+	  cap_close_all_connections();
+	  unsetenv("PLASH_COMM_FD");
+	  assert(plash_libc_reset_connection);
+	  plash_libc_reset_connection();
+	  
+	  if(install_fds(inst_fds) < 0) { exit(1); }
+	  
 	  snprintf(buf, sizeof(buf), "%i", sock_fd_no);
 	  if(setenv("PLASH_COMM_FD", buf, 1) < 0 ||
 	     setenv("PLASH_CAPS", "fs_op;conn_maker;fs_op_maker", 1) < 0) {
 	    fprintf(stderr, "setenv failed");
 	    exit(1);
 	  }
-	  
-	  /* Close sockets */
-	  cap_close_all_connections();
-	  assert(plash_libc_reset_connection);
 	  plash_libc_reset_connection();
-	  
-	  if(install_fds(inst_fds) < 0) { exit(1); }
 
 	  if(ea.pgid > 0) {
 	    if(setpgid(0, ea.pgid) < 0) perror("exec-object: setpgid");

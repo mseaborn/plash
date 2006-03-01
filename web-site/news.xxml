@@ -1,0 +1,560 @@
+
+\paras:
+
+\h2- Version 1.11
+
+The major new feature in this version is the "plash-run-emacs"
+program.  This lets you start an XEmacs process and then grant it
+access to individual files and directories, as you need to edit them.
+
+You can start XEmacs from the Plash shell with the following commands:
+
+\pre
+  >>plash-opts /x=options 'enable_x11' 'on'
+  >>def edit_file = capcmd plash-run-emacs
+
+Then edit the file "foo.txt" with:
+
+\pre
+  >>edit_file => foo.txt &
+
+This works like gnuserv (in fact, it calls some of gnuserv's Elisp
+code).  It grants access to foo.txt to plash-run-emacs, which adds it
+to XEmacs' file namespace.  Then it asks XEmacs to open a window to
+edit the file.
+
+"edit_file" is a shell variable which is bound to an executable
+object.  I have introduced two tools for exporting Plash object
+references to other instances of the shell.  In the shell where you
+bound the "edit_file" variable, do:
+
+\pre
+  >>plash-socket-publish => /tmp/emacs /x=edit_file
+
+Then you can use the following command in another instance of the
+shell to make the object available there:
+
+\pre
+  >>def edit_file = capcmd plash-socket-connect => /tmp/emacs
+
+(You can use plash's "--rcfile" switch to execute this on startup.)
+
+This only works with XEmacs at present, not GNU Emacs.  GNU Emacs has
+problems running under the Plash environment.  It doesn't like being
+started using "/lib/ld-linux.so.2 /usr/bin/emacs": it fails with a
+"Memory exhausted" error.  This needs more investigation.
+
+This functionality is fairly awkward.  One major improvement will be
+to implement a "powerbox".  XEmacs would be able to request a "File
+Open" dialogue box, through which the user would grant it access to
+files.
+
+
+\h3- Running the shell as root
+
+It's now safer to run the Plash shell as root.
+
+Before, the default installation endowment included "/dev/null" and
+"/dev/tty" as read/write slots.  A malicious program could delete or
+replace "/dev/null" and "/dev/tty" if the shell had that authority.
+Now they are attached as files, not slots.  Programs are not passed on
+the authority to delete them or create objects in their place.
+
+However, it's not yet completely safe to set the "enable_x11" option
+when running the shell as root.  In this case, the shell grants
+read-write access to the "/tmp/.X11-unix" directory.
+
+
+\h3- Following symlinks
+
+Suppose "link.txt" is a symbolic link to "file.txt".  If you run the
+command:
+
+\pre
+  >>cat link.txt
+
+then the shell follows the symlink and includes both "link.txt" and
+"file.txt", as read-only, in cat's file namespace.
+
+Previously, if you did "cat => link.txt", the shell would grant
+read/write/create access to the "link.txt" slot, but it would \em{not}
+follow the symlink.  This part was not fully implemented.  Now it is:
+The shell will follow the symlink and grant read/write/create access
+to the "file.txt" slot.
+
+This was necessary for making the "edit_file" command follow symlinks.
+
+However, I've come to realise that having the shell follow symlinks is
+more dangerous than I originally thought.  A command that is run
+multiple times with the same arguments, and granted read/write/create
+access to a slot, could get the shell to give it write access to the
+root directory.  The shell's security would be rendered useless.
+
+Part of this problem is inherent in symbolic links: they store a
+string, not an object reference.
+
+We could fix this by providing alternatives to symlinks, such as hard
+links that work with directories and across partitions.  An ideal
+solution would involve persistence.  But this would be difficult and
+complex to do under Unix.  It would be hard to integrate with existing
+filesystems.
+
+Furthermore, it doesn't address the problem of how to deal with
+symlinks that exist on your system already.  A simpler but not ideal
+solution would be for the shell to indicate when an argument is a
+symlink, and to provide a quick way of replacing or augmenting it with
+the object it points to.  This at least provides some form of review.
+For this to be usable, the shell will have to use GUI features.
+
+
+\h3- Documentation overhaul
+
+I have mostly converted the documentation to DocBook format, including
+the man pages (which were in POD format before).  I couldn't face
+writing XML by hand, so I have created an alternative surface syntax
+for XML.
+
+However, the documentation still needs work.
+
+
+\h3- Other changes
+
+Fixed a bug when using the shell's non-interactive mode (its "-c"
+option).
+
+
+
+\h2- Version 1.10
+
+New in this version is an implementation of fchdir().
+
+There are a number of programs that need fchdir(), including "rm -r",
+"install" and "mkdir -p".
+
+fchdir() sets the process's current directory given a file descriptor
+for a directory.
+
+Usually, under Plash, the open() function will return a real,
+kernel-level file descriptor for a file.  The file server passes the
+client this file descriptor across a socket.  But it's not safe to do
+this with kernel-level directory file descriptors, because if the
+client obtained one of these it could use it to break out of its
+chroot jail (using the kernel-level fchdir system call).
+
+So, for directories, the file server's open() method returns a
+dir_stack object, which is implemented by the file server rather than
+by the kernel.  Under Plash, libc's open() function returns a
+kernel-level file descriptor for the device /dev/null (a "dummy" file
+descriptor), but it stores the dir_stack object in a table maintained
+by libc.  Plash's fchdir() function in libc consults this table; it
+can only work if there is an entry for the given file descriptor
+number in the table.
+
+Creating a "dummy" kernel-level file descriptor ensures that the file
+descriptor number stays allocated from the kernel's point of view, and
+it ensures that passing the file descriptor to functions such as
+select() or write(), which aren't useful for directory file
+descriptors, gives an appropriate error rather than EBADF.
+
+Plash's dir_stack objects are a bit different from its directory
+objects.  Under Plash, a directory object doesn't know what its parent
+directory is -- multiple directories can contain the same object.
+This property is important because processes have their own private
+namespaces.  Plash implements the ".." component of filenames using
+dir_stacks.  A dir_stack is a list of directory objects corresponding
+to the components of a directory pathname.  For example, dir_stack for
+the pathname "/a/b" would contain the directory object for "/a/b" at
+the head, then the directory for "/a", then the root directory.  It
+also contains the names "b" and "a"; this is used to implement
+getcwd().
+
+This approach means that doing:
+
+\pre
+  >>chdir("leafname");
+  >>chdir("..");
+
+has no effect (provided that the first call succeeds).  This contrasts
+with the usual Unix semantics, where the "leafname" directory could
+be moved between the two calls, giving it a different parent directory.
+This is partly why programs like "rm" use fchdir() -- to avoid this
+problem.
+
+Note that dup(), dup2() and fcntl()/F_DUPFD will not copy directory
+file descriptors properly under Plash; only the kernel-level part is
+copied because Plash does not intercept these calls.  Similarly,
+directory file descriptors will not be preserved across execve()
+calls.  This is unlikely to be a problem in practice.  It could be
+fixed if necessary.
+
+
+\h2- Version 1.9
+
+In this version, I have changed the implementation of how file
+namespaces are constructed for processes.
+
+When the shell processes a command, it constructs a tree representing
+the filesystem namespace, indicating where to attach filesystem
+objects (files, directories and symlinks) in the namespace.  For
+example, the command:
+
+\pre
+  >>some-command /home/fred/my-file.txt /bin/new-prog=EXPR
+
+would produce a tree like the following:
+
+\pre
+>>/
+>> * etc: ATTACH
+>> * usr: ATTACH
+>> * lib: ATTACH
+>> * bin: ATTACH
+>>    * new-prog: ATTACH
+>> * home
+>>    * fred
+>>       * my-file.txt: ATTACH
+
+Each node in the tree is a "struct node".
+
+At the paths "/usr", "/lib", etc. are attached real directory objects
+that correspond to directories on a Linux filesystem.
+
+The tree nodes for "/" and "/home", however, do not correspond to any
+directory on a Linux filesystem.  The shell traverses this tree, and
+for these tree nodes, it creates "fabricated" directory objects that
+are implemented by a server process.  This is implemented in
+build-fs.c.  Fabricated directories are implemented in
+filesys-obj-fab.c.
+
+In the old version of the code, the information in a "struct node" was
+copied to create a fabricated directory.
+
+Also, when it reached a node that had an object attached to it, the
+code would not look at any other nodes attached \em{below} the node.  So,
+in the example above, "/bin/new-prog" would be ignored because a
+directory was attached at "/bin".  "/bin/new-prog" would not be
+visible in the filesystem.  The code did not have a way of combining
+the "new-prog" entry with the contents of "/bin".
+
+In the new version of the code, the information in a "struct node" is
+not copied.  There is a new kind of fabricated directory object (see
+build-fs-dynamic.c) which has a pointer to a "struct node".  This
+means that the tree nodes can be modified, and the changes will be
+visible to processes using this directory structure.
+
+Furthermore, the new code allows objects to be attached below
+directories that are attached to the tree.  The new fabricated
+directory objects can combine directory listings so that
+"/bin/new-prog" will be visible in the example above (as well as other
+entries in the directory attached at the path "/bin").  This is
+similar to union directories, but the semantics are slightly
+different.
+
+This change means that two things are immediately possible:
+
+\ul{
+
+\li{\p~ When you run a program you can grant it read-only access to a
+   directory, but read-write-create access to an object inside that
+   directory.  (This means that the caveat mentioned in the note for
+   version 1.5 no longer applies.)
+
+   \p~ For example, previously this command would not work as expected:
+
+   \pre
+     >>gcc -c foo.c => -o foo.o + .
+
+   \p~ It would fail to grant write access to foo.o.  Now it does so.
+}
+
+\li{\p~ Using the "PATH=EXPR" syntax, you can add entries to or replace
+   entries in directories, without changing the directory, including
+   those that are implicitly included in a process's file namespace,
+   such as "/bin" and "/usr".  (This means that the caveat in the note
+   for version 1.6 no longer applies.)
+}
+
+}
+
+This change is an important step for a couple of features that are
+planned for the future:
+
+\ul{
+
+\li~ Implementing a "powerbox" for GUI programs.  The user could, over
+   the lifetime of a process, grant it access to files in addition to
+   the ones it was granted when it was created.  These files will be
+   attached into the filesystem by modifying the "struct node"s.
+
+\li~ At the moment, Plash doesn't grant access to "/tmp" by default.
+   But it could grant every program access to its own private
+   temporary directory, mapped into the file namespace as "/tmp".
+   Below this we'll need to attach "/tmp/.X11-unix/X0" -- the socket
+   that X11 clients use to connect to the X server.
+
+}
+
+This facility is similar to mount points in Linux and Plan 9 (mount
+points are system-wide in Linux but per-process in Plan 9).  However,
+it has slightly different semantics.  In Linux, mount points are
+implemented on the basis of the identity of directories, using their
+inode numbers; one directory is redirected to another directory.  In
+Plash, attaching objects works on the basis of pathnames, not
+directories' identities.
+
+In both Linux and Plan 9, a directory must exist before you can mount
+another directory at that point to replace it.  This is not the case
+in Plash.  When you attach an object at "/bin", it adds a "bin" entry
+to the root directory.  When you then attach an object at "/bin/foo",
+the directory at "/bin" will be unioned with a "foo" entry.  Mount
+points are limited to directories, while Plash allows you to attach
+files, symlinks and other objects too.
+
+
+\h3- Other changes
+
+In libc, the functions set\{,e,re,res\}\{u,g\}id() have been made into
+no-ops, which always return indicating success.
+
+This is to deal with programs such as mkisofs and GNU make which make
+pointless calls to setreuid32().  mkisofs and make call setreuid32()
+with the current UID.  Ordinarily this should succeed and do nothing.
+But Plash's libc fakes the current UID: it has getuid() return the
+shell's UID (stored in the environment variable PLASH_FAKE_UID) rather
+than the process's UID.  mkisofs and make's call to setreuid32() will
+fail and they will exit.
+
+The reason for faking the UID was to get gnuclient to work -- gnuserv
+uses the user's UID in the filename of the socket it creates in /tmp.
+But maybe this was not worth it.  Either way, UID-related functions in
+libc aren't useful under Plash and can be turned into no-ops.
+Ideally, they should be logged.
+
+
+\h2- Version 1.8
+
+\h3- New build system
+
+You can now build glibc for Plash automatically.  (Previously,
+building glibc involved manually intervening in the build process.)
+
+
+\h3- Syntax change
+
+I have swapped the precedences of the "+" and "=>" argument list
+operators in the shell.  "=>" now binds more tightly than "+".  This
+means that:
+
+\pre
+  >>command a => b + c => d
+
+means the same as:
+
+\pre
+  >>command { a => b } + { c => d }
+
+
+\h3- Enabling X11 access
+
+The shell now has an option for automatically granting programs access
+to the X11 Window System.  When this is switched on, a command such
+as:
+
+\pre
+  >>xpdf foo.pdf
+
+is equivalent to:
+
+\pre
+  >>xpdf foo.pdf + ~/.Xauthority => /tmp/.X11-unix
+
+This option is switched off by default because X11 is not secure!  X
+servers provide no isolation between the clients connected to them.
+One client can read keyboard input that goes to other clients, grab
+the screen's contents, and feed events to other clients, including
+keypress events.  So \em{potentially}, an X client can gain the full
+authority of the user.
+
+The solution to this will be to write a proxy, through which an X
+client will connect to the X server, which will prevent it from
+interfering with other X clients.
+
+How to switch on this option (short version):
+
+Either:  From the shell, enter:
+
+\pre
+  >>plash-opts /x=options 'enable_x11' 'on'
+
+Or:  To enable it for all shell sessions, you can create a file
+"~/.plashrc" file containing this (note the semicolon):
+
+\pre
+  >>plash-opts /x=options 'enable_x11' 'on';
+
+and start the Plash shell with the command:
+
+\pre
+  >>plash --rcfile ~/.plashrc
+
+(In order to make it as predictable as possible, Plash doesn't read
+any options files by default, so you have to specify options files
+explicitly.)
+
+
+\h3- Shell options
+
+I have removed the "opts" command from the shell, which used to open
+an options window using Gtk.  There is now an external program which
+does the same thing, which you can run from the shell (so the shell is
+no longer linked with Gtk).  You can run this program with the command:
+
+\pre
+  >>plash-opts-gtk /x=options
+
+The shell creates an object -- which it binds to the "options"
+variable -- for setting and getting options.
+
+
+\h3- Support for directory file descriptors
+
+Plash now has partial support for using open() on directories.  XEmacs
+can now run under Plash.  XEmacs will just open() a directory and then
+close() the file descriptor it got, and this is all Plash supports at
+the moment.
+
+A complete solution would involve virtualising file descriptors, so
+that every libc call involving file descriptors is intercepted and
+replaced.  This would be a lot of work, because there are quite a few
+FD-related calls.  It raises some tricky questions, such as what bits
+of code use real kernel FDs and which use virtualised FDs.  It might
+impact performance.  And it's potentially dangerous: if the changes to
+libc failed to replace one FD-related call, it could lead to the wrong
+file descriptors being used in some operation, because in this case a
+virtual FD number would be treated as a real, kernel FD number.
+(There is no similar danger with virtualising the system calls that
+use the file namespace, because the use of chroot() means that the
+process's kernel file namespace is almost entirely empty.)
+
+However, a complete solution is complete overkill.  There are probably
+no programs that pass a directory file descriptor to select(), and no
+programs that expect to keep a directory file descriptor across a call
+to execve() or in the child process after fork().
+
+So I will be using a partial but safe solution:  When Plash's libc
+needs to return a directory file descriptor to the main program, it
+does open("/dev/null") and returns a real file descriptor.  This has
+the effect of allocating a FD number (so the kernel can't re-use the
+slot), and it provides a FD that can be used in any context where an
+FD can be used, without any harmful effects -- at least, as far as I
+know.
+
+If a program uses fchdir() or getdents() on the resulting FD, it will
+just get an error in the current version of Plash.  If I want to
+implement these calls in the future, it will just be a matter of
+having open() record in a table any directory FDs that it returns;
+fchdir() and getdents() can do a lookup in this table.  dup(), dup2(),
+close() and fcntl() (with F_DUPFD) will have to be changed to keep
+this table up-to-date.  Maybe execve() should give a warning if there
+are FDs that won't be kept in the new process.  Frequently-called
+functions like read() and write() will not have to be changed.
+
+
+
+\h2- Version 1.7
+
+This version adds a major new feature, executable objects.  See
+NOTES.exec.
+
+
+\h2- Version 1.6
+
+The shell now lets you start processes with existing files and
+directories attached to arbitrary points in the filesystem tree.  For
+example:
+
+\pre
+  >>gcc -c /arg/foo.c=(F bar.c) => -o out.o
+
+The directory `/arg' does not need to exist in the real filesystem.
+It will be created in the fabricated filesystem that `gcc' receives.
+
+The general form of this new kind of argument is "PATHNAME = EXPR",
+where the pathname may be relative to the root directory or the
+current directory.  At present, the only kind of expression is
+"F PATHNAME", which returns the file or directory object at that
+pathname (following symlinks if necessary).
+
+The command also receives the pathname being assigned to ("/arg/foo.c"
+in the example) as an argv argument, unless the argument occurs to the
+right of a "+" operator.  For example, you can give a process a
+different /tmp directory using:
+
+\pre
+  >>blah + /tmp=(F ~/new-tmp)
+
+The difference between writing
+
+\pre
+  >>blah a/b/c
+
+and
+
+\pre
+  >>blah a/b/c=(F a/b/c)
+
+is that if any of the components of the path `a/b/c' are symbolic
+links, in the first case the constructed filesystem will include those
+symbolic links and the objects they point to, whereas in the second
+case, `a', `a/b' and `a/b/c' will appear as directories and files.
+
+The `=' argument syntax does not force the object being attached to be
+read-only, even if the argument appears to the left of `=>'.  A
+future extension will be to let you write "(read_only(F file))" as an
+expression.
+
+This only lets you attach existing files.  A future extension will be
+to let you write "path $= (S file)", where the "S" expression returns
+a slot object, and "$=" attaches a slot to the filesystem.  (Slots
+represent a location in which a file, directory or symlink may be
+created or deleted.)
+
+One caveat is that if you do
+
+\pre
+  >>blah + /a/b=EXPR1 /a=EXPR2
+
+the binding for `/a/b' does not appear; it is overridden by `/a'.
+The directories `/bin', `/usr', `/etc' and `/lib' are implicitly
+attached to the filesystem that is constructed, so this means you
+can't yet attach new objects within these directories.
+
+
+\h2- Version 1.5
+
+Recursive read-only objects are now implemented, and the shell will
+pass objects as read-only by default.  There is one caveat to this.
+If you enter a command like this:
+
+\pre
+  >>blah a => a/b
+
+then `blah' will get read-only access to `a' but it won't get writable
+access to `a/b'.  Fixing this requires a new kind of proxy object
+which I'll implement in a later version.
+
+It's now possible for a process to use the object-capability protocol
+that I introduced in the previous version to create a restricted
+environment to run a child process in.  As an example, there's a
+"chroot" program.  It basically asks the server to return a reference
+to the directory it wants to chroot into, given a pathname for it.
+Then it creates a new fs_op object (which resides in the server
+process) for handling filesystem requests, using that directory as the
+root, and replaces its existing fs_op object with that one.
+
+Normally, use of "chroot" is restricted to root under Unix, because
+it's dangerous in the presence of setuid executables.  (You can hard
+link a setuid executable into your chroot directory and replace the
+libraries it uses with your own code.)  But Plash doesn't provide
+setuid executables, so it's safe.  Another mechanism will be provided
+instead of setuid.

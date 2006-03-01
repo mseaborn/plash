@@ -21,7 +21,7 @@ package XXMLParse;
 
 require Exporter;
 @ISA = qw(Exporter);
-@EXPORT_OK = qw(tag tagp);
+@EXPORT_OK = qw(tag tagp get_attr get_attr_opt);
 
 # \tag;
 # \tag: greedy
@@ -56,6 +56,10 @@ sub read_file {
   my $f = IO::File->new($file, 'r');
   if(!defined $f) { die "Can't open file `$file'" }
   my $data = join('', <$f>);
+
+  # Hack: remove comments
+  $data =~ s/###.*\n//g;
+  
   if($data =~ /\t/) { warn "File `$file' contains tabs" }
   print STDERR "Parse file $file\n";
   my $x = parse($data, Filename => $file);
@@ -90,6 +94,13 @@ sub get_attr {
     if($p->[0] eq $n) { return flatten_attr($p->[1]) }
   }
   die "Can't get attribute `$n'"
+}
+sub get_attr_opt {
+  my ($t, $n) = @_;
+  foreach my $p (@{$t->{A}}) {
+    if($p->[0] eq $n) { return flatten_attr($p->[1]) }
+  }
+  undef
 }
 sub flatten_attr {
   my ($t) = @_;
@@ -153,7 +164,7 @@ sub to_html {
   elsif($t->{T} =~ /^E(.*)$/) { print $out "&$1;" }
   else {
     if($in_attr) { warn "Tag inside attribute"; }
-    if(scalar(@{$t->{B}}) > 0) {
+    if(ref($t->{B}) ne ARRAY || scalar(@{$t->{B}}) > 0) {
       print $out "<$t->{T}";
       attrs_to_html($out, $t->{A});
       print $out ">";
@@ -278,11 +289,14 @@ sub parse_tag {
       elsif($a->{Data} =~ /\G-[ \t]*/gc) { parse_line($a, $body); last }
       elsif($a->{Data} =~ /\G~[ \t]*/gc) { parse_para($a, $body); last }
       elsif($a->{Data} =~ /\G\+/gc)      { parse_to_whitespace($a, $body); last }
+      elsif($a->{Data} =~ /\G\{/gc)      { parse_upto_brace($a, $body); last }
       elsif($a->{Data} =~ /\G\\/gc)      { parse_tag($a, $body); last }
       elsif($a->{Data} =~ /\G>>(.*\n)/gc) {
 	do {
 	  push(@$body, $1);
 	} while($a->{Data} =~ /\G\s*>>(.*\n)/gc);
+	# Put back last newline
+	pos($a->{Data}) = pos($a->{Data}) - 1;
 	last;
       }
       elsif($a->{Data} =~ /\G([a-zA-Z_][a-zA-Z_0-9]*)(=?)/gc) {

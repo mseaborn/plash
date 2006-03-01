@@ -1,0 +1,86 @@
+
+### \html:
+### \head{
+###   \title{Plash: tools for least privilege}
+###   \link rel=stylesheet href={styles.css};
+### }
+### \body style={margin-left: 0}:
+### 
+### 
+### \div class=topbar \table width={100%} \tr{
+###   \td{
+###     \img src={../logo.png};
+###   }
+###   \td{
+###     \h1- Plash: tools for practical least privilege
+###   }
+### }
+### 
+### \table width={100%} cellpadding=4 \tr valign=top:
+### 
+### \td{
+### 
+### 
+### }
+### 
+### \td:
+### 
+### 
+### \div class=indent:
+
+
+\p~ Plash is a system for sandboxing GNU/Linux programs.  Plash's aim is to protect you from the programs you run by letting you run them with the minimum authority and privileges they need do do their job -- this is the Principle of Least Authority (POLA).  Plash can run programs in a secure, restricted execution environment with access to a limited subset of your files.
+
+\p~ Plash can be used to run servers, command line tools, and applications with graphical user interfaces:
+
+\ul{
+
+{\li: \strong{Applications with graphical interfaces:}  You can dynamically grant GUI applications access rights to individual files that you want to open or edit.  This happens transparently through the Open/Save file chooser dialog box.  Plash replaces Gtk's GtkFileChooserDialog so that the file chooser is implemented outside the application in a separate process, as a trusted component.  This file chooser is known as a \strong{powerbox}, because it delegates additional power to the application.  (See {\a href={examples.html#gui-apps}: examples}.)}
+
+{\li: \strong{Servers:}  You can run a network-accessible server with minimal access rights so that if it is compromised (e.g. via a buffer overrun bug), the adversary cannot compromise the whole machine.  You can set up an HTTP or FTP server with a limited view of the filesystem to export handpicked files without having to rely on the server's application-level access control mechanisms.}
+
+{\li: \strong{Command line tools:}  Using Plash, you can run tools with read access to their inputs and write access to their outputs.  Sandboxes are lightweight, so you can, for example, create a sandbox for running gcc to compile a single file.}
+
+}
+
+\p~ In all cases, Plash gives you fine-grained control over dependencies.  You can link a program with specific versions of dynamic libraries by mapping individual files; or you can just map the whole /usr directory into the program's namespace.
+
+
+
+
+\h2\a name={mailing-list}- Mailing list
+
+\p~ There is a {\a
+href={http://lists.nongnu.org/mailman/listinfo/plash}: mailing list}
+for Plash.  To subscribe, e-mail {\a
+href={mailto:plash-request@nongnu.org}: plash-request@nongnu.org} with
+"subscribe" in the subject line.
+
+\p~ Another way to be notified of new releases is to subscribe to the
+project on its {\a href={http://freshmeat.net/projects/plash/}:
+Freshmeat page}.
+
+
+
+\h2\a name={related}- Related systems
+
+\ul{
+
+\li~ Polaris
+
+\li~ CapDesk
+
+\li~ \a href={http://www.eros-os.org} {EROS} (now called \a
+href={http://www.capros.org} {CapROS})
+
+}
+
+
+
+\h2\a name={roadmap}- Roadmap
+
+### python bindings
+
+### persistence
+
+### X11 access control, using proxy

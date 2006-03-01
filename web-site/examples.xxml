@@ -1,0 +1,101 @@
+
+\h1 name={gui-apps}- Running GUI applications
+
+\h2 name={leafpad}- Running Leafpad (a simple text editor)
+
+### \table class=sidebar align=right \tr\td{See Leafpad screenshot}
+
+Leafpad is a simple text editor that uses Gtk.  You can run it to use
+the powerbox with a shell script such as:
+
+\pre
+>>#!/bin/bash
+>>PB_SO=/usr/lib/plash/lib/powerbox-for-gtk.so
+>>pola-run --prog /usr/bin/leafpad \
+>>  -B -fl /etc \
+>>  --env LD_PRELOAD=$PB_SO -f $PB_SO \
+>>  --x11 --powerbox --pet-name "Leafpad"
+
+"-B" grants access to /usr, /bin and /lib.
+
+On my Debian system, it is necessary to include /etc/ld.so.conf in
+Leafpad's namespace, otherwise it will not link (it won't find the X
+libraries in /usr/X11R6/lib).  This is why we do "-fl /etc".  Perhaps
+"-fl /etc/ld.so.conf" would do instead.
+
+Leafpad does not need any configuration files from your home
+directory.  Since we can use the powerbox to grant Leafpad access to
+files to be edited, we don't initially need to grant it access to
+anything from your home directory.
+
+
+\h2 name={gnumeric}- Running Gnumeric
+
+Gnumeric is a spreadsheet application, written in C, which uses Gtk.
+
+Here is one way to run Gnumeric so that it uses the powerbox:
+
+\pre
+>>#!/bin/bash
+>>
+>>rm -rv tmp/gnumeric
+>>mkdir -p tmp/gnumeric
+>>
+>>PB_SO=/usr/lib/plash/lib/powerbox-for-gtk.so
+>>
+>>pola-run \
+>>  --prog /usr/bin/gnumeric \
+>>  -B -fl /etc \
+>>  -tw /tmp tmp/gnumeric \
+>>  -tw $HOME tmp/gnumeric \
+>>  -fw /dev/urandom -fw /dev/log -f /var/lib/defoma \
+>>  --env LD_PRELOAD=$PB_SO -f $PB_SO \
+>>  --x11 --powerbox --pet-name "Gnumeric"
+
+Gnumeric requires a number of configuration directories to exist
+(inside the user's home directory).  If they don't exist, it tries to
+create them, and exits if it can't.  In this example, we substitute a
+temporary directory (tmp/gnumeric) for our real home directory, using
+"-tw $HOME tmp/gnumeric".  This ensures that Gnumeric runs cleanly,
+from scratch, without picking up existing configuration files from
+previous runs (which, of course, may not be what you want).
+
+Gnumeric launches gconfd (a service which deals with configuration
+files).  Usually this process gets shared between GNOME applications.
+In this case, we want to isolate Gnumeric, so that it has its own
+instance of gconfd.  The sharing works by creating shared sockets
+inside /tmp, so we disable sharing by giving Gnumeric its own private
+instance of /tmp (which we map to tmp/gnumeric).
+
+
+\h2 name={inkscape}- Running Inkscape
+
+Inkscape is a vector graphics application which uses Gtk.  It is quite
+complex.  It seems to be written in C, and it deals with complex
+vector image file formats (e.g. SVG), so it may well have buffer
+overrun bugs.  If you run Inkscape on an SVG file downloaded from the
+Internet, it could be a malicious file that exploits a bug, so it's
+worth sandboxing Inkscape.
+
+Running Inkscape is similar to running Leafpad:
+
+\pre
+>>#!/bin/sh
+>>PB_SO=/usr/lib/plash/lib/powerbox-for-gtk.so
+>>pola-run --prog /usr/bin/inkscape \
+>>  -B -fl /etc \
+>>  -f /proc \
+>>  --env LD_PRELOAD=$PB_SO -f $PB_SO \
+>>  --x11 --powerbox --pet-name "Inkscape"
+
+One difference from before is "-f /proc".  Inkscape reads "/proc/stat"
+and "/proc/self/stat" -- perhaps something to do with the garbage
+collection library it uses -- and it exits if these are not available.
+So we grant access to "/proc"; however, this is not a great idea and
+it should be reviewed because it might reveal sensitive information.
+
+Note that granting access to "/proc/self" will not actually work under
+Plash, because the Linux kernel treats it specially: the information
+Linux returns from it depends on the PID of the process that is
+asking.  When running under Plash, a server process asks on behalf of
+the application process.

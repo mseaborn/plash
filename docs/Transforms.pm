@@ -28,6 +28,8 @@ sub flatten_lists {
   else { $x }
 }
 
+# Returns a list in which each element is either an untagged paragraph
+# or some tag.
 sub split_para_list {
   my ($data) = @_;
   my $paras = [];
@@ -47,12 +49,45 @@ sub split_para_list {
    grep { scalar(@$_) > 0 } @$paras]
 }
 
+# Takes a list and wraps untagged elements in a <p> or <para> tag (as
+# specified by $tag).
 sub introduce_paras {
   my ($tag, $list) = @_;
   [map {
      my $x = $_;
      if(ref($x) eq HASH) { $x, "\n\n" } else { tag($tag, $x), "\n\n" }
    } @$list]
+}
+
+sub transform {
+  my ($t, $map) = @_;
+
+  if(!ref($t)) { $t }
+  elsif(ref($t) eq ARRAY) { [map { transform($_, $map) } @$t] }
+  elsif(ref($t) eq HASH) {
+#    print "$t->{T}\n";
+    my $fun = $map->{$t->{T}};
+    if(defined $fun) {
+      transform(&$fun($t), $map);
+    }
+    else {
+      { T => $t->{T},
+	A => $t->{A},
+        B => transform($t->{B}, $map) }
+    }
+  }
+  else { die }
+}
+
+# Expands the <paras> tag
+sub expand_paras {
+  my ($data) = @_;
+  transform($data,
+	    { 'paras' => sub {
+		my ($d) = @_;
+		introduce_paras('p', split_para_list($d->{B}))
+	      }
+	    });
 }
 
 sub group_sections {

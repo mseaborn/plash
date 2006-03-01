@@ -1,0 +1,137 @@
+
+body {
+  margin: 0;
+  background-color: white;
+}
+/* Top title bar of page */
+.topbar {
+  background-color: #CFFDCC;
+  border-bottom: solid 2px;
+  border-color: #BAE3B7;
+  margin-bottom: 10px;
+}
+.topbar h1.h0 { font-size: large }
+div.logo {
+  padding-left: 0.3in;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+div.body {
+  margin-left: 10px;
+  margin-right: 10px;
+}
+
+/* Footer */
+hr { display: none }
+.footer {
+  background-color: #eef;
+  border-top: solid 2px;
+  border-color: #ccd;
+  margin-top: 12pt;
+  padding-left: 0.25in;
+  padding-right: 0.25in;
+  padding-top: 0.15in;
+  padding-bottom: 0.15in;
+}
+
+/* Downloads table */
+table.borders {
+  border-color: #777;
+  border-style: solid;
+  border-width: 2px;
+  border-collapse: collapse;
+}
+table.borders td, table.borders th {
+  border-color: #aaa;
+  border-style: solid;
+  border-width: 1px;
+  padding: 4pt;
+}
+th {
+  background-color: #eee;
+}
+/* table.borders ul { padding-left: 16pt } */
+
+div.indent { margin-left: 0.5in }
+div.indent > h1 { margin-left: -0.55in }
+div.indent > h2 { margin-left: -0.4in }
+div.indent > h3 { margin-left: -0.2in }
+div.body h1,
+div.body h2,
+div.body h3 {
+  padding-left: 0.1in;
+  padding-right: 0.1in;
+  background-color: #f0f0f0;
+}
+/*
+div.indent { margin-left: 0.5in }
+div.indent > h1 { margin-left: -0.5in }
+div.indent > h2 { margin-left: -0.3in }
+div.indent > h3 { margin-left: -0.1in }
+*/
+
+/*
+h1 { margin-left: 0in }
+h2 { margin-left: 0.2in }
+h3 { margin-left: 0.5in }
+p, dl, ul, ol { margin-left: 0.5in }
+pre { margin-left: 0.7in; margin-right: 0.7in }
+
+dd p { margin-left: 0 }
+
+hr { margin-left: 0in }
+
+p.footer { margin-left: 0; text-align: right }
+*/
+
+table ul, table pre { margin-left: 0 }
+
+
+/* Side bar for home page */
+/*
+table.sidebar {
+  border-style: solid;
+  border-width: medium;
+  background-color: #CFFDCC;
+  border-color: #BAE3B7;
+}
+*/
+table.sidebar {
+  margin-left: 3pt;
+  /* padding-left: 6pt; */
+  border-style: solid;
+  border-left-width: medium;
+  border-color: #ddd;
+}
+table.sidebar ul {
+  list-style: none;
+  margin-left: 0cm;
+  padding-left: 6pt;
+}
+table.sidebar ul li { display: block }
+table.sidebar li {
+  padding-bottom: 6pt;
+  font-size: small;
+}
+
+
+
+pre {
+  background-color: #E8EDFF;
+  padding: 6pt;
+  margin-left: 12pt;
+  margin-right: 12pt;
+}
+
+a:link { color: #204979 }
+a:visited { color: #796DBD }
+a:active { color: #FF7F28 }
+a:hover { text-decoration: underline }
+h1 a:link,
+h2 a:link,
+h3 a:link,
+h1 a:visited,
+h2 a:visited,
+h3 a:visited
+{ color: black }

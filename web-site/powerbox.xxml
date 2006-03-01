@@ -1,0 +1,248 @@
+
+\paras:
+
+\h2- Introduction to powerboxes
+
+
+\h3- What is a file powerbox?
+
+
+A file powerbox is a kind of file chooser dialog box, and it works the
+same from the user's perspective.  The difference is that as well as
+telling the application which file to access, it dynamically grants
+the application the right to access the file.
+
+This helps provide security: It means that the application does not
+have to be given access to all of the user's files by default.  This
+is an example of applying the principle of least privilege/authority:
+the aim is to give the program the authority it needs to do its job,
+but no more.
+
+
+\h3- Why "least privilege" is important: an example
+
+Suppose you run Gnumeric to view a spreadsheet you downloaded from the
+Internet.  Gnumeric might not be a malicious program, but suppose it
+has a buffer overrun bug -- quite possible considering that it is
+written in C -- and the spreadsheet exploits that bug.
+
+If Gnumeric runs with all your authority, the dodgy spreadsheet can
+read any of your files (such as "~/sensitive-file.txt", or your
+private keys from "~/.ssh") and send them back to its creator.
+
+But if Gnumeric runs with minimum authority, the malicious spreadsheet
+can't do anything except write to the file it was opened from, and
+open a powerbox to request a file.  The application cannot specify a
+default pathname for the powerbox to open, so for the spreadsheet to
+get access to a sensitive file, the user would have to specifically
+choose that file.  The malicious spreadsheet would find it very hard
+to get access to ".ssh": why would the user choose ".ssh" if Gnumeric
+opened a powerbox out of the blue without a good reason?
+
+
+\h3- How do powerboxes work?
+
+In order for the powerbox file chooser to provide security, it cannot
+be implemented by the application and its libraries.  It must be
+implemented as a separate, trusted component, and it must run in its
+own protection domain.
+
+The idea is that the file chooser has a trusted path to the user, so
+only the user can enter a filename into it.  This allows the system to
+distinguish between requests made by the user and requests made by the
+application.
+
+
+\h3- The history of powerboxes
+
+Powerboxes have been implemented in a couple of other systems already:
+
+{\ul:
+
+   {\li: {\a href={http://www.combex.com/tech/edesk.html}: CapDesk},
+   an environment based around the {\a href={http://www.erights.org}:
+   E programming language}, implemented in Java.}
+
+   {\li: {\a
+   href={http://www.hpl.hp.com/personal/Alan_Karp/polaris.pdf}:
+   Polaris}, a restricted environment for Windows that runs normal
+   Windows programs.}
+
+}
+
+
+\h2- How to run programs to use the powerbox
+
+Here is an example of running the simple text editor Leafpad so that
+it uses the powerbox:
+
+\pre
+>>pola-run --prog /usr/bin/leafpad \
+>>  --env LD_PRELOAD=powerbox-for-gtk.so \
+>>  -B -fl /etc \
+>>  --x11 --powerbox --pet-name "Leafpad"
+
+### See the {\a href={../html/pola-run.html}: man page for pola-run}
+### for more details.
+
+
+\h2- Limitations
+
+\h3- X Window System security
+
+The biggest limitation is that the X Window System provides no
+security.  The security of a powerbox relies on the powerbox having a
+secure path to the user, so that the user can enter a filename into
+the powerbox but the application can't.  However, under X, this isn't
+true: one X client can spoof keypresses by sending keypress events to
+another client.
+
+So the present system only raises the bar to a successful attack,
+rather than ruling an attack out.
+
+\h3- UI limitations
+
+The system doesn't provide any other way to dynamically grant an
+application access to files.  A gnuclient-style command line tool for
+this would be useful.
+
+
+\h2- What Gtk applications does this work with?
+
+This is an early version and has had limited testing with these
+applications:
+
+{\ul:
+
+\li~ Leafpad (a simple text editor): works
+
+\li~ Gnumeric: has some problems
+
+}
+
+
+\h2- How does the Powerbox for Gtk work?
+
+The Powerbox for Gtk reimplements Gtk's GtkFileChooserDialog
+interface.  It provides an LD_PRELOADed shared object, {\tt:
+powerbox-for-gtk.so}, which intercepts or outright replaces a number
+of Gtk functions.
+
+Unfortunately, the GtkFileChooserDialog interface was not designed
+as a call-return style interface.  The interface allows the
+application to control the file chooser while it is open.  It lets the
+application treat the file chooser as a GtkWidget, as a GtkWindow, and
+as an instance of many other classes.  This is not suitable when the
+file chooser window is implemented by another process.  So,
+reimplementing GtkFileChooserDialog is not seamless.
+
+{\tt: powerbox-for-gtk.so} implements a new object class,
+FilePowerbox, which inherits from GtkObject and nothing else.  It then
+changes various Gtk functions to operate on this type:
+
+{\dl:
+
+\dt\tt- gtk_file_chooser_dialog_new()
+\dt\tt- gtk_file_chooser_dialog_new_with_backend()
+\dt\tt- gtk_file_chooser_dialog_get_type()
+\dt\tt- gtk_file_chooser_get_type()
+\dt\tt- GTK_FILE_CHOOSER()
+\dt\tt- GTK_FILE_CHOOSER_DIALOG()
+
+\dd~ The GtkFileChooserDialog constructors are redirected so that it
+instead creates FilePowerbox instances, and the type description is
+redirected so that the type checks work.
+
+\dt\tt- gtk_widget_show()
+\dt\tt- gtk_widget_show_all()
+\dt\tt- gtk_dialog_run()
+
+\dd~ These functions are changed to check for the FilePowerbox as a
+special case, and they will send the powerbox manager process a
+message to open the powerbox window.  We have to intercept these
+functions in an ad-hoc way because GtkWidget and GtkDialog are
+classes, not interfaces.
+
+\dt\tt- gtk_file_chooser_set_current_folder()
+\dt\tt- gtk_file_chooser_get_filename()
+\dt\tt- gtk_file_chooser_get_uri()
+
+\dd~ The GtkFileChooserIface interface's public functions are
+replaced.
+
+\dt\tt- gtk_file_chooser_set_extra_widget()
+\dt\tt- gtk_file_chooser_add_filter()
+
+\dd~ Some of the GtkFileChooserIface functions become no-ops.  The
+powerbox doesn't support embedding an extra widget from the
+application.  Filters are not supported yet.
+
+\dt\tt- gtk_message_dialog_new()
+
+   {\dd: \p~ This is an annoying case.  Leafpad uses
+   gtk_message_dialog_new() to open an overwrite confirmation dialog
+   box with the "file save" dialog box as its parent window.
+   Unfortunately, gtk_message_dialog_new() requires that its "parent"
+   argument is either NULL or a GtkWindow.  FilePowerbox does not
+   inherit from GtkWindow, so passing that as the parent causes
+   gtk_message_dialog_new() to do nothing.  This stops Leafpad from
+   being able to save the file, since it never receives the
+   confirmation from the user.
+
+   \p~ This is frustrating because gtk_message_dialog_new() works when
+   there is no parent, when NULL is given.  I really want it to treat
+   a non-GtkWindow the same as NULL.
+
+   \p~ My solution is to copy the code for gtk_message_dialog_new()
+   into {\tt: powerbox-for-gtk.so}, and change its test for GtkWindow.
+   This works for this one case, but I expect similar problems will
+   crop up with other Gtk functions when I test powerbox-for-gtk.so
+   with other applications.}
+
+}
+
+I would have preferred it if the FilePowerbox could use the
+GtkFileChooserIface interface.  However, the interface itself (its
+vtable) is not part of Gtk's public interface.  The interface's vtable
+also depends on GtkFileSystem, which is also not public.
+
+
+\h2- How Plash's powerbox works
+
+The powerbox manager is compiled into the {\tt:pola-run} program
+launcher.  When the {\tt:--powerbox} option is used, {\tt:pola-run}
+will pass the application being launched an object under the name
+{\tt:powerbox_req_filename}.
+
+An application can invoke the object {\tt:powerbox_req_filename} to
+request a file from the user.  In response, the powerbox manager will
+open a file chooser.  If the user selects a filename, the powerbox
+manager attaches the file (or file slot) into the application's file
+namespace, and returns the filename to the application.
+
+When the application invokes {\tt:powerbox_req_filename}, it can pass
+some arguments, such as:
+
+{\ul:
+
+   \li~ Whether it wants a file or a directory.
+
+   \li~ Whether it is opening or saving a file.
+
+   \li~ A textual description of why it wants the file.
+
+   \li~ A start directory.  The powerbox manager checks that this
+   directory is already in the application's namespace, so that the
+   application can't confuse the user into granting it the wrong file.
+   }
+
+There is a simpler helper program called {\tt:powerbox-req} which
+invokes the {\tt:powerbox_req_filename} capability.  It is a command
+line program, so it is easy to use from XEmacs.
+
+The {\tt:--pet-name} argument provides a name for the powerbox manager
+to put in the title bar of the powerbox, so the user can tell which
+application the request comes from.
+
+The powerbox manager uses Gtk's original GtkFileChooserDialog to
+provide a file chooser.

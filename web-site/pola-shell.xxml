@@ -4,9 +4,7 @@
 
 \paras:
 
-### \sect1 id={shell-diffs}:
-### \h2- Overview of differences from Bash
-\h2- Differences from Bash: examples
+\h2 name={shell-diffs}- Differences from Bash: examples
 
 The syntax of Plash is similar to Unix shells such as the Bourne shell
 or Bash.  Here are some examples of command invocations using Plash:
@@ -87,8 +85,7 @@ or Bash.  Here are some examples of command invocations using Plash:
   Changing directory works as before.
 
 
-### \sect1 id={shell-missing-features}:
-\h2- Bourne shell features missing from Plash
+\h2 name={shell-missing-features}- Bourne shell features missing from Plash
 
 The following features are provided in the Bourne shell and Bash but
 not in Plash.
@@ -112,8 +109,7 @@ not in Plash.
 }
 
 
-### {\sect1 id={shell-inst-endowment}: \title- Installation endowment
-\h2- Installation endowment
+\h2 name={shell-inst-endowment}- Installation endowment
 
 A program's installation endowment is the set of files, directories
 and other objects that it needs and should have access to regardless
@@ -139,8 +135,7 @@ The default installation endowment is not configurable yet.  However,
 you can change it on a per-program basis by using executable objects.
 
 
-### {\sect1 id={shell-enable-x11}: \title- Enabling access to the X11 Window System
-\h2- Enabling access to the X11 Window System
+\h2 name={shell-enable-x11}- Enabling access to the X11 Window System
 
 The shell has an option for automatically granting programs access to
 the X11 Window System.  When this is switched on, a command such as:
@@ -187,8 +182,7 @@ any options files by default, so you have to specify options files
 explicitly.)
 
 
-### {\sect1 id={shell-job-control}:
-\h2- Job control
+\h2 name={shell-job-control}- Job control
 
 As with other shells, you can start a job in the background by putting
 "&" at the end of the command.  Or, having run a job in the
@@ -202,8 +196,7 @@ The command "bg <N>" resumes a job in the background.
 There is no command for listing the currently active jobs yet.
 
 
-### {\sect1 id={shell-scripts}:
-\h2- Shell scripts
+\h2 name={shell-scripts}- Shell scripts
 
 Plash has only rudimentary support for shell scripts.  You can get the
 shell to run a script file on startup with the {\option:--rcfile}

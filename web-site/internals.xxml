@@ -1,0 +1,308 @@
+
+\paras:
+
+\h1 name={internal-regions}- Region-based memory management
+
+See region.h
+
+A lot of the memory management in Plash is done using regions.
+Regions work like this:
+
+{\orderedlist:
+\listitem\ps- You create a region.  This allocates a medium-sized block (eg. 1k) initially.
+\listitem\ps- You allocate blocks from the region.
+\listitem\ps- You free the whole region.  This frees all the blocks that were allocated from it.
+}
+
+Regions don't provide a way to free individual blocks in the region.
+This means that allocation is fast, because there's no fragmentation
+within a region.  Deallocation is fast too, because all the blocks are
+freed in one step.
+
+The main reason for using regions in Plash is convenience.
+Deallocation becomes much less of a burden, and is easier to get
+right, so the chances of memory leaks are reduced.  If a complex
+structure is region-allocated, you don't need to traverse the
+structure to free each node individually.
+
+Using regions works well when allocation and deallocation follow the
+structure of the function call tree: when a structure is not used
+outside of the function that allocates it or the parent of the
+function that allocates it.  When this is not the case, and the
+amounts of storage allocated are large, regions are not so good.
+
+Plash uses reference counting for storage management when regions are
+not appropriate.
+
+It is possible to attach explicit finalisers to a region, so that when
+the region is free, other resources are freed, eg. file descriptors
+can be closed.
+
+
+\h1 name={internal-string}- String handling
+
+See region.h
+
+Plash has some functions for handling strings of bytes, which are used
+for text and binary data.  There are facilities for constructing
+strings, and decomposing strings.
+
+The seqf_t type ("flat sequence") is a struct which represents a
+string stored contiguously in memory.
+
+The seqt_t type ("tree sequence") represents a string that need not
+stored contiguously.  It is a tree structure containing strings to be
+concatenated together.
+
+You can concatenate seqt_ts using the functions cat2, cat3, cat4, etc.
+These all use a region to allocate nodes.
+
+The \function+flatten function turns a seqt_t into a seqf_t.
+
+
+\h1 name={internal-objects}- Object system
+
+See filesysobj.h
+
+Originally the object system was just used for file, directory and
+symlink objects, but I extended it so that references to objects can
+be exported to other processes using Plash's object-capability
+protocol.  There are other kinds of object now.
+
+An object reference has type "struct filesys_obj *".  "cap_t" is an
+alias for this.
+
+
+\h2- Methods
+
+There are a number of methods defined.  Every object supports all the
+methods.  That is, it is valid to call a method on any object, even if
+the method isn't relevant to that object.  If the method isn't
+relevant, it will return an error code (for those methods that can
+return error codes).
+
+Every object contains a pointer to a vtable, which contains function
+pointers implementing the methods.  This design is simple, but it
+means all the vtables need to be recompiled when we add new methods.
+Since the vtables are sparse (ie. most methods aren't relevant to a
+given object), we have a program, "make-vtables.pl", which generates
+the C code for constructing the vtables.
+
+\h2- Reference counting
+
+All objects have a reference count.  To increment the count, use
+"inc_ref(obj)".  To decrement the count, use "filesys_obj_free(obj)"
+(this will free the object when the count hits zero).  Some references
+are owning references -- you are supposed to free them.  Some
+references are non-owning -- they are "borrowed" from the caller.
+
+The choice of whether a function argument is an owning or a non-owning
+reference is based on a trade-off between convenience and minimising
+the lifetime of objects.  You have to look at the comments for a
+function to see whether its arguments are passed as owning or
+non-owning.
+
+\h2- Marshalling
+
+In order to make a method call across a connection using the
+object-capability protocol, the method's arguments must be marshalled
+-- converted into a string and an array of objects/FDs, and then
+converted back again at the other end.
+
+Marshalled arguments are represented by "struct cap_args".
+
+The most general methods are "cap_invoke" and "cap_call", which only
+use marshalled arguments.  "cap_invoke" is send-only and asynchronous;
+it returns immediately and does not itself get a reply.  "cap_call" is
+synchronous and returns a result.
+
+The other methods call, or are called by, "cap_call".
+
+For remote objects, other methods marshal their arguments and call
+"cap_call", which in turn calls "cap_invoke".
+
+When local objects receive a remote request, "cap_invoke" handles this
+request and calls "cap_call", which unmarshals the arguments and
+calls the relevant method.
+
+The reason the other methods exist is that they are more efficient to
+use for calls within a process, and they are more convenient.
+
+For some methods, marshalling is not implemented, so these methods
+can't be used remotely.
+
+
+\h1 name={internal-marshal}- Encodings for marshalling
+
+In some cases, marshalling code is written by hand.  This is how the
+methods for fs_op work at present.
+
+The program make-marshall.pl generates marshalling code for other
+methods.  It uses compact descriptions of a method's arguments, such
+as "mode/int leaf/string".
+
+
+\h1 name={xxml}- Documentation format: XXML, an XML surface syntax
+
+I am writing the documentation in DocBook format, but I have created a
+new surface syntax for XML.  XML's standard surface syntax is too
+verbose, and I didn't want to have to write it by hand.
+
+I'm calling the new surface syntax XXML (let's say it stands for Extra
+Extra Medium Large).
+
+Here's an example:
+
+{\xxmlexample:
+\xxml
+>>{\tag attr={value}: body}
+
+\xml~
+<tag attr="value">body</tag>
+}
+
+The curly brackets are a grouping construct which is independent from
+the tag.  They introduces blocks.  When a tag's attributes are
+terminated with a colon, the tag works greedily: it applies to all of
+the text up to the end of the block.
+
+{\xxmlexample:
+\xxml
+>>{\tag1: \tag2: body}
+
+\xml~
+<tag1><tag2>body</tag2></tag1>
+}
+
+If you end a tag's attributes with a hyphen "-" rather than a colon
+":", the tag consumes upto the end of the line.  This is useful
+because no closing bracket is required.
+
+{\xxmlexample:
+\xxml
+>>{\ul:
+>>\li- list item 1
+>>\li- list item 2
+>>\li- list item 3
+>>}
+
+\xml~
+<ul>
+  <li>list item 1</li>
+  <li>list item 2</li>
+  <li>list item 3</li>
+</ul>
+}
+
+Ending a tag with a tilde "~" will consume the following paragraph,
+ie. upto the next empty line.
+
+{\xxmlexample:
+\xxml
+>>{\ul:
+>>\li~ blah
+>>blah
+>>blah
+>>
+>>\li~ paragraph
+>>list
+>>entry
+>>}
+
+{\xml:
+<ul>
+<li>blah
+blah
+blah</li>
+
+<li>paragraph
+list
+entry</li>
+</ul>
+}
+}
+
+Those last examples use the HTML tags "ul" and "li".  DocBook has
+longer names for the same thing, "itemizedlist" and "listitem", and it
+also requires you to use "para" tags in the "listitem"s.
+
+{\xxmlexample:
+\xxml
+>>{\itemizedlist:
+>>\listitem\para- list item 1
+>>\listitem\para- list item 2
+>>\listitem\para- list item 3
+>>}
+
+\xml~
+<itemizedlist>
+  <listitem><para>list item 1</para></listitem>
+  <listitem><para>list item 2</para></listitem>
+  <listitem><para>list item 3</para></listitem>
+</itemizedlist>
+}
+
+Note that
+\pre
+>>\listitem\para- text
+is an abbreviation for
+\pre
+>>\listitem- \para- text
+
+XXML provides some help in writing paragraphs, so you don't have to
+write "p" or "para" tags explicitly.  The "ps" tag will treat empty
+lines in the input as paragraph breaks.  It is expanded out by a
+postprocessor.  This is similar to how you write paragraph breaks in
+TeX.
+
+{\xxmlexample:
+\xxml
+>>{\ps:
+>>A paragraph.
+>>
+>>Another paragraph.
+>>}
+
+{\xml:
+<para>A paragraph.</para>
+
+<para>Another paragraph.</para>
+}
+}
+
+A tag without a body can be terminated with a semicolon ";".
+
+{\xxmlexample:
+\xxml
+>>\hr size=4;
+
+\xml~
+<hr size=4>
+}
+
+There is no special escape sequence for writing XML entities.  A tag
+whose name begins with "E" is converted into an entity.  It should not
+have attributes or a body.  (Note that tag names are case sensitive.)
+
+{\xxmlexample:
+\xxml
+>>\Eamp;
+
+\xml~
+&amp;
+}
+
+You can specify the literal characters '\\', '\{' and '\}' by
+prefixing them with another backslash.
+
+XXML has the following advantages:
+
+\ul{
+\li~ You don't have to write the tag name in the closing tag.
+
+\li~ It's easier to do search and replace on the name of a tag.
+
+\li~ When writing XML, it's easy to forget that '<' and '&' are
+special characters that have to be escaped.  '\\' and '\{' and '\}' are
+perhaps a bit more unusual.
+}

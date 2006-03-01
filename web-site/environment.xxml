@@ -1,0 +1,342 @@
+
+\paras:
+
+\h2 name={env-overview}- Architecture overview
+
+Plash limits the ability of a process to open files by running it in a
+chroot environment, under dynamically-allocated user IDs.  The chroot
+environment only contains one file, an executable to exec to start the
+program running in the process.
+
+Rather than using the open() syscall to open files, the client process
+sends messages to a server process.  One of the file descriptors that
+the client is started with is a socket which is connected to the
+server.  The environment variable PLASH_COMM_FD gives the file
+descriptor number.  The server can send the client open file
+descriptors across the socket in response to `open' requests (see
+cmsg(3)).
+
+The server can handle multiple connections.  If the client wishes to
+fork() off another process, it first asks the server to send it
+another socket for a duplicate connection.
+
+GNU libc is re-linked so that open() etc. send requests to the server
+rather than using the usual Unix system calls.  The dynamic linker
+(/lib/ld.so or, equivalently, /lib/ld-linux.so.2) is similarly
+re-linked.  execve() is changed so that it always invokes the dynamic
+linker directly, since the chroot environment does not contain the
+main executable and the kernel does not provide an fexecve() system
+call.  The dynamic linker is passed the executable via a file
+descriptor.
+
+The file server uses its own filesystem object abstraction internally.
+Filesystem objects may be files, directories or symbolic links on the
+underlying filesystem provided by the Unix kernel.  They may also be
+implemented entirely in the server.  The server has its own functions
+for resolving pathnames and following symbolic links which do not use
+the kernel's facility for following symbolic links.
+
+The shell starts up a new server process for each command the user
+enters.  The shell and the file server are linked into the same
+executable and the shell uses the same filesystem object abstraction.
+The shell simply uses fork() to start a new server.
+
+User IDs are allocated by the setuid program
+{\command:run-as-anonymous}.  It picks IDs in the range 0x100000 to
+0x200000 (configurable by changing config.sh), and opens lock files in
+the lock directory
+{\filename:/usr/lib/plash-chroot-jail/plash-uid-locks} so that the
+same UID is not allocated twice.  The lock directory goes inside the
+chroot jail so that the sandboxed processes can also spawn processes
+with reduced authority (though this is not done yet).  Therefore
+`chroot-jail' needs to go on a writable filesystem, so you may need to
+move it.
+
+The setuid program {\command:gc-uid-locks} will garbage collect and
+remove UID lock files for UIDs that are no longer in use.  It works by
+scanning the `/proc' filesystem to list currently-running processes
+and their UIDs.  When the shell starts, it runs
+{\command:gc-uid-locks}.
+
+
+\h2 name={env-symlinks}- Symbolic links
+
+\h3- Semantics
+
+If we pass a directory as an argument to a program, it may contain
+symbolic links to anywhere.  Since processes may now have different
+namespaces, we have a choice of namespaces in which to resolve the
+destinations of the symbolic links.  Do we resolve them in the user's
+namespace, or the process's namespace?
+
+If we resolve symlinks in the user's namespace, and we allow the
+process to create symlinks to arbitrary destinations, it could create
+a symlink to `/' and thereby grant itself access to all of the user's
+filesystem.  Instead, we could try to restrict the ability of a
+process to create symlinks, so that it can only create symlinks to
+files and directories that it already has access to.  But since
+symlinks are interpreted relative to their position in the filesystem,
+which can change, it would be difficult to make this robust.
+Furthermore, the problem of pre-existing symlinks remains.  A user
+should be able to tell what files and directories they're granting
+access to based on the command invocation.  Granting access also to
+files and directories that are symlinked to, perhaps from deep inside
+a directory, violates this, because there is little constraint on the
+destinations of symlinks.
+
+Resolving symlinks in the process's namespace makes more sense.  It
+follows the normal semantics of symlinks under Unix, which is that
+symlinks are simply a convenience that *could* be implemented by the
+process itself rather than by the kernel.
+
+Ultimately, the solution is to do away with symbolic links and replace
+them with object references.
+
+\h3- Implementation
+
+If we are to implement these semantics, we must be careful not to use
+the kernel's ability to follow symlinks.  There is not a
+straightforward option for turning off following symlinks in the
+underlying filesystem.  When we give a pathname such as `a/b/c' to the
+kernel, if `a/b' is a symbolic link the kernel will always follow it,
+interpreting it in its namespace.
+
+The approach used in the file server is to set the current working
+directory to each component of the pathname in turn.  For each
+component, do:
+
+{\ul:
+
+\li\paras~ lstat() on the leaf name.  If it's a symlink, do readlink() and
+   interpret the link.
+
+\li\paras~ Otherwise, if it's a directory, do open(leaf, O_NOFOLLOW | O_DIRECTORY).
+   If O_NOFOLLOW or O_DIRECTORY are not supported, we can do fstat()
+   to check that the object opened is the same as the one we lstat()'d
+   (it may have changed between the system calls).
+
+\li\paras~ Do fchdir() to set the current directory to the directory.
+}
+
+Obviously this requires more system calls than allowing the kernel to
+resolve symlinks.
+
+Note that the server must never send the clients FDs for directories.
+A client could use a directory FD to break out of its chroot jail.
+
+\h3- Remaining problems
+
+The Unix kernel can be regarded as providing a set of capability
+registers (file descriptors) that can contain directory object
+references, along with a special capability register (the current
+working directory) relative to which pathnames are resolved.
+References can be copied from a normal register to the special
+register using fchdir().  References can be copied from the special
+register to the normal registers using open(".").
+
+Unfortunately, this model falls down in two places:
+
+\ul{
+ \li\paras{
+   Directories with `execute' but not `read' permission
+   cannot be opened with open().  One can chdir() into them, but not
+   fchdir() into them.
+
+   Arguably, Unix should let you open() such directories but not read
+   their contents using the resulting FD.
+
+   This could be worked around, but no workaround is implemented yet.
+ }
+
+ \li\paras{
+   link() is unusual in that it takes two pathname arguments.
+   It is difficult to use safely (without the kernel following
+   symlinks).  We have no guarantee that the source file (or
+   destination) is the one we intended to link.  Any check will be
+   vulnerable to race conditions.
+
+   The same applies to rename().
+
+   Under Plash, link() and rename() are only implemented for the
+   same-directory case.
+ }
+}
+
+
+\h2 name={env-parent-dirs}- Parent directories: the semantics of dot-dot using dir_stacks
+
+A directory may have different parent directories in different
+namespaces.  Furthermore, a directory may appear multiple times in the
+same namespace, and so have multiple parents in that namespace.  `..' 
+does not fit well into a system based on object references.  However,
+it is widely used by Unix programs, so we have to support it.
+
+Rather than using the `..' parent directory facility provided by the
+underlying filesystem, the file server interprets `..' itself.
+
+The semantics is that the parent of a directory is the directory that
+it was reached through, after symlinks have been expanded.
+
+This means that the filename resolver maintains a stack of directory
+object references, called a dir_stack.  When resolving the pathname
+`/a/b/..', it will first push the root directory onto the stack, then
+directory objects for `/a' and `/a/b', and then it will pop `/a/b' off
+the stack, leaving `/a' at the top of the stack as the result.
+
+If `/a/b' is a symlink to `g/h', however, the filename resolver does
+not push `/a/b' onto the stack (since `/a/b' is not a directory object).
+It pushes `/a/g' and then `/a/g/h' onto the stack.  Then, when it
+interprets `..' in the pathname, it pops `/a/g/h' off the stack to
+leave `/a/g' (the result) at the top.
+
+The server represents the current working directory as one of these
+directory stacks.  One of the consequences of these semantics is that
+if the current working directory is renamed or moved, the result of
+getcwd() will not reflect this.
+
+This approach means that doing:
+\pre
+>>chdir("leafname");
+>>chdir("..");
+has no effect (provided that the first call succeeds).  This contrasts
+with the usual Unix semantics, where the "leafname" directory could
+be moved between the two calls, giving it a different parent directory.
+This is partly why programs like "rm" use {\f:fchdir()} -- to avoid this
+problem.
+
+
+\h2 name={env-dir-fds}- Directory file descriptors
+
+Plash supports {\f:open()} on directories.  It supports the use of
+{\f:fchdir()} and {\f:close()} on the resulting directory file
+descriptor.  However, it doesn't support {\f:dup()} on directory FDs,
+and {\f:execve()} won't preserve them.
+
+Directory file descriptors require special handling.  Under Plash,
+when {\f:open()} is called on a file, it will return a real,
+kernel-level file descriptor for a file.  The file server passes the
+client this file descriptor across a socket.  But it's not safe to do
+this with kernel-level directory file descriptors, because if the
+client obtained one of these it could use it to break out of its
+chroot jail (using the kernel-level {\f:fchdir} system call).
+
+A complete solution would be to virtualize file descriptors fully, so
+that every libc call involving file descriptors is intercepted and
+replaced.  This would be a lot of work, because there are quite a few
+FD-related calls.  It raises some tricky questions, such as what bits
+of code use real kernel FDs and which use virtualised FDs.  It might
+impact performance.  And it's potentially dangerous: if the changes to
+libc failed to replace one FD-related call, it could lead to the wrong
+file descriptors being used in some operation, because in this case a
+virtual FD number would be treated as a real, kernel FD number.
+(There is no similar danger with virtualising the system calls that
+use the file namespace, because the use of {\f:chroot()} means that
+the process's kernel file namespace is almost entirely empty.)
+
+However, a complete solution is complete overkill.  There are probably
+no programs that pass a directory file descriptor to {\f:select()},
+and no programs that expect to keep a directory file descriptor across
+a call to {\f:execve()} or in the child process after {\f:fork()}.
+
+So I have adopted a partial solution to virtualising file descriptors.
+When {\f:open()} needs to return a virtualized file descriptor -- in
+this case, for a directory -- the server returns two parts to the
+client: it returns the real, kernel-level file descriptor that it gets
+from opening {\filename:/dev/null} (a "dummy" file descriptor), and it
+returns a reference to a dir_stack object (representing the
+directory).
+
+Plash's libc {\f:open()} function returns the kernel-level
+{\filename:/dev/null} file descriptor to the client program, but it
+stores the dir_stack object in a table maintained by libc.  Plash's
+{\f:fchdir()} function in libc consults this table; it can only work if
+there is an entry for the given file descriptor number in the table.
+
+Creating a "dummy" kernel-level file descriptor ensures that the file
+descriptor number stays allocated from the kernel's point of view.  It
+provides a FD that can be used in any context where an FD can be used,
+without -- as far as I know -- any harmful effects.  The client
+program will get a more appropriate error than EBADF if it passes the
+file descriptor to functions which aren't useful for directory file
+descriptors, such as {\f:select()} or {\f:write()}.
+
+
+\h2 name={syscall-intercept}- Why not do interception of system calls using, for example, ptrace?
+
+Another way to do what Plash does is to intercept system calls.
+
+One way to do this is to use the ptrace mechanism, which is available
+in standard versions of Linux.  Using ptrace, all the syscalls a
+process makes can be handled by another process.  The problems with
+ptrace are security and performance.  Firstly, fork() cannot be
+handled securely with ptrace.  Secondly, redirecting system calls with
+ptrace is slow, but it can't be done selectively.  ptrace doesn't let
+you redirect some syscalls (such as "open") while letting others
+through (such as "read").  (See David Wagner's Master's thesis,
+"Janus: an approach for confinement of untrusted applications".)
+
+systrace provides a mechanism that is similar to ptrace.  It provides
+better performance, because it allows system calls to be intercepted
+selectively.  It allows race-free handling of fork().  However, it is
+not part of standard releases of Linux.  Using it requires recompiling
+your kernel and rebooting.  Plash is intended to be immediately usable
+without recompiling your kernel.  That said, it would be useful to add
+systrace support to Plash in addition to its current approach.
+
+Ostia provides a different mechanism intercepting system calls.
+Rather than redirecting a system call to a second process, it will
+bounce a system call back to the process that issued it.  Then, much
+like in Plash, the process makes the request via a socket.  This
+approach is simpler than systrace.  Unlike Plash, it doesn't require
+modifying libc.  A separate library handles the syscalls that get
+bounced back.  Ostia is implemented by a Linux kernel module.
+Unfortunately, the code is not publicly available.  (See "Ostia: A
+Delegating Architecture for Secure System Call Interposition" by Tal
+Garfinkel, Ben Pfaff and Mendel Rosenblum, 2004.)
+
+Plash could benefit by using syscall interception.  Using chroot and
+UIDs, Plash is able to control a process's ability to access the
+filesystem and interfere with other processes.  However, Plash does
+not prevent a process from connecting to or listening on network
+sockets.  This could be done if there was a way for Plash to prevent a
+process from doing connect() and bind() system calls.
+
+
+\h2 name={chroot-comparison}- How does Plash compare with chroot jails?
+
+Plash provides functionality similar to chroot().  The Linux kernel's
+chroot() system call can be used to run a program in a different file
+namespace (ie. root directory).  chroot jailing is a well-known
+technique, though not used very frequently due to its limitations.
+
+The facilities for creating new namespaces for use with chroot are
+limited.  You can only put individual files into the chroot
+environment by copying or hard linking them.  It's not possible to
+grant read-write access to individual directory entries.  Though you
+can't hard link directories, you can put directories into a chroot
+environment using "mount --bind", but this can't be used to grant only
+read-only access to a directory.
+
+chroot environments are heavyweight.  It is not practical to create
+one for every invocation of a program.  To do so, you would have to
+delete the copied files and directories, and remove any mount point
+entries, when the process you started had finished.  If a program
+starts child processes, it's hard to tell when this is.  As a result,
+chroot environments are usually static.
+
+Furthermore, the chroot() call is only available to the root user.
+(This is a consequence of the way chroot() interacts with setuid
+executables.)
+
+Plash implements its security using a chroot environment, but this is
+largely just an implementation detail.  Plash uses chroot() to take
+authority away from a process, but it uses file descriptor passing to
+give limited authority back to the process.
+
+Plash moves the interpretation of filenames so that it is done in user
+space.  It allows directories to be implemented in user space.  This
+allows the creation of file namespaces to be more flexible.  Files,
+directories and directory entries (slots) can be mapped anywhere in a
+directory tree.  Since the directory tree for a file namespace is
+stored in a server process, tidying up is simple: the server process
+exits when no clients are connected to it.

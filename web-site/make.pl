@@ -39,21 +39,14 @@ my $footer =
 		       tagp('a', [['href', 'contents.html']],
 			    'Up: Contents')))))];
 
-  my $files = {};
-  foreach my $base (qw(index download news examples pola-shell)) {
-    my $in_file = "$base.xxml";
-    
-    my $data = Transforms::expand_paras(XXMLParse::read_file($in_file));
-    $files->{$base} = $data;
-  }
-
 sub contents_list {
   my ($node) = @_;
   my $entry =
-    tagp('a', [['href',
-		"$node->{File}".
-		(defined $node->{Name} ? "#$node->{Name}" : '')],
-	       ['name', $node->{Name}]],
+    tagp('a',
+	 (defined $node->{Name}
+	  ? [['href', "$node->{File}#$node->{Name}"],
+	     ['name', $node->{Name}]]
+	  : [['href', $node->{File}]]),
 	 $node->{Title});
   
   if(scalar(@{$node->{Children}}) > 0) {
@@ -69,14 +62,31 @@ sub contents_list {
 my @sections =
   ({ File => 'download', Title => 'Download' },
    { File => 'examples', Title => 'Examples' },
+   { File => 'powerbox', Title => 'The powerbox: a GUI for granting authority' },
+   { File => 'pola-run', Title => 'pola-run: A command line tool for launching sandboxed programs' },
+   { File => 'environment', Title => 'Plash\'s sandbox environment' },
    { File => 'pola-shell', Title => 'pola-shell: A shell for interactive use' },
+   { File => 'exec-objs', Title => 'Executable objects: a replacement for setuid' },
+   { File => 'protocols', Title => 'Communication protocols' },
+   { File => 'methods', Title => 'RPC methods' },
    { File => 'news', Title => 'News' },
+   { File => 'internals', Title => 'Internals' },
+   { File => 'issues', Title => 'Issues' },
+   { File => 'copyright', Title => 'Copyright' },
   );
+
+my $files = {};
+foreach my $part (@sections,
+		  { File => 'index' }) {
+  $files->{$part->{File}} =
+    Transforms::expand_paras(XXMLParse::read_file("$part->{File}.xxml"));
+}
 
 my $contents = {};
 push(@{$contents->{Children}},
      { Title => 'Introduction',
-       File => "index.html" });
+       File => "index.html",
+       Children => [] });
 my $section = 1;
 foreach my $part (@sections) {
   my $tree = $files->{$part->{File}};
@@ -88,6 +98,7 @@ foreach my $part (@sections) {
   my $root = { Level => 0,
 	       Title => $part->{Title},
 	       File => "$part->{File}.html",
+	       Children => [],
 	     };
   push(@{$contents->{Children}}, $root);
   my @stack = ($root);
@@ -101,6 +112,7 @@ foreach my $part (@sections) {
 		   Title => $elt->{B},
 		   File => "$part->{File}.html",
 		   Name => get_attr_opt($elt, 'name') || "section$i",
+		   Children => [],
 		 };
       $elt->{B} =
 	tagp('a', [['name', $node->{Name}],
@@ -193,7 +205,8 @@ write_file('out/index.html',
 
 sub write_file {
   my ($out_file, $data) = @_;
-  
+
+  print "Writing $out_file\n";
   my $f = IO::File->new($out_file, 'w') || die "Can't open '$out_file'";
   XXMLParse::to_html($f, $data);
   $f->close();

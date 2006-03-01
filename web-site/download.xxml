@@ -14,13 +14,13 @@
  \td- Version 1.15 \br; (12th December 2005)
  {\td\ul:
    {\li: Debian package:
-     \a href={releases/plash_1.15_i386.deb}:
+     \a href={http://plash.beasts.org/releases/plash_1.15_i386.deb}:
        plash_1.15_i386.deb}
    {\li: RPM:
-     \a href={releases/plash-1.15-1.i386.rpm}:
+     \a href={http://plash.beasts.org/releases/plash-1.15-1.i386.rpm}:
        plash-1.15-1.i386.rpm}
    {\li: Source:
-     \a href={releases/plash-1.15.tar.gz}:
+     \a href={http://plash.beasts.org/releases/plash-1.15.tar.gz}:
        plash-1.15.tar.gz}
  }
  {\td:
@@ -34,13 +34,13 @@ Added Powerbox for Gtk.  Fixes to allow Konqueror and Gnumeric to run.
  \td- Version 1.14 \br; (9th November 2005)
  {\td\ul:
    {\li: Debian package:
-     \a href={releases/plash_1.14_i386.deb}:
+     \a href={http://plash.beasts.org/releases/plash_1.14_i386.deb}:
        plash_1.14_i386.deb}
    {\li: RPM:
-     \a href={releases/plash-1.14-1.i386.rpm}:
+     \a href={http://plash.beasts.org/releases/plash-1.14-1.i386.rpm}:
        plash-1.14-1.i386.rpm}
    {\li: Source:
-     \a href={releases/plash-1.14.tar.gz}:
+     \a href={http://plash.beasts.org/releases/plash-1.14.tar.gz}:
        plash-1.14.tar.gz}
  }
  {\td:
@@ -54,13 +54,13 @@ Added powerboxes.
  \td- Version 1.13 \br; (6th October 2005)
  {\td\ul:
    {\li: Debian package:
-     \a href={releases/plash_1.13_i386.deb}:
+     \a href={http://plash.beasts.org/releases/plash_1.13_i386.deb}:
        plash_1.13_i386.deb}
    {\li: RPM:
-     \a href={releases/plash-1.13-1.i386.rpm}:
+     \a href={http://plash.beasts.org/releases/plash-1.13-1.i386.rpm}:
        plash-1.13-1.i386.rpm}
    {\li: Source:
-     \a href={releases/plash-1.13.tar.gz}:
+     \a href={http://plash.beasts.org/releases/plash-1.13.tar.gz}:
        plash-1.13.tar.gz}
  }
  {\td:
@@ -74,13 +74,13 @@ Much-improved build system.
  \td- Version 1.12 \br; (19th September 2005)
  {\td\ul:
    {\li: Debian package:
-     \a href={releases/plash_1.12_i386.deb}:
+     \a href={http://plash.beasts.org/releases/plash_1.12_i386.deb}:
        plash_1.12_i386.deb}
    {\li: RPM:
-     \a href={releases/plash-1.12-1.i386.rpm}:
+     \a href={http://plash.beasts.org/releases/plash-1.12-1.i386.rpm}:
        plash-1.12-1.i386.rpm}
    {\li: Source:
-     \a href={releases/plash-1.12.tar.gz}:
+     \a href={http://plash.beasts.org/releases/plash-1.12.tar.gz}:
        plash-1.12.tar.gz}
  }
  {\td:
@@ -95,16 +95,16 @@ Include libm.so etc. in packages.
  \td- Version 1.11 \br; (13th August 2005)
  {\td\ul:
    {\li: Debian package:
-     \a href={releases/plash_1.11_i386.deb}:
+     \a href={http://plash.beasts.org/releases/plash_1.11_i386.deb}:
        plash_1.11_i386.deb}
    {\li: RPM:
-     \a href={releases/plash-1.11-1.i386.rpm}:
+     \a href={http://plash.beasts.org/releases/plash-1.11-1.i386.rpm}:
        plash-1.11-1.i386.rpm}
    {\li: Source:
-     \a href={releases/plash-1.11.tar.gz}:
+     \a href={http://plash.beasts.org/releases/plash-1.11.tar.gz}:
        plash-1.11.tar.gz}
    {\li: Debian source package:
-     {\a href={releases/plash_1.11.dsc}:
+     {\a href={http://plash.beasts.org/releases/plash_1.11.dsc}:
        plash_1.11.dsc},
      {\a href={http://savannah.nongnu.org/download/plash/plash_1.11.tar.gz}:
        plash_1.11.tar.gz}}
@@ -122,13 +122,13 @@ and converted to DocBook format.
  \td- Version 1.10 \br; (20th July 2005)
  {\td\ul:
    {\li: Debian package:
-     \a href={releases/plash_1.10_i386.deb}:
+     \a href={http://plash.beasts.org/releases/plash_1.10_i386.deb}:
        plash_1.10_i386.deb}
    {\li: RPM:
-     \a href={releases/plash-1.10-1.i386.rpm}:
+     \a href={http://plash.beasts.org/releases/plash-1.10-1.i386.rpm}:
        plash-1.10-1.i386.rpm}
    {\li: Source:
-     \a href={releases/plash-1.10.tar.gz}:
+     \a href={http://plash.beasts.org/releases/plash-1.10.tar.gz}:
        plash-1.10.tar.gz}
  }
  {\td:
@@ -142,13 +142,13 @@ Implemented fchdir().  "rm -r", "install -d" and "mkdir -p" now work.
  \td- Version 1.9 \br; (10th July 2005)
  {\td\ul:
    {\li: Debian package:
-     \a href={releases/plash_1.9_i386.deb}:
+     \a href={http://plash.beasts.org/releases/plash_1.9_i386.deb}:
        plash_1.9_i386.deb}
    {\li: RPM:
-     \a href={releases/plash-1.9-1.i386.rpm}:
+     \a href={http://plash.beasts.org/releases/plash-1.9-1.i386.rpm}:
        plash-1.9-1.i386.rpm}
    {\li: Source:
-     \a href={releases/plash-1.9.tar.gz}:
+     \a href={http://plash.beasts.org/releases/plash-1.9.tar.gz}:
        plash-1.9.tar.gz}
    {\li: Debian source package:
      {\a href={http://www.cs.jhu.edu/~seaborn/plash/with-glibc/plash_1.9.dsc}:
@@ -169,13 +169,13 @@ directory).
  \td- Version 1.8 \br; (22nd May 2005)
  {\td\ul:
    {\li: Debian package:
-     \a href={releases/plash_1.8_i386.deb}:
+     \a href={http://plash.beasts.org/releases/plash_1.8_i386.deb}:
        plash_1.8_i386.deb}
    {\li: RPM:
-     \a href={releases/plash-1.8-1.i386.rpm}:
+     \a href={http://plash.beasts.org/releases/plash-1.8-1.i386.rpm}:
        plash-1.8-1.i386.rpm}
    {\li: Source:
-     \a href={releases/plash-1.8.tar.gz}:
+     \a href={http://plash.beasts.org/releases/plash-1.8.tar.gz}:
        plash-1.8.tar.gz}
    {\li: Debian source package:
      {\a href={http://www.cs.jhu.edu/~seaborn/plash/with-glibc/plash_1.8.dsc}:
@@ -197,13 +197,13 @@ descriptors, so that XEmacs works.
  \td- Version 1.7 \br; (1st May 2005)
  {\td\ul:
    {\li: Debian package:
-     \a href={releases/plash_1.7_i386.deb}:
+     \a href={http://plash.beasts.org/releases/plash_1.7_i386.deb}:
        plash_1.7_i386.deb}
    {\li: RPM:
-     \a href={releases/plash-1.7-1.i386.rpm}:
+     \a href={http://plash.beasts.org/releases/plash-1.7-1.i386.rpm}:
        plash-1.7-1.i386.rpm}
    {\li: Source:
-     \a href={releases/plash-1.7.tar.gz}:
+     \a href={http://plash.beasts.org/releases/plash-1.7.tar.gz}:
        plash-1.7.tar.gz}
  }
  {\td:
@@ -215,13 +215,13 @@ Major new feature: executable objects.
  \td- Version 1.6 \br; (18th January 2005)
  {\td\ul:
    {\li: Debian package:
-     \a href={releases/plash_1.6_i386.deb}:
+     \a href={http://plash.beasts.org/releases/plash_1.6_i386.deb}:
        plash_1.6_i386.deb}
    {\li: RPM:
-     \a href={releases/plash-1.6-1.i386.rpm}:
+     \a href={http://plash.beasts.org/releases/plash-1.6-1.i386.rpm}:
        plash-1.6-1.i386.rpm}
    {\li: Source:
-     \a href={releases/plash-1.6.tar.gz}:
+     \a href={http://plash.beasts.org/releases/plash-1.6.tar.gz}:
        plash-1.6.tar.gz}
  }
  {\td:
@@ -234,13 +234,13 @@ anywhere in the file namespace.
  \td- Version 1.5 \br; (7th January 2005)
  {\td\ul:
    {\li: Debian package:
-     \a href={releases/plash_1.5_i386.deb}:
+     \a href={http://plash.beasts.org/releases/plash_1.5_i386.deb}:
        plash_1.5_i386.deb}
    {\li: RPM:
-     \a href={releases/plash-1.5-1.i386.rpm}:
+     \a href={http://plash.beasts.org/releases/plash-1.5-1.i386.rpm}:
        plash-1.5-1.i386.rpm}
    {\li: Source:
-     \a href={releases/plash-1.5.tar.gz}:
+     \a href={http://plash.beasts.org/releases/plash-1.5.tar.gz}:
        plash-1.5.tar.gz}
  }
  {\td:
@@ -253,13 +253,13 @@ first tool to use object-capability protocol.
  \td- Version 1.4 \br; (4th January 2005)
  {\td\ul:
    {\li: Debian package:
-     \a href={releases/plash_1.4_i386.deb}:
+     \a href={http://plash.beasts.org/releases/plash_1.4_i386.deb}:
        plash_1.4_i386.deb}
    {\li: RPM:
-     \a href={releases/plash-1.4-1.i386.rpm}:
+     \a href={http://plash.beasts.org/releases/plash-1.4-1.i386.rpm}:
        plash-1.4-1.i386.rpm}
    {\li: Source:
-     \a href={releases/plash-1.4.tar.gz}:
+     \a href={http://plash.beasts.org/releases/plash-1.4.tar.gz}:
        plash-1.4.tar.gz}
  }
  {\td:
@@ -274,13 +274,13 @@ layer in the communication between client and server.
  \td- Version 1.3 \br; (29th December 2004)
  {\td\ul:
    {\li: Debian package:
-     \a href={releases/plash_1.3_i386.deb}:
+     \a href={http://plash.beasts.org/releases/plash_1.3_i386.deb}:
        plash_1.3_i386.deb}
    {\li: RPM:
-     \a href={releases/plash-1.3-1.i386.rpm}:
+     \a href={http://plash.beasts.org/releases/plash-1.3-1.i386.rpm}:
        plash-1.3-1.i386.rpm}
    {\li: Source:
-     \a href={releases/plash-1.3.tar.gz}:
+     \a href={http://plash.beasts.org/releases/plash-1.3.tar.gz}:
        plash-1.3.tar.gz}
  }
  {\td:
@@ -297,13 +297,13 @@ rename() and link().
  \td- Version 1.2 \br; (18th December 2004)
  {\td\ul:
    {\li: Debian package:
-     \a href={releases/plash_1.2_i386.deb}:
+     \a href={http://plash.beasts.org/releases/plash_1.2_i386.deb}:
        plash_1.2_i386.deb}
    {\li: RPM:
-     \a href={releases/plash-1.2-1.i386.rpm}:
+     \a href={http://plash.beasts.org/releases/plash-1.2-1.i386.rpm}:
        plash-1.2-1.i386.rpm}
    {\li: Source:
-     \a href={releases/plash-1.2.tar.gz}:
+     \a href={http://plash.beasts.org/releases/plash-1.2.tar.gz}:
        plash-1.2.tar.gz}
  }
  {\td:
@@ -319,13 +319,13 @@ options window for enabling logging.
  \td- Version 1.1 \br; (10th December 2004)
  {\td\ul:
    {\li: Debian package:
-     \a href={releases/plash_1.1_i386.deb}:
+     \a href={http://plash.beasts.org/releases/plash_1.1_i386.deb}:
        plash_1.1_i386.deb}
    {\li: RPM:
-     \a href={releases/plash-1.1-1.i386.rpm}:
+     \a href={http://plash.beasts.org/releases/plash-1.1-1.i386.rpm}:
        plash-1.1-1.i386.rpm}
    {\li: Source:
-     \a href={releases/plash-1.1.tar.gz}:
+     \a href={http://plash.beasts.org/releases/plash-1.1.tar.gz}:
        plash-1.1.tar.gz}
  }
  {\td:
@@ -337,13 +337,13 @@ Added job control to shell.
  \td- Version 1.0 \br; (7th December 2004)
  {\td\ul:
    {\li: Debian package:
-     \a href={releases/plash_1.0_i386.deb}:
+     \a href={http://plash.beasts.org/releases/plash_1.0_i386.deb}:
        plash_1.0_i386.deb}
    {\li: RPM:
-     \a href={releases/plash-1.0-1.i386.rpm}:
+     \a href={http://plash.beasts.org/releases/plash-1.0-1.i386.rpm}:
        plash-1.0-1.i386.rpm}
    {\li: Source:
-     \a href={releases/plash-1.0.tar.gz}:
+     \a href={http://plash.beasts.org/releases/plash-1.0.tar.gz}:
        plash-1.0.tar.gz}
  }
  {\td: First version.}

@@ -1,0 +1,395 @@
+
+\paras:
+
+\h1- Introduction
+
+Plash extends the concept of executables -- which are anything that
+can be invoked via Unix's execve() call -- so that in addition to
+executable data files, you can have executable {\em:objects}.  In this
+case, execve() works by invoking the object via a method call.
+Executable objects can be attached to the filesystem tree and
+unmodified Unix programs can call them.  Executable objects can be
+constructed from Unix programs as well.
+
+The executable objects feature allows for fine-grained control over
+how processes are constituted, in particular their file namespaces.
+
+This is similar to chroot() environments under Linux.  chroot() also
+allows a process's root directory (its file namespace) to be changed.
+It can be used to run different Linux distributions on the same
+machine, change the libraries a program dynamically links with, etc.
+However, Linux has only limited, heavyweight mechanisms for creating
+file namespaces.  Plash's mechanisms are lightweight, flexible, and
+not restricted to the superuser, and Plash can treat the files that a
+program receives as arguments separately from its library files and
+configuration files.
+
+
+\h1 name={exec-obj-inst}- Applying POLA to argument files and other files
+
+We can divide the files that a process uses into two sets, Arg and
+Env.  Arg is the set of files that are passed as parameters to the
+program.  Env consists of the remaining files: libraries,
+configuration files, files that would be installed by a package
+manager -- files that the program is in some sense "linked with".
+Plash has always provided control over the Arg set, applying the
+Principle of Least Authority (POLA) to it.  However, Plash has a
+default setting for the contents of the Env set.  The use of
+executable objects lets you change that default on a per-program basis
+and apply POLA to all the files a program accesses.
+
+By default, Plash maps the system's "/usr", "/lib", "/bin" and "/etc"
+directories (as read-only) into the file namespace of processes that
+it starts, along with "/dev/null" and "/dev/tty" (as read-write) --
+this is the default Env set.  Any other files or directories are
+mapped into the file namespace if and only if they are listed on the
+command line -- this is the Arg set.
+
+In this default mode of operation, POLA is applied to files in the
+user's home directory, but not to system files.  The programs you use
+do not have to be declared in advance.  This way, Plash can be used
+almost as a drop-in replacement for non-POLA shells like Bash.  You
+can run Unix programs using command lines that are not {\em:too}
+different from their equivalents under Bash, because Plash's default
+Env set covers most of the program's actual Env set.
+
+We can do a bit better if we are prepared to declare a program before
+using it, in order to provide some information about the program that
+is not provided in a Unix installation.  Plash lets you create an
+executable object and bind it to a variable, specifying the Env
+portion of the program's file namespace.  Given this control, you can
+include files that are not in Plash's default (such as configuration
+files in your home directory) or leave out files that are in Plash's
+default -- this helps get back the convenience of a non-POLA shell
+such as Bash while providing better security.  Perhaps more
+importantly, you can control not only {\em:whether} a filename is
+mapped in the namespace, but {\em:what} file it maps to -- this
+provides something you couldn't do before.
+
+It is possible to install two Linux distributions on one computer, and
+run one inside the other in a chroot() environment.  However, the
+interoperability between these two sets of programs is very limited.
+Linux doesn't normally provide a fine-grained mechanism for granting a
+program access to files outside its chroot() environment, and the
+mechanisms for creating chroot() environments are limited: you can
+hard link files (but not directories, and not across partitions), and
+you can use "mount --bind" on directories (but not individual files).
+Furthermore, the chroot() call is only available to the superuser.
+It's difficult enough to use this for a couple of installed
+distributions; to do it on a per-program basis is totally impractical.
+
+In contrast, Plash provides lightweight mechanisms for creating file
+namespaces (which are simply directories, although they do not have to
+be stored on a Linux filesystem).  Executable objects can be
+self-contained and provide their own execution environment, which
+allows for better interoperability between programs: a process can
+invoke an executable object which uses a different file namespace
+(root directory) to the caller for files in its Env set, yet the
+executable object can receive its Arg set from the caller.
+
+
+\h1 name={exec-obj-legacy}- Invocations between programs
+
+This document mainly focuses on applying POLA when the user invokes an
+executable using the shell.  It doesn't give much attention to the
+cases in which one program invokes an executable using execve(): in
+this case, we desire that the caller apply POLA and not pass too much
+authority on to the callee, and we desire that the callee not be
+confusable.  If the caller {\em:doesn't} apply POLA and the callee
+{\em:is} confusable -- which will be true if they are unmodified Unix
+programs -- and if the two have Env sets that clash -- that is, the
+same filename maps to different files in each -- then we have some
+basic workability problems, not just security problems.
+
+I hope to discuss these problems, and some solutions, in a forthcoming
+document.
+
+
+\h1 name={exec-obj-examples}- Examples
+
+I'll look at creating an executable object for the Unix command line
+program `oggenc', which encodes WAV files as Ogg Vorbis files.  (Ogg
+Vorbis is like the MP3 format, but a bit smaller and free of patent
+problems.)  To invoke `oggenc' with Plash you might do:
+
+\pre
+  >>oggenc input_file.wav => -o output_file.ogg
+
+(1)
+
+In this case, the resulting process's file namespace will contain:
+
+\ul{
+  \li- /usr/bin/oggenc (read-only)
+  \li- /usr, /lib, /bin, /etc (read-only)
+  \li- /dev/null (read-write)
+  \li- under the pathname of the current working directory: input_file.wav (read-only), output_file.ogg (read-write slot)
+  \li- /dev/tty (read-write)
+}
+
+However, it happens to be that `oggenc' doesn't need to access "/etc"
+or all of "/usr".  We could define an executable object for running
+`oggenc' that gives the program an execution environment containing
+less:
+
+\pre
+  >>def my_oggenc =
+  >>  capcmd exec-object '/usr/bin/oggenc'
+  >>    /x=(mkfs /usr/bin/oggenc /usr/lib /lib)
+
+[This needs to be entered on one line when using the shell
+interactively.  Alternatively, you can put it in a file and load it
+with "source <file>".]
+
+This will create an executable object and bind it to the variable
+"my_oggenc".  To invoke the object, we use the same syntax as before:
+
+\pre
+  >>my_oggenc input_file.wav => -o output_file.ogg
+
+(2)
+
+In this case, the the resulting process's file namespace will contain:
+
+\ul{
+  \li- /usr/bin/oggenc (read-only)
+  \li- /usr/lib, /lib (read-only)
+  \li- under the pathname of the current working directory:  input_file.wav (read-only), output_file.ogg (read-write slot)
+  \li- /dev/tty (read-write)  [actually, not included in current version]
+}
+
+While in (1), "oggenc" is treated as a filename and searched for in
+PATH, in (2), "my_oggenc" is recognised by the shell as a bound
+variable.  The shell doesn't start a new process in this case, it just
+invokes the executable object that "my_oggenc" is bound to.  The shell
+creates a namespace from the arguments, which it passes to
+"my_oggenc", but it doesn't include "/usr", "/lib", "/bin" and "/etc"
+as before -- the "my_oggenc" is expected to provide the files it
+needs itself.
+
+Suppose we don't want to install "oggenc" and the libraries it uses in
+our system's "/usr" directory.  Maybe we don't have access to that
+directory, because we don't have root access.  Maybe we have older
+versions of those libraries in "/usr" which some other program uses,
+and we don't want to risk messing that program up by upgrading its
+libraries.  Maybe we just want to organise our files differently from
+usual.  Perhaps we are running RedHat, but a Debian distribution is
+installed under "/debian", and we want to use Debian's version of
+`oggenc'.
+
+\pre
+  >>def my_oggenc =
+  >>  capcmd exec-object '/usr/bin/oggenc'
+  >>    /x=(mkfs
+  >>          /usr/bin/oggenc=(F /debian/usr/bin/oggenc)
+  >>          /usr/lib=(F /debian/usr/lib)
+  >>          /lib=(F /debian/lib))
+
+[NB. This requires that Plash is installed in the Debian distribution
+as well, so that libc.so will still be taken from /usr/lib/plash/lib
+rather than /lib.]
+
+These declarations still give `oggenc' a lot of files it doesn't need.
+We could give a tighter definition that lists exactly those files that
+`oggenc' needs in its execution environment.  `oggenc' is fairly
+simple: it doesn't use a huge number of dynamically-linked libraries,
+and it doesn't need any configuration files.
+
+Under Linux, we can find out the dynamic libraries that an executable
+file uses with the "ldd" command:
+
+\pre
+  >>bash$ ldd /usr/bin/oggenc
+  >>      libvorbisenc.so.0 => /usr/lib/libvorbisenc.so.0 (0x40028000)
+  >>      libvorbis.so.0 => /usr/lib/libvorbis.so.0 (0x4009c000)
+  >>      libm.so.6 => /lib/i686/libm.so.6 (0x400bb000)
+  >>      libogg.so.0 => /usr/lib/libogg.so.0 (0x400dd000)
+  >>      libc.so.6 => /lib/i686/libc.so.6 (0x42000000)
+  >>      /lib/ld-linux.so.2 => /lib/ld-linux.so.2 (0x40000000)
+
+[Run this under Plash using "!!ldd /usr/bin/oggenc".]
+
+Given this information, we can make a new definition:
+
+\pre
+  >>def my_oggenc =
+  >>  capcmd exec-object '/usr/bin/oggenc'
+  >>    /x=(mkfs
+  >>          /usr/bin/oggenc
+  >>          /usr/lib/libvorbisenc.so.0
+  >>          /usr/lib/libvorbis.so.0
+  >>          /lib/i686/libm.so.6
+  >>          /usr/lib/libogg.so.0
+  >>          /usr/lib/plash/lib/libc.so.6)
+
+[Future work will be to provide tools to help with constructing a
+definition like this.]
+
+("/lib/ld-linux.so.2" is the dynamic linker and doesn't need to be
+included.)
+
+Suppose we want another program to be able to invoke `my_oggenc'.  We
+can attach the object into a filesystem with a syntax like this:
+
+\pre
+  >>bash + /my-bin/oggenc=my_oggenc
+
+[NB. I don't use `/bin/oggenc=my_oggenc' because it's not yet possible
+to attach objects inside other attached directories, such as
+`/bin/oggenc' inside `/bin', which is attached implicitly.]
+
+This runs Bash with the pathname `/my-bin/oggenc' mapped to
+`my_oggenc'.  You can then run `my_oggenc' from inside Bash.  This is
+a good way in general to test out the file namespaces that Plash
+creates.
+
+
+
+\h1 name={exec-obj-notes}- Notes
+
+\h2- The process replacement behaviour
+
+Normally, execve() replaces the current process.  Method calls don't
+and can't have that behaviour: the callee does not even have to start
+a new process.
+
+The modified libc is responsible for emulating the process replacement
+behaviour.  execve() (and the other functions in the `exec' family
+which use it) will test whether the filename it is given resolves to
+an executable object or a regular file.  This test uses the "Exep"
+method.  Note that this is different to the shell: the shell chooses
+its behaviour according to whether the command name is a bound
+variable or not.
+
+If execve() is given an executable object, it invokes it (passing the
+root directory, file descriptors, etc.).  When the method call
+returns, this means the new process has exited; it gives the exit
+code.  libc's execve() wait for the method call to return, and then
+exits, using the same exit code.
+
+Plash does not modify libc's wait() and waitpid().
+
+This is slightly unsatisfactory in three respects:
+
+{\ul:
+
+\li\paras~ It doesn't let P return the correct wait() status code to its
+   parent when the process created by X dies with an unhandled signal
+   (such as SIGSEGV).
+
+\li\paras~ It doesn't let P notify its parent when the new process is stopped
+   (by SIGSTOP or when the user presses Ctrl-Z).
+
+\li\paras~ kill() doesn't work as expected:  it sends a signal to the process
+   that is waiting, not the process it spawned.
+
+\li\paras~ There is an extra process hanging around, filling up the process
+   table and taking up memory (and holding onto open file descriptors
+   -- though this could be fixed) but not doing much else.
+}
+
+The solution to this would be to modify wait() and waitpid().  This
+would not be too bad because they can only be used on child processes.
+Modifying kill() as well would be trickier and less desirable, because
+it involves a global namespace of process IDs, and we would like to
+avoid global namespaces.
+
+\h2- Discovering file descriptors
+
+libc's execve() finds out which file descriptor indexes a process has
+open simply by trying to dup() each index in turn, upto a high index
+number.  If your program uses FDs with big FD numbers (eg. >1000),
+this may cause problems.  Although the Linux `proc' filesystem can be
+used to find out what file descriptors a process has open, this is not
+available in the Linux chroot() environment Plash uses to run programs
+in, and there's no way to use it securely.
+
+\h2- Garbage collection
+
+exec-object will exit when the reference to the object it provides is
+dropped, and it has no more processes to handle.
+
+
+\h1 id={exec-obj-limits}- Limitations
+
+\h2- Linux, job control, and TTY file descriptors
+
+File descriptors for TTYs under Unix do not behave like capabilities
+in the sense that the kernel takes a process's "process group" into
+account when the process does IO on a TTY file descriptor.  This is
+part of the Unix job control mechanism.  A process will be stopped
+(with SIGTTIN) if it tries to read from a TTY when it is not part of
+the TTY's current process group.
+
+I don't think this is a good design.  So far, however, it has not a
+problem because the processes started by `exec-object' can simply set
+their process group ID to the one specified in the "exec" invocation.
+That lets them read input from the terminal.
+
+However, processes also have a "session ID".  Typically, the processes
+running under a given terminal window run in their own distinct
+session.  A process cannot set its process group ID to a process group
+that belongs to a different session.  So if an exec-object instance E,
+started from one terminal window W1, is invoked by a process in
+another terminal window W2, E won't be able to start a process P that
+can read input from the user in W2, even if P has the appropriate TTY
+file descriptor.  This may be a problem in the future.
+
+I can see two ways around this:
+
+{\ul:
+\li\paras~ Just arrange for all the relevant processes to be running under
+   the same session ID.  This would only work if we're not using
+   existing terminal emulators (xterm, gnome-terminal, etc.).
+   It might not work at all.
+
+\li\paras~ Virtualise IO on file descriptors to use method calls on objects
+   instead.  There would be a lot of libc functions to modify in
+   order to do this properly, but this has other uses.
+}
+
+\h2- Job control
+
+You can start a process via the shell using an object invocation, and
+you can stop the process by pressing Ctrl-Z, but the shell is not
+informed that the process has been stopped, so the shell will not
+return control to the user and display a prompt.
+
+This needs to be fixed.  It is a deficiency in the specification of
+the "Exeo" method call.
+
+\h2- exec-object limitations
+
+exec-object does not set the current working directory of the
+processes it starts.
+
+exec-object doesn't provide any control over the arguments and
+environment variables it passes to the processes it starts.
+
+exec-object doesn't start its child processes with a different UID, so
+the child process could kill it, ptrace() it, etc.  (exec-object
+should use "run-as-anonymous" like the shell does.)
+
+\h2- Shell limitations
+
+The shell does not provide a mechanism for sharing object references
+with other instances of the shell, with other users, or across the
+network.
+
+The shell does not allow for recursive definitions using "def".
+
+The shell only supports "capcmd CMD ARGS..." where CMD is an
+executable file, but not where CMD is an executable object, and it
+doesn't support running CMD in the standard Unix way (as the `!!' 
+syntax does).
+
+A "capcmd !! CMD ARGS..." expression would allow the use of existing
+setuid executables from programs running under Plash.
+
+A "capcmd VAR ARGS..." expression would make it possible to have
+a single process provide multiple executable objects, ie:
+
+\pre
+  >>def factory_maker = capcmd factory-maker-maker
+  >>def echo = capcmd factory_maker '/bin/echo' ...
+  >>def ls = capcmd factory_maker '/bin/ls' ...

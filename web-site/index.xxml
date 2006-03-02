@@ -1,86 +1,156 @@
 
-### \html:
-### \head{
-###   \title{Plash: tools for least privilege}
-###   \link rel=stylesheet href={styles.css};
-### }
-### \body style={margin-left: 0}:
-### 
-### 
-### \div class=topbar \table width={100%} \tr{
-###   \td{
-###     \img src={../logo.png};
-###   }
-###   \td{
-###     \h1- Plash: tools for practical least privilege
-###   }
-### }
-### 
-### \table width={100%} cellpadding=4 \tr valign=top:
-### 
-### \td{
-### 
-### 
-### }
-### 
-### \td:
-### 
-### 
-### \div class=indent:
+\paras:
 
+Plash is a system for sandboxing GNU/Linux programs.  Plash's aim is
+to protect you from the programs you run by letting you run them with
+the minimum authority and privileges they need do do their job -- this
+is the Principle of Least Authority (POLA).  Plash can run programs in
+a secure, restricted execution environment with access to a limited
+subset of your files.
 
-\p~ Plash is a system for sandboxing GNU/Linux programs.  Plash's aim is to protect you from the programs you run by letting you run them with the minimum authority and privileges they need do do their job -- this is the Principle of Least Authority (POLA).  Plash can run programs in a secure, restricted execution environment with access to a limited subset of your files.
-
-\p~ Plash can be used to run servers, command line tools, and applications with graphical user interfaces:
+Plash can be used to run servers, command line tools, and applications
+with graphical user interfaces:
 
 \ul{
+  \li{
 
-{\li: \strong{Applications with graphical interfaces:}  You can dynamically grant GUI applications access rights to individual files that you want to open or edit.  This happens transparently through the Open/Save file chooser dialog box.  Plash replaces Gtk's GtkFileChooserDialog so that the file chooser is implemented outside the application in a separate process, as a trusted component.  This file chooser is known as a \strong{powerbox}, because it delegates additional power to the application.  (See {\a href={examples.html#gui-apps}: examples}.)}
+    \strong{Applications with graphical interfaces:} You can
+    dynamically grant GUI applications access rights to individual
+    files that you want to open or edit.  This happens transparently
+    through the Open/Save file chooser dialog box.  Plash replaces
+    Gtk's GtkFileChooserDialog so that the file chooser is implemented
+    outside the application in a separate process, as a trusted
+    component.  This file chooser is known as a {\strong\a
+    href={powerbox.html}: powerbox}, because it delegates additional
+    power to the application.  (See {\a href={examples.html#gui-apps}:
+    examples}.)
 
-{\li: \strong{Servers:}  You can run a network-accessible server with minimal access rights so that if it is compromised (e.g. via a buffer overrun bug), the adversary cannot compromise the whole machine.  You can set up an HTTP or FTP server with a limited view of the filesystem to export handpicked files without having to rely on the server's application-level access control mechanisms.}
+  }
+  \li{
 
-{\li: \strong{Command line tools:}  Using Plash, you can run tools with read access to their inputs and write access to their outputs.  Sandboxes are lightweight, so you can, for example, create a sandbox for running gcc to compile a single file.}
+    \strong{Servers:} You can run a network-accessible server with
+    minimal access rights so that if it is compromised (e.g. via a
+    buffer overrun bug), the adversary cannot compromise the whole
+    machine.  Or you can set up an HTTP or FTP server with a limited
+    view of the filesystem to export handpicked files without having
+    to rely on the server's application-level access control
+    mechanisms.
 
+  }
+  \li{
+
+    \strong{Command line tools:} Using Plash, you can run tools with
+    read-only access to their inputs and write access to their
+    outputs.  Sandboxes are lightweight, so you can, for example,
+    create a sandbox for running gcc to compile a single file.
+
+  }
 }
 
-\p~ In all cases, Plash gives you fine-grained control over dependencies.  You can link a program with specific versions of dynamic libraries by mapping individual files; or you can just map the whole /usr directory into the program's namespace.
+Plash provides two main interfaces for granting access rights to the
+sandboxed process:
+
+\ul{
+  \li\paras{
+
+    {\strong\a href={pola-run.html}: The pola-run tool:} This is a
+    command line interface for launching programs to run inside a
+    sandbox.
+
+    pola-run gives you fine-grained \em{control over dependencies}.
+    You can link a program with specific versions of dynamic libraries
+    by mapping individual files; or you can just map the whole /usr
+    directory into the program's namespace.
+
+    pola-run can be used from within a sandbox, allowing \em{nested
+    sandboxes}.
+
+  }
+  \li\paras{
+
+    {\strong\a href={powerbox.html}: The powerbox:} This is a GUI that
+    works transparently -- it adds a security role to a dialog box
+    that normal users already use for choosing files.  Users therefore
+    do not have to adjust much.  However, applications or their
+    libraries must be changed to make requests via the powerbox
+    component.
+
+  }
+}
 
 
 
+\h2 name={mailing-list}- Mailing list
 
-\h2\a name={mailing-list}- Mailing list
+There is a mailing list for Plash, for announcements and general
+discussion.  You can subscribe through the {\a
+href={http://lists.nongnu.org/mailman/listinfo/plash}: mailing list
+page}, or by e-mailing {\a href={mailto:plash-request@nongnu.org}:
+plash-request@nongnu.org} with "subscribe" in the subject line.
 
-\p~ There is a {\a
-href={http://lists.nongnu.org/mailman/listinfo/plash}: mailing list}
-for Plash.  To subscribe, e-mail {\a
-href={mailto:plash-request@nongnu.org}: plash-request@nongnu.org} with
-"subscribe" in the subject line.
-
-\p~ Another way to be notified of new releases is to subscribe to the
+Another way to be notified of new releases is to subscribe to the
 project on its {\a href={http://freshmeat.net/projects/plash/}:
 Freshmeat page}.
 
 
 
-\h2\a name={related}- Related systems
+\h2 name={related}- Related systems
+
+Plash is strongly influenced by systems that use capability-based
+security.  Plash itself uses a capability architecture, and the idea
+of a \em{powerbox} user interface comes from the same tradition.
+
+There are two other existing systems that implement file powerboxes:
 
 \ul{
+  \li{
 
-\li~ Polaris
+    {\strong\a href={http://www.combex.com/tech/edesk.html}: CapDesk},
+    a desktop GUI which is based around the {\a
+    href={http://www.erights.org}: E programming language}.  E is
+    implemented in Java, and CapDesk uses a Java-based widget set to
+    provide its GUI.  Programs must be written in E specially to run
+    under CapDesk.
 
-\li~ CapDesk
+  }
+  \li{
 
-\li~ \a href={http://www.eros-os.org} {EROS} (now called \a
-href={http://www.capros.org} {CapROS})
+    {\strong\a
+    href={http://www.hpl.hp.com/personal/Alan_Karp/polaris.pdf}:
+    Polaris}, a system for sandboxing Windows applications, such as
+    Word and Internet Explorer.  Polaris is proprietary software.  See
+    the {\a
+    href={http://www.hpl.hp.com/techreports/2004/HPL-2004-221.html}:
+    tech report on Polaris}.
 
+  }
 }
 
+The powerbox concept appears to have first been proposed by Ka-Ping
+Yee and Miriam Walker in {\cite\a
+href={http://www.sims.berkeley.edu/~ping/sid/ideus.html}: Interaction
+Design for End User Security} (December 2000).
+
+Plash has been influenced by the {\a href={http://www.eros-os.org}:
+EROS operating system}, a research system which is now being developed
+under the name {\a href={http://www.capros.org}: CapROS}.  EROS is
+based on KeyKOS, which was proprietary.  A successor to EROS is being
+designed, called {\a href={http://www.coyotos.org}: Coyotos}.  Like
+EROS, Coyotos will be free software.
 
 
-\h2\a name={roadmap}- Roadmap
+
+\h2 name={roadmap}- Roadmap
 
 ### python bindings
 
 ### persistence
 
 ### X11 access control, using proxy
+
+
+
+\h2 name={licence}- Licence
+
+Plash is free software, distributed under the GNU Lesser General
+Public Licence.

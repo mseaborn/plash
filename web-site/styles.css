@@ -54,9 +54,10 @@ th {
 /* table.borders ul { padding-left: 16pt } */
 
 div.indent { margin-left: 0.5in }
-div.indent > h1 { margin-left: -0.55in }
-div.indent > h2 { margin-left: -0.4in }
-div.indent > h3 { margin-left: -0.2in }
+/* Removed use of ">" in order to work with IE. */
+div.indent h1 { margin-left: -0.55in }
+div.indent h2 { margin-left: -0.4in }
+div.indent h3 { margin-left: -0.2in }
 div.body h1,
 div.body h2,
 div.body h3 {
@@ -71,22 +72,6 @@ div.indent > h2 { margin-left: -0.3in }
 div.indent > h3 { margin-left: -0.1in }
 */
 
-/*
-h1 { margin-left: 0in }
-h2 { margin-left: 0.2in }
-h3 { margin-left: 0.5in }
-p, dl, ul, ol { margin-left: 0.5in }
-pre { margin-left: 0.7in; margin-right: 0.7in }
-
-dd p { margin-left: 0 }
-
-hr { margin-left: 0in }
-
-p.footer { margin-left: 0; text-align: right }
-*/
-
-table ul, table pre { margin-left: 0 }
-
 
 /* Side bar for home page */
 /*
@@ -100,9 +85,9 @@ table.sidebar {
 table.sidebar {
   margin-left: 3pt;
   /* padding-left: 6pt; */
-  border-style: solid;
+  border-left-style: solid;
   border-left-width: medium;
-  border-color: #ddd;
+  border-left-color: #ddd;
 }
 table.sidebar ul {
   list-style: none;
@@ -112,7 +97,7 @@ table.sidebar ul {
 table.sidebar ul li { display: block }
 table.sidebar li {
   padding-bottom: 6pt;
-  font-size: small;
+  font-size: 90%; /* small */
 }
 
 

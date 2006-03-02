@@ -39,6 +39,39 @@ my $footer =
 		       tagp('a', [['href', 'contents.html']],
 			    'Up: Contents')))))];
 
+
+# A section is:
+#   Level => number
+#   Title => text
+#   Children => list
+my $section = 1;
+sub get_contents {
+  my ($root, $tree) = @_;
+  my @stack = ($root);
+  foreach my $elt (Transforms::flatten_lists($tree)) {
+    if(ref($elt) eq HASH && $elt->{T} =~ /^h(\d+)$/i) {
+      my $l = $1;
+      die if !($l > 0);
+      my $i = $section++;
+
+      my $node = { Level => $l,
+		   Title => $elt->{B},
+		   File => $root->{File},
+		   Name => get_attr_opt($elt, 'name') || "section$i",
+		   Children => [],
+		 };
+      $elt->{B} =
+	tagp('a', [['name', $node->{Name}],
+		   ['href', "contents.html#$node->{Name}"]],
+	     $node->{Title});
+      
+      while($stack[0]{Level} >= $l) { shift(@stack); }
+      push(@{$stack[0]{Children}}, $node);
+      unshift(@stack, $node);
+    }
+  }
+}
+
 sub contents_list {
   my ($node) = @_;
   my $entry =
@@ -66,7 +99,7 @@ my @sections =
    { File => 'pola-run', Title => 'pola-run: A command line tool for launching sandboxed programs' },
    { File => 'environment', Title => 'Plash\'s sandbox environment' },
    { File => 'pola-shell', Title => 'pola-shell: A shell for interactive use' },
-   { File => 'exec-objs', Title => 'Executable objects: a replacement for setuid' },
+   { File => 'exec-objs', Title => 'Executable objects: a replacement for setuid executables' },
    { File => 'protocols', Title => 'Communication protocols' },
    { File => 'methods', Title => 'RPC methods' },
    { File => 'news', Title => 'News' },
@@ -83,47 +116,26 @@ foreach my $part (@sections,
 }
 
 my $contents = {};
-push(@{$contents->{Children}},
-     { Title => 'Introduction',
-       File => "index.html",
-       Children => [] });
-my $section = 1;
+
+{
+  my $intro_contents =
+    { Title => 'Introduction',
+      File => "index.html",
+      Children => [] };
+  get_contents($intro_contents, $files->{'index'});
+  push(@{$contents->{Children}}, $intro_contents);
+}
+     
 foreach my $part (@sections) {
   my $tree = $files->{$part->{File}};
-
-  # Section is:
-  #   Level
-  #   Title
-  #   Children
-  my $root = { Level => 0,
-	       Title => $part->{Title},
-	       File => "$part->{File}.html",
-	       Children => [],
-	     };
-  push(@{$contents->{Children}}, $root);
-  my @stack = ($root);
-  foreach my $elt (Transforms::flatten_lists($tree)) {
-    if(ref($elt) eq HASH && $elt->{T} =~ /^h(\d+)$/i) {
-      my $l = $1;
-      die if !($l > 0);
-      my $i = $section++;
-
-      my $node = { Level => $l,
-		   Title => $elt->{B},
-		   File => "$part->{File}.html",
-		   Name => get_attr_opt($elt, 'name') || "section$i",
-		   Children => [],
-		 };
-      $elt->{B} =
-	tagp('a', [['name', $node->{Name}],
-		   ['href', "contents.html#$node->{Name}"]],
-	     $node->{Title});
-      
-      while($stack[0]{Level} >= $l) { shift(@stack); }
-      push(@{$stack[0]{Children}}, $node);
-      unshift(@stack, $node);
-    }
-  }
+  my $sect_contents =
+    { Level => 0,
+      Title => $part->{Title},
+      File => "$part->{File}.html",
+      Children => [],
+    };
+  get_contents($sect_contents, $tree);
+  push(@{$contents->{Children}}, $sect_contents);
 
   write_file("out/$part->{File}.html",
 	     tag('html',

@@ -6,16 +6,17 @@
 
 \h2 name={shell-diffs}- Differences from Bash: examples
 
-The syntax of Plash is similar to Unix shells such as the Bourne shell
-or Bash.  Here are some examples of command invocations using Plash:
+The syntax of pola-shell is similar to Unix shells such as the Bourne
+shell or Bash.  Here are some examples of command invocations using
+pola-shell:
 
 
 \pre >>ls .
 
   Arguments that were implicit before must now be made explicit.  With
   the Bourne shell or Bash you can write `ls' to list the current
-  directory's contents.  With Plash you must add `.' to grant access
-  to the current directory.
+  directory's contents.  With pola-shell you must add `.' to grant
+  access to the current directory.
 
 
 \pre >>gcc -c foo.c => -o foo.o
@@ -85,14 +86,14 @@ or Bash.  Here are some examples of command invocations using Plash:
   Changing directory works as before.
 
 
-\h2 name={shell-missing-features}- Bourne shell features missing from Plash
+\h2 name={shell-missing-features}- Bourne shell features missing from pola-shell
 
 The following features are provided in the Bourne shell and Bash but
-not in Plash.
+not in pola-shell.
 
 \ul{
 
-  \li{Environment variables.  Plash doesn't provide any way to set
+  \li{Environment variables.  pola-shell doesn't provide any way to set
   environment variables, and it doesn't perform any substitution of
   environment variables in arguments.}
 
@@ -118,11 +119,11 @@ configuration files, other executables -- and for interpreted
 programs, source files.  These are files that are in a sense "part of"
 the program.
 
-On Unix, Plash can't tell exactly what the installation endowment of a
+On Unix, pola-shell can't tell exactly what the installation endowment of a
 program is or should be.  Unix does not have this information, because
 programs are usually given access to everything the user can access.
 
-So, Plash has a default installation endowment.  It grants read-only
+So, pola-shell has a default installation endowment.  It grants read-only
 access to the directories
 {\filename:/bin},
 {\filename:/lib},
@@ -172,12 +173,12 @@ Or:  To enable it for all shell sessions, you can create a file
 \pre
   >>plash-opts /x=options 'enable_x11' 'on';
 
-and start the Plash shell with the command:
+and start pola-shell with the command:
 
 \pre
-  >>plash --rcfile ~/.plashrc
+  >>pola-shell --rcfile ~/.plashrc
 
-(In order to make it as predictable as possible, Plash doesn't read
+(In order to make it as predictable as possible, pola-shell doesn't read
 any options files by default, so you have to specify options files
 explicitly.)
 
@@ -198,14 +199,14 @@ There is no command for listing the currently active jobs yet.
 
 \h2 name={shell-scripts}- Shell scripts
 
-Plash has only rudimentary support for shell scripts.  You can get the
+pola-shell has only rudimentary support for shell scripts.  You can get the
 shell to run a script file on startup with the {\option:--rcfile}
 option.  The "source {\r:file}" command will run {\r:file} as a
 script.
 
 Each command in the script file must be terminated with a semicolon ";".
 
-Plash doesn't accept any leading space in the script.  This is a bug.
+pola-shell doesn't accept any leading space in the script.  This is a bug.
 
 There is no error handling: if a command exits with a non-zero return
 code, it doesn't stop the script.

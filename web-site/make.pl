@@ -7,12 +7,21 @@ use Transforms;
 use IO::File;
 use File::stat;
 
+
+foreach my $base (qw(screenshot-gnumeric
+		     screenshot-inkscape
+		     screenshot-xemacs)) {
+  system('convert', '-scale', '30%x30%',
+	 "$base.png", "out/${base}-small.png");
+}
+
+
   ### \li- Why POLA
   ### \li- FAQs
 my $sidebar = XXMLParse::parse(<<'END');
 \table class=sidebar border={0} \tr\td\ul{
   \li\a href={download.html}- Download
-  \li- Screenshots
+  \li\a href={screenshots.html}- Screenshots
   \li\a href={contents.html}- Documentation contents
   \li\a href={examples.html}- Examples
   \li\a href={news.html}- News
@@ -95,6 +104,7 @@ sub contents_list {
 my @sections =
   ({ File => 'download', Title => 'Download' },
    { File => 'examples', Title => 'Examples' },
+   { File => 'screenshots', Title => 'Screenshots' },
    { File => 'powerbox', Title => 'The powerbox: a GUI for granting authority' },
    { File => 'pola-run', Title => 'pola-run: A command line tool for launching sandboxed programs' },
    { File => 'environment', Title => 'Plash\'s sandbox environment' },

@@ -101,6 +101,12 @@ table.sidebar li {
 }
 
 
+div.screenshot-small {
+}
+div.screenshot-comment {
+  margin-left: 0.5in;
+}
+
 
 pre {
   background-color: #E8EDFF;

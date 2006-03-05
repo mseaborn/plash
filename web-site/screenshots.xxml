@@ -1,0 +1,99 @@
+
+\paras:
+
+
+\h2- Using the powerbox from Gtk applications
+
+\div class={screenshot-small}
+\a  href={screenshot-gnumeric.png}
+\img src={screenshot-gnumeric-small.png};
+
+\div class={screenshot-comment} \paras{
+
+  \em{Saving a file from Gnumeric:} Here, the powerbox is accessed
+  from the "File => Save As" menu item.
+
+}
+
+
+\div class={screenshot-small}
+\a  href={screenshot-inkscape.png}
+\img src={screenshot-inkscape-small.png};
+
+\div class={screenshot-comment} \paras{
+
+  \em{Importing an image file into an existing document in Inkscape:}
+  Here, the powerbox is accessed through the "File => Import" menu
+  item.  Note that you can choose to grant read-only access to the
+  file: Inkscape doesn't need to write to the file if you're only
+  importing it.
+
+  One limitation of the powerbox implementation is that you can't
+  preview images in the file chooser dialog.
+
+}
+
+
+The interesting thing about these screenshots is that they are not
+very interesting!  They just show opening or saving a file via a
+familiar file chooser dialog box.
+
+The difference from usual is that the file chooser now grants the
+application the right to access the file in question.  The file
+chooser is asking the user to make a security decision, although the
+user does not need to be aware of that.
+
+Once you have chosen a file using the powerbox, you don't need to
+confirm the application's right to access it further.  So selecting
+"File => Save" will save a document without any annoying "Are you
+sure?" boxes popping up.
+
+In these examples, the windows belong to \em{two different processes}.
+The application runs in a sandboxed process, which gets granted access
+to the individual files that the user picks via the file chooser.  The
+file chooser dialog is provided by the powerbox manager, which runs in
+a separate process.  The powerbox manager has access to all the user's
+files and can delegate selected files to the application.
+
+There are three visible differences from normal file chooser dialogs:
+
+\ul{
+  \li{
+    The title bar displays the "pet name" of the application (that is,
+    a name the user chooses to give the application beforehand), so
+    that the user can tell what entity they are granting authority to.
+  }
+  \li{
+    There is an option to grant read-only access.
+  }
+  \li{
+    There is a "reason" field which gives the application the chance
+    to say why it wants the user to pick a file to grant to it.
+    Unmodified Gtk applications do not fill this out.  Usually it's
+    not necessary because the dialog is opened in response to the
+    user picking a menu item such as "File => Save As".
+  }
+}
+
+The powerbox manager happens to use Gtk to display the file chooser,
+but it could equally use any other widget set; it can be a different
+widget set to the application, as the XEmacs example shows.
+
+
+\h2- Using the powerbox from XEmacs
+
+\div class={screenshot-small}
+\a  href={screenshot-xemacs.png}
+\img src={screenshot-xemacs-small.png};
+
+\div class={screenshot-comment} \paras{
+
+  \em{Saving a file from XEmacs:} Here, the powerbox has been opened
+  by typing C-x C-s (in a buffer that doesn't have a filename yet) or
+  by selecting the "File => Save As" menu item.  Usually, typing C-x
+  C-f (\tt{find-file}) causes XEmacs to prompt for a filename via the
+  minibuffer (using Tab for filename completion).  Plash's
+  XEmacs/powerbox integration (written in elisp) replaces the
+  minibuffer-based prompt with a dialog box.
+
+}

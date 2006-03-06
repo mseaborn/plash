@@ -150,8 +150,12 @@ sub pretty_print_aux {
 # Output without any indentation
 sub to_html {
   my ($out, $t, $in_attr) = @_;
-  
-  if(!ref($t)) {
+
+  if(!defined($t)) {
+    warn 'Undefined value';
+    print $out '<!-- undef -->';
+  }
+  elsif(!ref($t)) {
     $t =~ s/&/&amp;/g;
     if($in_attr) { $t =~ s/"/&quot;/g; }
     $t =~ s/</&lt;/g;

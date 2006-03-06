@@ -1,6 +1,142 @@
 
-\h2- Download previous versions
+\paras:
 
+\h2- Installing Plash
+
+There are three ways in which you might install Plash, depending on
+how much you want to build from scratch.
+
+
+\h3- Pre-built packages
+
+Debian and RPM packages are available, for i386:
+
+\ul{
+  \li{
+    Debian package:
+    {\a href={http://plash.beasts.org/releases/plash_1.15_i386.deb}:
+     plash_1.15_i386.deb}
+  }
+  \li{
+    RPM package:
+    {\a href={http://plash.beasts.org/releases/plash-1.15-1.i386.rpm}:
+     plash-1.15-1.i386.rpm}
+  }
+}
+
+
+\h3- Build Plash using pre-built glibc object files
+
+Download these files:
+
+\ul{
+  \li{
+    {\a href={http://plash.beasts.org/releases/plash-1.15.tar.gz}:
+     plash-1.15.tar.gz}, the Plash source
+  }
+  \li{
+    {\a href={http://plash.beasts.org/releases/glibc-i386-objs-2.3.5_2.tar.gz}:
+     glibc-i386-objs-2.3.5_2.tar.gz}, the pre-built glibc object files
+  }
+}
+
+Unpack the Plash source and unpack the glibc object files inside
+Plash's build directory:
+
+\pre
+>>tar -xvzf plash-1.15.tar.gz
+>>cd plash-1.15
+>>tar -xvzf ../glibc-i386-objs-2.3.5_2.tar.gz
+
+Configure and build Plash:
+
+\pre
+>>./configure
+>>./make.sh
+
+Then do the following as root to install Plash:
+
+\pre
+>>./install.sh /
+
+
+\h3- Build Plash and glibc from source
+
+Download these files:
+
+\ul{
+  \li{
+    {\a href={http://plash.beasts.org/releases/plash-1.15.tar.gz}:
+     plash-1.15.tar.gz}, the Plash source
+  }
+  \li{
+    {\a href={ftp://ftp.gnu.org/gnu/glibc/glibc-2.3.5.tar.bz2}:
+     glibc-2.3.5.tar.bz2} (13Mb)
+  }
+  \li{
+    {\a href={ftp://ftp.gnu.org/gnu/glibc/glibc-linuxthreads-2.3.5.tar.gz}:
+     glibc-linuxthreads-2.3.5.tar.gz} (~300k)
+  }
+}
+
+Unpack Plash, and copy or link the glibc source tar.bz2/tar.gz files
+inside Plash's build directory.
+
+Build glibc with the following command.  This will unpack glibc, apply
+patches, configure and build it.  This uses the Debian package build
+script, but this part is not Debian-specific.  It takes about 100 Mb
+of disc space, and takes 13 minutes on my Athlon XP 3200 machine.
+
+\pre
+>>./debian/rules stamp-dir/build-glibc
+
+Now configure and build Plash:
+
+\pre
+>>./configure GLIBC_DIR=glibc-objs
+>>./make.sh
+
+As before, you can do the following, as root, to install Plash:
+
+\pre
+>>./install.sh /
+
+
+
+\h2- SVN repository
+
+Bleeding-edge versions of Plash are available from the Subversion
+(SVN) repository, which is hosted by {\a href={http://gna.org}:
+gna.org}.
+
+\ul{
+  \li\paras{
+    Checkout over SVN protocol (TCP 3690):
+
+    \pre- svn co svn://svn.gna.org/svn/plash/trunk plash
+  }
+  \li\paras{
+    Checkout over http:
+
+    \pre- svn co http://svn.gna.org/svn/plash/trunk plash
+  }
+  \li{
+    \a href={http://svn.gna.org/daily/plash-snapshot.tar.gz}:
+    Plash source daily snapshot
+  }
+  \li{
+    \a href={http://svn.gna.org/viewcvs/plash/trunk/}:
+    Browse the source repository
+  }
+  \li{
+    \a href={https://gna.org/svn/?group=plash}:
+    More comprehensive information about the repository on gna.org
+  }
+}
+
+
+
+\h2- Download previous versions
 
 {\table width={100%} align=center border=1 class=borders:
 
@@ -22,6 +158,8 @@
    {\li: Source:
      \a href={http://plash.beasts.org/releases/plash-1.15.tar.gz}:
        plash-1.15.tar.gz}
+   {\li\a href={http://svn.gna.org/viewcvs/plash/trunk/?rev=35}:
+     Browse SVN}
  }
  {\td:
 
@@ -42,6 +180,8 @@ Added Powerbox for Gtk.  Fixes to allow Konqueror and Gnumeric to run.
    {\li: Source:
      \a href={http://plash.beasts.org/releases/plash-1.14.tar.gz}:
        plash-1.14.tar.gz}
+   {\li\a href={http://svn.gna.org/viewcvs/plash/trunk/?rev=33}:
+     Browse SVN}
  }
  {\td:
 
@@ -62,6 +202,8 @@ Added powerboxes.
    {\li: Source:
      \a href={http://plash.beasts.org/releases/plash-1.13.tar.gz}:
        plash-1.13.tar.gz}
+   {\li\a href={http://svn.gna.org/viewcvs/plash/trunk/?rev=31}:
+     Browse SVN}
  }
  {\td:
 
@@ -82,6 +224,8 @@ Much-improved build system.
    {\li: Source:
      \a href={http://plash.beasts.org/releases/plash-1.12.tar.gz}:
        plash-1.12.tar.gz}
+   {\li\a href={http://svn.gna.org/viewcvs/plash/trunk/?rev=29}:
+     Browse SVN}
  }
  {\td:
 
@@ -108,6 +252,8 @@ Include libm.so etc. in packages.
        plash_1.11.dsc},
      {\a href={http://savannah.nongnu.org/download/plash/plash_1.11.tar.gz}:
        plash_1.11.tar.gz}}
+   {\li\a href={http://svn.gna.org/viewcvs/plash/trunk/?rev=27}:
+     Browse SVN}
  }
  {\td:
 
@@ -130,6 +276,8 @@ and converted to DocBook format.
    {\li: Source:
      \a href={http://plash.beasts.org/releases/plash-1.10.tar.gz}:
        plash-1.10.tar.gz}
+   {\li\a href={http://svn.gna.org/viewcvs/plash/trunk/?rev=25}:
+     Browse SVN}
  }
  {\td:
 
@@ -155,6 +303,8 @@ Implemented fchdir().  "rm -r", "install -d" and "mkdir -p" now work.
        plash_1.9.dsc},
      {\a href={http://www.cs.jhu.edu/~seaborn/plash/with-glibc/plash_1.9.tar.gz}:
        plash_1.9.tar.gz}}
+   {\li\a href={http://svn.gna.org/viewcvs/plash/trunk/?rev=23}:
+     Browse SVN}
  }
  {\td:
 
@@ -182,6 +332,8 @@ directory).
        plash_1.8.dsc},
      {\a href={http://www.cs.jhu.edu/~seaborn/plash/with-glibc/plash_1.8.tar.gz}:
        plash_1.8.tar.gz}}
+   {\li\a href={http://svn.gna.org/viewcvs/plash/trunk/?rev=21}:
+     Browse SVN}
  }
  {\td:
 
@@ -205,6 +357,8 @@ descriptors, so that XEmacs works.
    {\li: Source:
      \a href={http://plash.beasts.org/releases/plash-1.7.tar.gz}:
        plash-1.7.tar.gz}
+   {\li\a href={http://svn.gna.org/viewcvs/plash/trunk/mrs/?rev=19}:
+     Browse SVN}
  }
  {\td:
 Major new feature: executable objects.
@@ -223,6 +377,8 @@ Major new feature: executable objects.
    {\li: Source:
      \a href={http://plash.beasts.org/releases/plash-1.6.tar.gz}:
        plash-1.6.tar.gz}
+   {\li\a href={http://svn.gna.org/viewcvs/plash/trunk/mrs/?rev=17}:
+     Browse SVN}
  }
  {\td:
 New argument syntax: "PATHNAME = EXPR", allowing objects to be attached
@@ -242,6 +398,8 @@ anywhere in the file namespace.
    {\li: Source:
      \a href={http://plash.beasts.org/releases/plash-1.5.tar.gz}:
        plash-1.5.tar.gz}
+   {\li\a href={http://svn.gna.org/viewcvs/plash/trunk/mrs/?rev=15}:
+     Browse SVN}
  }
  {\td:
 Add recursive read-only directories.  Add example "chroot" program:
@@ -261,6 +419,8 @@ first tool to use object-capability protocol.
    {\li: Source:
      \a href={http://plash.beasts.org/releases/plash-1.4.tar.gz}:
        plash-1.4.tar.gz}
+   {\li\a href={http://svn.gna.org/viewcvs/plash/trunk/mrs/?rev=13}:
+     Browse SVN}
  }
  {\td:
 
@@ -282,6 +442,8 @@ layer in the communication between client and server.
    {\li: Source:
      \a href={http://plash.beasts.org/releases/plash-1.3.tar.gz}:
        plash-1.3.tar.gz}
+   {\li\a href={http://svn.gna.org/viewcvs/plash/trunk/mrs/?rev=11}:
+     Browse SVN}
  }
  {\td:
 
@@ -305,6 +467,8 @@ rename() and link().
    {\li: Source:
      \a href={http://plash.beasts.org/releases/plash-1.2.tar.gz}:
        plash-1.2.tar.gz}
+   {\li\a href={http://svn.gna.org/viewcvs/plash/trunk/mrs/?rev=9}:
+     Browse SVN}
  }
  {\td:
 
@@ -327,6 +491,8 @@ options window for enabling logging.
    {\li: Source:
      \a href={http://plash.beasts.org/releases/plash-1.1.tar.gz}:
        plash-1.1.tar.gz}
+   {\li\a href={http://svn.gna.org/viewcvs/plash/trunk/mrs/?rev=7}:
+     Browse SVN}
  }
  {\td:
 Added job control to shell.
@@ -345,6 +511,8 @@ Added job control to shell.
    {\li: Source:
      \a href={http://plash.beasts.org/releases/plash-1.0.tar.gz}:
        plash-1.0.tar.gz}
+   {\li\a href={http://svn.gna.org/viewcvs/plash/trunk/mrs/?rev=5}:
+     Browse SVN}
  }
  {\td: First version.}
 }

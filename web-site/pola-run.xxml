@@ -66,14 +66,15 @@ aren't implemented yet.
 \h2- Options
 
 For arguments that take one parameter, there are two forms to choose
-from: "{\option:--arg} {\r:param}" and "{\option:--arg}={\r:param}".
-The first form may be more convenient to generate in a C program.  The
-latter may be more readable in hand-written shell scripts.
+from: "\code{\option{--arg} \r{param}}" and
+"\code{\option{--arg}=\r{param}}".  The first form may be more
+convenient to generate in a C program.  The latter may be more
+readable in hand-written shell scripts.
 
 \dl{
 
-\dt- {\option:--prog} {\r:filename}
-\dt- {\option:--prog}={\r:filename}
+\dt\code- {\option:--prog} {\r:filename}
+\dt\code- {\option:--prog}={\r:filename}
 {\dd\paras:
 
 This gives the filename of the executable to be invoked.  If it
@@ -82,14 +83,14 @@ doesn't contain a slash, it will be looked up in {\envar:PATH}.
 The filename is resolved in the callee's namespace, not the caller's
 namespace.
 
-Note that if the executable is a "#!" script, access to the
-interpreter specified in the "#!" line will {\emphasis:not} be
+Note that if the executable is a "\code{#!}" script, access to the
+interpreter specified in the "\code{#!}" line will \em{not} be
 implicitly granted.
 
 }
 
-\dt- {\option:-f}[awls]...[,{\r:option}]... {\r:pathname}
-\dt- {\option:-f}[awls]...[,{\r:option}]...={\r:pathname}
+\dt\code- {\option:-f}[awls]...[,{\r:option}]... {\r:pathname}
+\dt\code- {\option:-f}[awls]...[,{\r:option}]...={\r:pathname}
 {\dd\paras:
 
 Grant access to a file or directory (given by {\r:pathname}), and
@@ -146,7 +147,7 @@ separated by commas.
 }
 }
 
-\dt- {\option:-t}[awls]...[,{\r:option}]... {\r:dest-pathname} {\r:source-pathname}
+\dt\code- {\option:-t}[awls]...[,{\r:option}]... {\r:dest-pathname} {\r:source-pathname}
 {\dd\paras:
 
 Grant access to a file or directory ({\r:source-pathname}), but attach
@@ -154,7 +155,7 @@ it to a different pathname in the file namespace({\r:dest-pathname}).
 Optionally add {\r:dest-pathname} to the argument list.  This takes
 the same options as {\option:-f}.
 
-Note that "{\option:-f}{\r:options} {\r:pathname}" is {\emphasis:not}
+Note that "{\option:-f}{\r:options} {\r:pathname}" is \em{not}
 exactly equivalent to "{\option:-t}{\r:options} {\r:pathname}
 {\r:pathname}".  {\option:-t} will not introduce symlinks at the
 directory components of {\r:dest-pathname}, and it will fail if there
@@ -162,18 +163,18 @@ are any symlinks in these locations.
 
 }
 
-\dt- {\option:-a} {\r:string}
-\dt- {\option:-a}={\r:string}
+\dt\code- {\option:-a} {\r:string}
+\dt\code- {\option:-a}={\r:string}
 {\dd\paras:
 
 Add {\r:string} to the argument list.
 
 }
 
-\dt- {\option:--cwd} {\r: dir}
-\dt- {\option:--cwd}={\r: dir}
-\dt- {\option:--no-cwd}
-\dt- {\option:--copy-cwd}
+\dt\code- {\option:--cwd} {\r: dir}
+\dt\code- {\option:--cwd}={\r: dir}
+\dt\code- {\option:--no-cwd}
+\dt\code- {\option:--copy-cwd}
 {\dd\paras:
 
 These options set the current working directory (cwd) for the process.
@@ -196,7 +197,7 @@ argument also sets the process's cwd.
 
 }
 
-\dt- {\option:-B}
+\dt\code- {\option:-B}
 {\dd\paras:
 
 Grant access to a default installation endowment.  This is equivalent
@@ -211,7 +212,7 @@ to the options:
 
 }
 
-\dt- {\option:--x11}
+\dt\code- {\option:--x11}
 {\dd\paras:
 
 Grant access to the X11 Window System.  This is currently equivalent
@@ -225,7 +226,7 @@ In the future, {\option:--x11} may work using an X11 proxy.
 
 }
 
-\dt- {\option:--net}
+\dt\code- {\option:--net}
 {\dd\paras:
 
 This grants access to some files that are important for accessing the
@@ -242,7 +243,7 @@ Currently, this is equivalent to:
 
 }
 
-\dt- {\option:--powerbox}
+\dt\code- {\option:--powerbox}
 {\dd\paras:
 
 Grants the callee program an object "powerbox_req_filename" which can
@@ -259,7 +260,7 @@ powerbox request object rather than always creating a new one.
 
 }
 
-\dt- {\option:--pet-name} {\r:name}
+\dt\code- {\option:--pet-name} {\r:name}
 {\dd\paras:
 
 This provides a name to use in the title bar of powerbox windows, so

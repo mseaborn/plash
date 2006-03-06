@@ -342,9 +342,9 @@ By default, the shell does not read any scripts on startup.
     This built-in expression is similar to a normal command
     invocation, except that it expects the resulting process to return
     an object reference as a result.  The shell passes the process a
-    return continuation argument ({\varname:return_cont}; see the
-    {\envar:PLASH_CAPS} environment variable), which the process
-    invokes with the result.
+    return continuation argument ({\code:return_cont}; see {\a
+    href={protocols.html#env-vars}: the {\envar:PLASH_CAPS}
+    environment variable}), which the process invokes with the result.
 
     This expression doesn't wait for the process to exit: the process
     will typically act as a server and stay running in the background

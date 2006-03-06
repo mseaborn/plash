@@ -8,11 +8,58 @@ use IO::File;
 use File::stat;
 
 
+# code
+# samp (output)
+# kbd (input)
+# var
+my $aliases =
+  { 'envar' => 'code',
+    'r' => 'var',        # DocBook's <replaceable>; italic
+    'option' => 'code',  # DocBook's <option>; usually bold, but not here
+    'f' => 'code',       # filename or function?
+    'function' => 'code',
+    'filename' => 'code',
+    'userinput' => 'kbd',
+    'command' => 'code',
+  };
+my $transform_map =
+  { (map {
+       my $tag = $_;
+       ($tag =>
+	sub {
+	  my ($x) = @_;
+	  tag($aliases->{$tag}, $x->{B})
+	})
+     } keys(%$aliases)),
+
+    # 'option' => sub { $_[0]{B} },
+
+    'xxmlexample' =>
+    sub {
+      my ($t) = @_;
+      my @body = grep { /\S/ } @{$t->{B}};
+      die unless scalar(@body) == 2;
+      die unless $body[0]{T} eq 'xxml';
+      die unless $body[1]{T} eq 'xml';
+      tagp('table', [['border', 1]],
+	   tag('tr',
+	       tag('td', 'XXML'),
+	       tag('td', tag('pre', $body[0]{B}))),
+	   tag('tr',
+	       tag('td', 'XML'),
+	       tag('td', tag('pre', $body[1]{B}))));
+    },
+  };
+
+
+# Generate smaller versions of images
 foreach my $base (qw(screenshot-gnumeric
 		     screenshot-inkscape
 		     screenshot-xemacs)) {
-  system('convert', '-scale', '30%x30%',
-	 "$base.png", "out/${base}-small.png");
+  my @cmd = ('convert', '-scale', '30%x30%',
+	     "$base.png", "out/${base}-small.png");
+  my $rc = system(@cmd);
+  if($rc != 0) { die "Exited with code $rc: ".join(' ', @cmd) }
 }
 
 
@@ -83,22 +130,23 @@ sub get_contents {
 
 sub contents_list {
   my ($node) = @_;
-  my $entry =
-    tagp('a',
-	 (defined $node->{Name}
-	  ? [['href', "$node->{File}#$node->{Name}"],
-	     ['name', $node->{Name}]]
-	  : [['href', $node->{File}]]),
-	 $node->{Title});
-  
+  my @got;
+
+  if(defined $node->{Title}) {
+    push(@got,
+	 tagp('a',
+	      (defined $node->{Name}
+	       ? [['href', "$node->{File}#$node->{Name}"],
+		  ['name', $node->{Name}]]
+	       : [['href', $node->{File}]]),
+	      $node->{Title}));
+  }
   if(scalar(@{$node->{Children}}) > 0) {
-    [$entry,
-     tag('ul',
-	 map { tag('li', contents_list($_)) } @{$node->{Children}})]
+    push(@got,
+	 tag('ul',
+	     map { tag('li', contents_list($_)) } @{$node->{Children}}));
   }
-  else {
-    $entry
-  }
+  \@got
 }
 
 my @sections =
@@ -129,7 +177,8 @@ my $contents = {};
 
 {
   my $intro_contents =
-    { Title => 'Introduction',
+    { Level => 0,
+      Title => 'Introduction',
       File => "index.html",
       Children => [] };
   get_contents($intro_contents, $files->{'index'});
@@ -225,10 +274,48 @@ write_file('out/index.html',
 		  )));
 
 
+sub get_tags {
+  my ($x, $tags) = @_;
+  if(!ref($x)) {}
+  elsif(ref($x) eq ARRAY) { foreach my $x (@$x) { get_tags($x, $tags) } }
+  elsif(ref($x) eq HASH) {
+    $tags->{$x->{T}} = 1;
+    get_tags($x->{B}, $tags);
+  }
+  else { die }
+}
+
 sub write_file {
   my ($out_file, $data) = @_;
 
+  my @html_tags =
+    qw(html
+       head title link
+       body
+       h1 h2 h3
+       p div pre
+       hr br
+       img
+       table tr th td
+       ul ol li
+       dl dt dd
+       a strong em cite tt code var samp kbd
+       );
+  my $html_tags = { map { ($_ => 1) } @html_tags };
+  
   print "Writing $out_file\n";
+
+  $data = Transforms::transform($data, $transform_map);
+
+  # Warn about non-HTML tags
+  my $tags = {};
+  get_tags($data, $tags);
+  foreach my $tag (keys(%$tags)) {
+    if(!$html_tags->{$tag}) {
+      print "  Unknown tag: $tag\n";
+    }
+  }
+
   my $f = IO::File->new($out_file, 'w') || die "Can't open '$out_file'";
   XXMLParse::to_html($f, $data);
   $f->close();

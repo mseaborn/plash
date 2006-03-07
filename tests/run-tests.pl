@@ -39,6 +39,39 @@ mycmd '/'
 END
      });
 
+
+
+test('hello',
+     sub {
+       my $data = cmd_capture($pola_run, qw(-B --prog /bin/echo),
+			      '-a', 'Hello world');
+       if($data ne "Hello world\n") { die "Got: \"$data\"" }
+     });
+
+# Tests execve but not fork, because bash does a tail call
+test('bash_exec',
+     sub {
+       # do "--cwd /" to stop bash complaining about unset cwd
+       my $data = cmd_capture($pola_run, qw(-B --prog /bin/bash --cwd /),
+			      '-a=-c', '-a', '/bin/echo yeah');
+       if($data ne "yeah\n") { die "Got: \"$data\"" }
+     });
+
+test('bash_fork',
+     sub {
+       my $data = cmd_capture($pola_run, qw(-B --prog /bin/bash --cwd /),
+			      '-a=-c', '-a', '/bin/echo yeah; /bin/true');
+       if($data ne "yeah\n") { die "Got: \"$data\"" }
+     });
+
+test('strace',
+     sub {
+       my $data = cmd_capture($pola_run,
+			      qw(-B --prog /usr/bin/strace -a=/bin/echo),
+			      '-a', 'Hello world');
+       if($data !~ /Hello world/) { die "Got: \"$data\"" }
+     });
+
 test('chmod_x',
      sub {
        my $f = IO::File->new('file', O_CREAT | O_EXCL | O_WRONLY) || die;
@@ -67,6 +100,7 @@ test('utimes',
        if($st[8] != $atime) { die "atime mismatch" }
        if($st[9] != $mtime) { die "atime mismatch" }
      });
+
 
 
 sub test {
@@ -100,10 +134,14 @@ sub cmd_capture {
     die;
   }
   close(PIPE_WRITE);
-  my $data = join('', <PIPE_READ>);
+  my @lines = <PIPE_READ>;
+  my $data = join('', @lines);
   close(PIPE_READ);
   if(waitpid($pid, 0) != $pid) { die }
   my $rc = $?;
-  if($rc != 0) { die "Return code $rc" }
+  if($rc != 0) {
+    print join('', map { ">>$_" } @lines);
+    die "Return code $rc"
+  }
   $data
 }

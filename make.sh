@@ -83,6 +83,7 @@ EXCLUDE="io/open.os io/open64.os io/creat.os io/creat64.os
 	io/not-cancel-open.os
 	io/close.os
 	io/not-cancel-close.os
+	io/not-cancel-close-ns.os
 	io/dup2.os
 	io/getcwd.os io/chdir.os io/fchdir.os
 	io/xmknod.os
@@ -117,8 +118,7 @@ EXCLUDE="io/open.os io/open64.os io/creat.os io/creat64.os
 	posix/setuid.os posix/setgid.os
 	posix/setresuid.os posix/setresgid.os
 	misc/seteuid.os misc/setegid.os
-	misc/setreuid.os misc/setregid.os
-	io/not-cancel-open.os"
+	misc/setreuid.os misc/setregid.os"
 
 if [ ! -d "$GLIBC" ]; then
   echo "Warning: glibc object files directory \"$GLIBC\" does not exist"

@@ -24,7 +24,9 @@ package=plash
 
 GLIBC_DIR		= glibc-2.3.5
 GLIBC_ARCHIVE		= glibc-2.3.5.tar.bz2
-LINUXTHREADS_ARCHIVE	= glibc-linuxthreads-2.3.5.tar.gz
+LINUXTHREADS_ARCHIVE	= glibc-linuxthreads-2.3.5.tar.bz2
+
+binary:	binary-arch
 
 stamp-dir/unpack-patch-glibc:
 	if [ ! -e $(GLIBC_ARCHIVE) ]; then \
@@ -39,31 +41,32 @@ stamp-dir/unpack-patch-glibc:
 	# Unpack
 	mkdir -p tmp
 	bzip2 -cd $(GLIBC_ARCHIVE) | tar -C tmp -xf -
-	gzip -cd $(LINUXTHREADS_ARCHIVE) | tar -C tmp/$GLIBC_DIR -xf -
+	bzip2 -cd $(LINUXTHREADS_ARCHIVE) | tar -C tmp/$(GLIBC_DIR) -xf -
 	# Apply patch
-	patch -p1 -d tmp/$GLIBC_DIR <patches/glibc-2005-10-04.diff
+	patch -p1 -d tmp/$(GLIBC_DIR) <patches/glibc-2005-10-04.diff
 	# Move into place
-	mv -v tmp/$GLIBC_DIR .
+	mv -v tmp/$(GLIBC_DIR) .
 	mkdir -p stamp-dir
 	touch stamp-dir/unpack-patch-glibc
 
 stamp-dir/configure-glibc: stamp-dir/unpack-patch-glibc
 	mkdir -p glibc-objs
 	# Use --disable-profile to save disc space
+	# -g1 saves a lot of space
 	( cd glibc-objs && \
-	  ../$GLIBC_DIR/configure \
+	  ../$(GLIBC_DIR)/configure \
 		--prefix=/usr \
 		--enable-add-ons=linuxthreads \
 		--without-selinux --enable-kernel=2.2.0 \
 		--with-tls --without-__thread \
-		--disable-profile \
+		--disable-profile CFLAGS="-pipe -fstrict-aliasing -g1 -O3" \
 	)
 	mkdir -p stamp-dir
 	touch stamp-dir/configure-glibc
 
 stamp-dir/build-glibc: stamp-dir/configure-glibc
 	cd glibc-objs && make
-	cd glibc-objs && ../make-glibc-extra.sh
+	GLIBC_SOURCE_DIR=`pwd`/$(GLIBC_DIR) GLIBC_BUILD_DIR=`pwd`/glibc-objs ./make-glibc-extra.sh
 	mkdir -p stamp-dir
 	touch stamp-dir/build-glibc
 
@@ -76,8 +79,6 @@ binary-arch:	checkroot stamp-dir/build-glibc
 define checkdir
         test -f debian/rules
 endef
-
-binary:	binary-arch
 
 checkroot:
 	$(checkdir)

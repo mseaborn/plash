@@ -108,6 +108,11 @@ div.screenshot-comment {
 }
 
 
+/* FAQs */
+/* Question */
+dl.faq dt { font-weight: bold }
+
+
 pre {
   background-color: #E8EDFF;
   padding: 6pt;

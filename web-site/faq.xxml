@@ -1,0 +1,98 @@
+
+### These are supposed to be real FAQs rather than introductory points.
+
+\paras:
+
+\dl class=faq {
+  \dt{
+    If Plash relies on replacing libc, doesn't this mean that
+    processes can get around the access restrictions by making system
+    calls directly?
+  }
+  \dd\paras{
+
+    No.  Plash takes away a process's authority by putting it in a
+    chroot() jail and running it under a freshly-allocated user ID.
+    This stops all of the filename-related system calls from doing
+    anything much.
+
+    The modified glibc is not used for taking away authority.  It is
+    only used for giving authority back via a different channel.
+    glibc will communicate with a server process via a socket; this is
+    how the filename-related Unix calls such as open() are
+    implemented.  The server can send the process file descriptors via
+    the socket.
+
+    If a sandboxed program bypasses glibc, it will only be able to see
+    the contents of the chroot jail.  If you link a sandboxed program
+    with the regular glibc, it probably won't work.
+
+  }
+
+
+  \dt{
+    Why don't you intercept libc calls using an LD_PRELOADed library
+    rather than using a replacement libc.so?
+  }
+  \dd\paras{
+
+    Plash needs to be able to intercept \em{all} calls to functions
+    such as open().  Using an LD_PRELOADed library can only replace
+    open() as seen from outside of libc.so.  It is not able to replace
+    libc.so's internal uses of open().  These include:
+
+    \ul{
+      \li- fopen() calls open()
+      \li- calls to open() to read configuration files such as /etc/hosts, /etc/hosts, /etc/resolv.conf
+      \li- calls to open() to read locale data
+    }
+
+    Other tools, such as fakeroot, fakechroot and cowdancer, use
+    LD_PRELOADed libraries which replace fopen() as well as open(),
+    but they are not able to handle the other cases.
+
+    It used to be that you could intercept libc.so's internal calls by
+    defining __open and __libc_open in an LD_PRELOADed library.  But
+    newer versions of glibc resolve these symbols at static linking
+    time now, so you can't.  This was changed for efficiency, so that
+    there are fewer relocations to do at dynamic link time, and so
+    that the calls don't have to go through a jump table.  There are
+    also some cases in libc.so where the "open" syscall is inlined,
+    such as when using open_not_cancel (a macro).
+
+    More importantly, Plash needs to replace the dynamic linker
+    (ld-linux.so.2) so that it doesn't use the "open" syscall, and you
+    can't do that with LD_PRELOAD.
+
+  }
+
+
+  \dt{
+    Why don't you use Linux's ptrace() syscall to intercept system
+    calls instead?
+  }
+  \dd\paras{
+
+    Firstly, performance: ptrace() is slow, because it intercepts all
+    system calls, and the monitor process can only read the traced
+    process's address space one word at a time.  In contrast, Plash
+    does not need to intercept frequently-used calls such as read()
+    and write() at all.
+
+    Secondly, ptrace() can only be used to allow or block a traced
+    process's system calls.  This leads to TOCTTOU (time-of-check to
+    time-of-use) race conditions when checking whether to allow
+    operations using filenames, particularly when symlinks are
+    involved.  ptrace() on its own does not let us virtualize the file
+    namespace, as Plash does.
+
+    Systrace addresses some of the problems of ptrace(), but it is not
+    included in mainline versions of the Linux kernel.
+
+    It used to be that there was a race condition in which a newly
+    forked process would not initially be traced, which mean that
+    ptrace() was not secure for sandboxing programs that need to use
+    fork().  I believe this has now been fixed.
+
+  }
+}

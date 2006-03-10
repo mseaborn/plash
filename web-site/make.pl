@@ -67,11 +67,12 @@ foreach my $base (qw(screenshot-gnumeric
   ### \li- FAQs
 my $sidebar = XXMLParse::parse(<<'END');
 \table class=sidebar border={0} \tr\td\ul{
-  \li\a href={download.html}- Download
+  \li\a href={download.html}- Download and install
   \li\a href={screenshots.html}- Screenshots
   \li\a href={contents.html}- Documentation contents
   \li\a href={examples.html}- Examples
   \li\a href={news.html}- News
+  \li\a href={faq.html}- FAQ
   \li\a href={#mailing-list}- Mailing list
   \li\a href={http://svn.gna.org/viewcvs/plash/trunk/}- Browse source code
   \li\a href={#related}- Related systems
@@ -150,12 +151,13 @@ sub contents_list {
 }
 
 my @sections =
-  ({ File => 'download', Title => 'Download' },
+  ({ File => 'download', Title => 'Downloading and installing Plash' },
    { File => 'examples', Title => 'Examples' },
    { File => 'screenshots', Title => 'Screenshots' },
    { File => 'powerbox', Title => 'The powerbox: a GUI for granting authority' },
    { File => 'pola-run', Title => 'pola-run: A command line tool for launching sandboxed programs' },
    { File => 'environment', Title => 'Plash\'s sandbox environment' },
+   { File => 'faq', Title => 'FAQs: frequently asked questions' },
    { File => 'pola-shell', Title => 'pola-shell: A shell for interactive use' },
    { File => 'exec-objs', Title => 'Executable objects: a replacement for setuid executables' },
    { File => 'protocols', Title => 'Communication protocols' },

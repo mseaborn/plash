@@ -22,6 +22,11 @@
 use IO::File;
 
 
+my $cc = `. src/config.sh && echo \$CC`;
+chomp($cc);
+if($cc eq '') { die }
+
+
 @opts_s = ('-O1', '-Wall',
 	   '-Igensrc', '-Isrc',
 	   # '-g',
@@ -158,7 +163,7 @@ sub gcc {
 
   if($b) {
     print "Compile $src -> $dest\n";
-    do_cmd('gcc-3.3', @opts,
+    do_cmd($cc, @opts,
 	   '-c', $src, '-o', $dest,
 	   '-MD', '-MF', $deps_file);
   }

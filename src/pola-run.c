@@ -26,9 +26,11 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#ifdef USE_GTK
 #include <gtk/gtkwindow.h>
 #include <gtk/gtk.h>
 #include <glib.h>
+#endif
 
 #include "region.h"
 #include "filesysobj.h"
@@ -442,8 +444,13 @@ int handle_arguments(region_t r, struct state *state,
     }
 
     if(!strcmp(arg, "--powerbox")) {
+#ifdef USE_GTK
       state->powerbox = TRUE;
       goto arg_handled;
+#else
+      fprintf(stderr, NAME_MSG _("powerbox support not compiled in\n"));
+      return 1;
+#endif
     }
 
     if(!strcmp(arg, "--pet-name")) {
@@ -763,9 +770,13 @@ int main(int argc, char **argv)
       caps[1] = fs_op_maker_make(shared);
       caps[2] = conn_maker_make();
       if(state.powerbox) {
+#ifdef USE_GTK
 	caps[3] = powerbox_make(state.pet_name,
 				inc_ref(state.root_dir),
 				(struct node *) inc_ref((cap_t) state.root_node));
+#else
+	assert(0);
+#endif
       }
 
       filesys_obj_free(state.root_dir);
@@ -792,6 +803,7 @@ int main(int argc, char **argv)
 	gc_check();
 #endif
 
+#ifdef USE_GTK
 	if(state.powerbox) {
 	  /* NB. We have already processed arguments!  Gtk should not
 	     take anything from this arg list, we hope. */
@@ -804,6 +816,7 @@ int main(int argc, char **argv)
 	    gtk_main_iteration();
 	  }
 	}
+#endif
 	/* We'd like to fall back to a normal non-X11 server if the X11
 	   event loop exits.  This in turn will exit if we're not serving
 	   any references any more. */

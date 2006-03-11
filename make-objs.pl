@@ -22,23 +22,30 @@
 use IO::File;
 
 
-my $cc = `. src/config.sh && echo \$CC`;
-chomp($cc);
-if($cc eq '') { die }
+# Read configure settings
+my ($cc, $use_gtk, $check) =
+  split(/\n/, `. src/config.sh && echo \$CC; echo \$USE_GTK; echo check`);
+if($check ne 'check') { die }
+$use_gtk = $use_gtk eq 'yes';
 
 
 @opts_s = ('-O1', '-Wall',
 	   '-Igensrc', '-Isrc',
 	   # '-g',
 	   # '-DGC_DEBUG',
-	   split(/\s+/, `pkg-config gtk+-2.0 --cflags`));
+	   );
+if($use_gtk) {
+  push(@opts_s,
+       split(/\s+/, `pkg-config gtk+-2.0 --cflags`),
+       '-DPLASH_GLIB');
+}
 
 gcc('src/region.c', 'obj/region.o', @opts_s);
 gcc('src/serialise.c', 'obj/serialise.o', @opts_s);
 gcc('src/serialise-utils.c', 'obj/serialise-utils.o', @opts_s);
 gcc('src/comms.c', 'obj/comms.o', @opts_s,
     '-DHALF_NAME="server"');
-gcc('src/cap-protocol.c', 'obj/cap-protocol.o', '-DPLASH_GLIB', @opts_s);
+gcc('src/cap-protocol.c', 'obj/cap-protocol.o', @opts_s);
 gcc('src/cap-call-return.c', 'obj/cap-call-return.o', @opts_s);
 gcc('src/cap-utils.c', 'obj/cap-utils.o', @opts_s);
 gcc('src/cap-utils-libc.c', 'obj/cap-utils-libc.o', @opts_s);
@@ -66,12 +73,16 @@ gcc('src/shell-wait.c', 'obj/shell-wait.o', @opts_s);
 gcc('src/shell-options.c', 'obj/shell-options.o', @opts_s);
 gcc('src/resolve-filename.c', 'obj/resolve-filename.o', @opts_s);
 gcc('src/fs-operations.c', 'obj/fs-operations.o', @opts_s);
-gcc('src/powerbox.c', 'obj/powerbox.o', @opts_s);
+if($use_gtk) {
+  gcc('src/powerbox.c', 'obj/powerbox.o', @opts_s);
+}
 
 # Non-library code
 gcc('src/test-caps.c', 'obj/test-caps.o', @opts_s);
 gcc('src/shell-options.c', 'obj/shell-options.o', @opts_s);
-gcc('src/shell-options-gtk.c', 'obj/shell-options-gtk.o', @opts_s);
+if($use_gtk) {
+  gcc('src/shell-options-gtk.c', 'obj/shell-options-gtk.o', @opts_s);
+}
 gcc('src/shell-options-cmd.c', 'obj/shell-options-cmd.o', @opts_s);
 gcc('src/chroot.c', 'obj/chroot.o', @opts_s);
 gcc('src/exec-object.c', 'obj/exec-object.o', @opts_s);
@@ -120,13 +131,16 @@ gcc('src/libc-truncate.c', 'obj/libc-truncate.os', @opts_c);
 
 # Build powerbox for Gtk
 
-my @opts_gtk_pb = ('-Igensrc', '-Isrc',
-		   '-Wall',
-		   '-fPIC',
-		   split(/\s+/, `pkg-config gtk+-2.0 --cflags`));
+if($use_gtk) {
+  my @opts_gtk_pb = ('-Igensrc', '-Isrc',
+		     '-Wall',
+		     '-fPIC',
+		     split(/\s+/, `pkg-config gtk+-2.0 --cflags`));
 
-gcc('src/gtk-powerbox-noninherit.c', 'obj/gtk-powerbox-noninherit.os', @opts_gtk_pb);
-gcc('src/gtk-powerbox.c', 'obj/gtk-powerbox.os', @opts_gtk_pb);
+  gcc('src/gtk-powerbox.c', 'obj/gtk-powerbox.os', @opts_gtk_pb);
+  # Not used, but keep building it so that it doesn't bitrot
+  gcc('src/gtk-powerbox-noninherit.c', 'obj/gtk-powerbox-noninherit.os', @opts_gtk_pb);
+}
 
 
 

@@ -430,7 +430,7 @@ build_small_bits () {
 
 build_shell_etc() {
   rm -f obj/libplash.a
-  ar -cr obj/libplash.a \
+  LIBPLASH_OBJS="
 	obj/shell-parse.o \
 	obj/shell-variants.o \
 	obj/shell-globbing.o \
@@ -449,8 +449,11 @@ build_shell_etc() {
 	obj/log-proxy.o \
 	obj/reconnectable-obj.o \
 	obj/parse-filename.o obj/comms.o \
-	obj/serialise.o obj/serialise-utils.o obj/region.o obj/utils.o \
-	obj/powerbox.o
+	obj/serialise.o obj/serialise-utils.o obj/region.o obj/utils.o"
+  if [ "$USE_GTK" = yes ]; then
+    LIBPLASH_OBJS="$LIBPLASH_OBJS obj/powerbox.o"
+  fi
+  ar -cr obj/libplash.a $LIBPLASH_OBJS
 
   # "search A B..." tries files A B etc. in turn, and prints the
   # name of the first one that exists.
@@ -507,16 +510,24 @@ build_shell_etc() {
 
   echo Linking bin/run-emacs
   $CC $OPTS_S obj/run-emacs.o $LIBC_LINK obj/libplash.a -o bin/plash-run-emacs
+
+  if [ "$USE_GTK" = yes ]; then
+    LINK_GTK=`pkg-config gtk+-2.0 --libs`
+  else
+    LINK_GTK=""
+  fi
   echo Linking bin/pola-run
-  $CC $OPTS_S obj/pola-run.o $LIBC_LINK obj/libplash.a `pkg-config gtk+-2.0 --libs` -o bin/pola-run
+  $CC $OPTS_S obj/pola-run.o $LIBC_LINK obj/libplash.a $LINK_GTK -o bin/pola-run
 
   echo Linking bin/powerbox-req
   $CC $OPTS_S obj/powerbox-req.o $LIBC_LINK obj/libplash.a -o bin/powerbox-req
 
-  echo Linking bin/plash-opts-gtk
-  $CC $OPTS_S \
+  if [ "$USE_GTK" = yes ]; then
+    echo Linking bin/plash-opts-gtk
+    $CC $OPTS_S \
 	obj/shell-options-gtk.o obj/shell-options.o $LIBC_LINK \
 	obj/libplash.a `pkg-config gtk+-2.0 --libs` -o bin/plash-opts-gtk
+  fi
   echo Linking bin/plash-opts
   $CC $OPTS_S \
 	obj/shell-options-cmd.o obj/shell-options.o $LIBC_LINK \
@@ -539,12 +550,14 @@ build_shell_etc() {
 }
 
 build_gtk_powerbox () {
-  echo Linking shobj/gtk-powerbox.so
-  $CC -shared -Wl,-z,defs \
+  if [ "$USE_GTK" = yes ]; then
+    echo Linking shobj/gtk-powerbox.so
+    $CC -shared -Wl,-z,defs \
 	obj/gtk-powerbox.os \
 	obj/libplash.a \
 	`pkg-config --libs gtk+-2.0` -ldl \
 	-o shobj/powerbox-for-gtk.so
+  fi
 }
 
 

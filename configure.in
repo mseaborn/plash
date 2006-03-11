@@ -5,6 +5,31 @@ AC_PROG_CC(gcc-4.0 gcc)
 AC_CONFIG_FILES([src/config.sh])
 
 
+AC_ARG_WITH([gtk],
+            AC_HELP_STRING([--without-gtk],
+                           [if Gtk should not be used]),
+            [with_gtk=$withval],
+            [with_gtk=yes])
+if test "$with_gtk" = yes; then
+  AC_PATH_PROG(PKG_CONFIG, pkg-config, :)
+  AC_SUBST(PKG_CONFIG)
+  if test "$PKG_CONFIG" = ":"; then
+    AC_MSG_ERROR([pkg-config not found (so can't find Gtk)])
+  fi
+
+  AC_MSG_CHECKING([for gtk >= 2.8.0])
+  if ! $PKG_CONFIG gtk+-2.0 --exists; then
+    AC_MSG_ERROR([gtk not installed; try --without-gtk])
+  else
+    gtk_version=`$PKG_CONFIG gtk+-2.0 --modversion`
+    AC_MSG_RESULT([found gtk $gtk_version])
+    if ! $PKG_CONFIG gtk+-2.0 --atleast-version 2.8.0; then
+      AC_MSG_ERROR([gtk must be >=2.8.0; try --without-gtk])
+    fi
+  fi
+fi
+
+
 if test "x$GLIBC_DIR" = x; then
   #GLIBC_DIR=glibc
   GLIBC_DIR=./glibc-i386-objs-2.3.5_2
@@ -19,4 +44,5 @@ fi
 
 AC_SUBST(PACKAGE_VERSION)
 AC_SUBST(GLIBC_DIR)
+AC_SUBST(with_gtk)
 AC_OUTPUT

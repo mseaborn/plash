@@ -33,4 +33,9 @@
   echo "#define UID_RANGE_END   $UID_RANGE_END"
   echo "#define UID_LOCK_DIR \"$UID_LOCK_DIR\""
   echo "#define UID_LOCK_DIR2 \"$UID_LOCK_DIR2\""
+  if test "$USE_GTK" = yes; then
+    echo "#define USE_GTK"
+  else
+    echo "/* #undef USE_GTK */"
+  fi
 ) >gensrc/config.h

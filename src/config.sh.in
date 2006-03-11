@@ -46,6 +46,7 @@ GLIBC_SO_DIR=$GLIBC
 
 
 CC=@CC@
+USE_GTK=@with_gtk@
 
 PLASH_EXECUTABLES="
 	pola-run

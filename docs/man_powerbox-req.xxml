@@ -1,0 +1,102 @@
+
+\refentry id={powerbox-req}:
+
+\refmeta{
+  \refentrytitle- powerbox-req
+  \manvolnum- 1
+}
+
+\refnamediv{
+  \refname- powerbox-req
+  \refpurpose- Ask the system to ask the user to choose a file and grant us access to it
+}
+
+{\refsynopsisdiv\synopsis:
+powerbox-req
+  [--save]
+  [--dir \r{directory}]
+  [--desc \r{reason-message}]
+}
+
+
+\refsect1{
+  \title- Description
+  \ps:
+
+  powerbox-req asks the system to open a powerbox window.  The
+  powerbox window asks the user to choose a file, which the calling
+  application is granted the right to access.  The file is attached
+  into the namespace of the calling application.
+
+  powerbox-req outputs the name of the file on stdout.
+
+  powerbox-req is a command line interface to the
+  powerbox_req_filename object, which is provided to sandboxed
+  processes as part of their environment when they are launched with
+  pola-run using the --powerbox option.
+
+  powerbox-req is used by the Emacs/powerbox integration
+  (powerbox.el).
+
+}
+
+
+\refsect1{
+  \title- Options
+  \ps:
+
+  \dl{
+    \dt- --dir \r{dir}
+    \dd\ps{
+
+      Ask powerbox manager to use \r{dir} as the initial directory
+      that is displayed in the file chooser.  The powerbox manager
+      will only use this directory if it is partly visible to the
+      calling application.
+
+    }
+
+    \dt- --save
+    \dd\ps{
+
+      Ask for a "Save As" dialog box rather than an "Open" dialog box.
+      A "Save As" box lets the user name a file that doesn't exist
+      yet, and it will prompt for confirmation before overwriting a
+      file.
+
+    }
+
+    \dt- --desc \r{reason-message}
+    \dd\ps{
+
+      Provides a human-readable string that will get displayed in the
+      powerbox file chooser window.  It lets the caller say why it
+      wants to be given a file.
+
+      e.g. "To edit the file"
+
+    }
+  }
+}
+
+\refsect1{
+  \title- Example
+  \ps:
+
+  \pre
+  >>$ ls /foo
+  >># nothing: directory is empty in the app's view
+  >>$ powerbox-req --dir /foo
+  >>/foo/baz.txt
+  >># baz.txt is the name of the file that the user picked in the GUI
+  >>$ ls /foo
+  >>baz.txt
+  >># the file has been attached into the app's namespace
+}
+
+\refsect1{
+  \title- See also
+  \ps:
+
+  \command{pola-run}
+}

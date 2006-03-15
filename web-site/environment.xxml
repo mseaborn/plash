@@ -59,6 +59,39 @@ and their UIDs.  When the shell starts, it runs
 {\command:gc-uid-locks}.
 
 
+\a name={table-glibc-calls}
+\table border=1 class=borders {
+  \caption{glibc library calls and whether they are altered by Plash}
+  \thead\tr{
+    \th{Treatment}
+    \th{Function}
+  }
+  \tbody:
+  \tr{
+    \td{Intercepted and reimplemented entirely}
+    \td{
+      open, mkdir, symlink, unlink, rmdir, stat, lstat, readlink,
+      rename, link, chmod, utimes, chdir, fchdir, getcwd,
+      opendir/readdir/closedir, getuid/getgid
+    }
+  }
+  \tr{
+    \td{Intercepted but reimplemented using the original system call}
+    \td\ul{
+      \li- fork -- duplicates the connection to the server first
+      \li- execve -- invokes execve syscall on dynamic linker directly
+      \li- connect, bind, getsockname -- changed for Unix domain sockets
+      \li- fstat -- changed for directory FDs
+      \li- close, dup2 -- changed to stop processes overwriting or closing the socket FD that is used to communicate with the server
+    }
+  }
+  \tr{
+    \td{Not intercepted}
+    \td{read, write, sendmsg, recvmsg, select, dup, kill, wait, getpid (and others)}
+  }
+}
+
+
 \h2 name={env-symlinks}- Symbolic links
 
 \h3- Semantics

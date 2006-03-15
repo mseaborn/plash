@@ -104,4 +104,4 @@ strip_install shobj/powerbox-for-gtk.so $DEST/$LIB_INSTALL/powerbox-for-gtk.so
 
 # Install Emacs lisp file
 install -d $DEST/$PLASH_EMACS_INSTALL
-cp -pv src/plash-gnuserv.el src/powerbox.el $DEST/$PLASH_EMACS_INSTALL/
+cp -v src/plash-gnuserv.el src/powerbox.el $DEST/$PLASH_EMACS_INSTALL/

@@ -33,10 +33,11 @@ END
 
 test('shell_execobj_2',
      sub {
-       my $data = run_cmd($pola_shell, '-c', <<END);
+       my $data = cmd_capture($pola_shell, '-c', <<END);
 def mycmd = capcmd $exec_object /bin/ls /x=(mkfs /lib /bin /usr);
 mycmd '/'
 END
+       if($data ne "bin\nlib\nusr\n") { die "Got: \"$data\"" }
      });
 
 

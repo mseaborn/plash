@@ -1,11 +1,15 @@
-Summary: Principle of Least Authority shell (Plash)
+# Please note that this spec file is a hack!
+# You can't use it on its own to build from source
+# -- it is intended for packaging binaries that have already been built.
+# See rpm/make-rpm.sh.
+Summary: Sandbox programs to run them with minimum authority
 Name: plash
-Version: 1.15
+Version: 1.16
 Release: 1
-Packager: Mark Seaborn <mseaborn@onetel.com>
-Copyright: GPL and LGPL
+Packager: Mark Seaborn <mrs@mythic-beasts.com>
+Copyright: LGPL
 Source0: %{name}-%{version}.tar.gz
-Group: System Environment/Shells
+Group: System Environment
 BuildRoot: %{_tmppath}/%{name}-root
 # This stops RPM from looking at all the lib*.so parts of libc.  They
 # depend on each other, not on any outside packages.
@@ -15,31 +19,34 @@ AutoReqProv: no
 
 %description
 
-Plash (the Principle of Least Authority shell) is a replacement Unix
-shell which lets the user run Linux programs with access only to the
-files and directories that they need to run.
+Plash is a sandbox for running GNU/Linux programs with the minimum
+necessary privileges. It is similar to chroot jails, but is more
+lightweight and flexible. You can use Plash to grant a process
+read-only or read-write access to specific files and directories,
+which can be mapped at any point in its private filesystem namespace.
 
-It works by virtualizing the filesystem.  Each process can have its
-own file namespace.
+Plash provides a command line tool (pola-run) for running programs in
+a sandbox, granting access to specific files and directories.
 
-This implemented in two steps: Firstly, processes are run in a
-chroot() environment under different UIDs, so they can't access files
-using the normal Linux system calls and are isolated from each other.
-Secondly, in order to open files, a process makes requests to a server
-process via a socket; the server can send file descriptors across the
-socket in reply.
+Plash also provides a "powerbox" user interface by which the user can
+grant an application the right to access files.  A powerbox is just
+like a normal file chooser dialog box, except that it also grants
+access rights.  The powerbox is implemented as a trusted component --
+applications must ask the system to open a file chooser, rather than
+implementing it themselves.  Plash comes with a patch to Gtk to
+implement GtkFileChooserDialog in terms of the powerbox API.
 
-Plash dynamically links programs with a modified version of GNU libc
-so that they can do filesystem operations using this different
-mechanism.
+The Plash execution environment doesn't require a modified Linux
+kernel -- it uses chroot() and UIDs. It works with existing Linux
+executables, provided they are dynamically linked, because Plash uses
+a modified version of GNU libc.
 
-No kernel modifications are required.  Plash can run Linux binaries
-unmodified, provided they are dynamically linked with libc, which is
-almost always the case.
-
-In most cases this does not affect performance because the most
-frequently called system calls, such as read() and write(), are not
-affected.
+Plash virtualizes the filesystem. With the modified libc, open() works
+by sending a request across a socket. The server process can send a
+file descriptor back across the socket in response. Usually, Plash
+does not slow programs down because the most frequently used system
+calls (such as read() and write()) work on kernel-level file
+descriptors as before.
 
 
 %prep
@@ -57,24 +64,20 @@ mkdir -p %{buildroot}/usr/share/man/man1
 
 # Install docs
 # Removed -p option
-cp -L -rv plash/COPYRIGHT plash/README \
-	plash/docs/README.powerbox \
-	plash/docs/README.old \
-	plash/docs/NEWS \
-	plash/docs/NEWS-exec-objs \
-	plash/docs/protocols.txt \
+cp -L -rv plash/COPYRIGHT \
 	plash/debian/changelog \
-	plash/docs/html \
 	%{buildroot}/usr/share/doc/plash-%{version}/
+cp -rv plash/web-site/out \
+	%{buildroot}/usr/share/doc/plash-%{version}/html
 
 # Install man pages
 cp -v plash/docs/man/* %{buildroot}/usr/share/man/man1/
 gzip -9 %{buildroot}/usr/share/man/man1/*.1
 ( cd %{buildroot}/usr/share/man/man1 && \
-  ln -s plash-opts.1.gz plash-opts-gtk.1.gz )
+  ln -s plash-opts.1.gz plash-opts-gtk.1.gz ) || false
 
 
-( cd plash && ./install.sh --nocheckroot %{buildroot} )
+( cd plash && ./install.sh --nocheckroot %{buildroot} ) || false
 
 
 %clean

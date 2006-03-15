@@ -5,35 +5,49 @@
 
 \h1 name={vulns}- Security vulnerabilities
 
-\pre{
-Race condition:
-connect() on Unix domain sockets presumably follows symlinks, and
-there is no way to switch this off.  This means an adversary could
-replace a domain socket with a symlink to exploit the race condition
-and open sockets in the server's namespace.
-(bind() probably doesn't follow symlinks; it probably behaves like
-open() with O_CREAT|O_EXCL.)
-Note that this is a race condition between servers.  If there was only
-one server process providing real filesystem objects, there would be
-no race condition, because socket_connect() would be atomic.
-Possible solution:
- * The server has a private directory in which no server will create
-   symlinks on behalf of a client.
-   The server's socket_connect() method hardlinks the socket file into
-   the private directory, checks that the object that got hardlinked
-   is not a symlink, and then calls connect() on it.
-    * Problem: this doesn't work across devices.  We could try creating
-      a hard link in the same directory, but that doesn't work if the
-      server doesn't have write access to the directory.
-      (But then, if the server doesn't have write access *and other
-      servers don't either* the symlink attack cannot be carried out.)
-      Doing this in /tmp/.X11-unix creates a file that is owned by
-      root in a directory owned by root (with the sticky bit set), which
-      then cannot be deleted.  (The sticky bit means you can unlink an
-      object only if you own it, or you own the directory.)
-    * We could have a list of directories into which we try to create
-      hard links.  These are tried in turn.  The user can set these up
-      to cover all the filesystems.
+\h2- connect() race condition
+
+Problem: connect() on Unix domain sockets follows symlinks, and there
+is no way to switch this off.
+
+filesys-obj-real.c calls lstat() to determine whether a directory
+entry is a symlink.  If not, real_file_socket_connect() can be used;
+this will call connect().  Between lstat() and connect(), another
+process might replace the socket with a symlink.
+
+Applicability: An adversary, A, in one sandbox cannot exploit this on
+its own; it requires a conspirator, B.  A and B can conspire so that A
+gets access to an arbitrary socket S that is in A's server's namespace
+but not in A's namespace.  A and B must have write access to some
+common directory.  B does not have to have access to socket S (it only
+needs to know its pathname in A's namespace).  This exploit can only
+occur if B is not in the same sandbox as A.
+
+Exploit: see tests/socket-symlink-race.
+
+Note: bind() does not follow symlinks.  It behaves like open() with
+O_CREAT|O_EXCL.  (There may be some other Unix variants where this is
+not true, perhaps including old versions of Linux.)
+
+Possible solutions:
+
+\ul{
+  \li\paras{
+
+    Hardlink socket into a temporary directory before calling connect().
+
+    The server has a private directory in which no server will create
+    symlinks on behalf of a client.  The server's
+    real_file_socket_connect() method hardlinks the socket file into
+    the private directory, checks that the object that got hardlinked
+    is not a symlink, and then calls connect() on it.
+
+    Problem: this doesn't work across devices.
+
+    We could have a list of directories into which we try to create
+    hard links.  These are tried in turn.  The user/administrator can
+    set these up to cover all the filesystems.
+
       Plash would have to create a directory per user ID inside these
       directories (as in /tmp) -- incidentally, this means the sticky
       bit isn't necessary, because processes with other user IDs can't
@@ -45,6 +59,20 @@ Possible solution:
       programs run under Plash don't see it.
       Via a configuration file in /etc?  /etc/plash/hardlink-dirs could
       contain a list of directories, each on a separate line.
+  }
+  \li\paras{
+
+    We could try creating a hard link in the same directory, but that
+    doesn't work if the server doesn't have write access to the
+    directory.  (But then, if the server doesn't have write access
+    *and other servers don't either* the symlink attack cannot be
+    carried out.)  Doing this in /tmp/.X11-unix creates a file that is
+    owned by root in a directory owned by root (with the sticky bit
+    set), which then cannot be deleted.  (The sticky bit means you can
+    unlink an object only if you own it, or you own the directory.)
+
+  }
+}
 
 It turns out that link() doesn't work between directories that are on
 the same device but have been mounted using "mount --bind".
@@ -56,26 +84,39 @@ on domain sockets.
 
 We could have a setuid tool for doing connect() that does the
 following:
- * creates a subdirectory in the socket's directory, making it
+
+\ul{
+ \li{
+   creates a subdirectory in the socket's directory, making it
    inaccessible to all except root.
    (The socket's directory would be the cwd: the caller would pass its
    leaf name.)
- * hard links the socket into this private directory.
- * checks that the inode number is as expected.
- * does connect()
- * deletes the copied domain socket, deletes the directory
+ }
+ \li- hard links the socket into this private directory.
+ \li- checks that the inode number is as expected.
+ \li- does connect()
+ \li- deletes the copied domain socket, deletes the directory
+}
+
 Problems:
- * It might be possible to misuse the setuid tool to create extra
+
+\ul{
+ \li{
+   It might be possible to misuse the setuid tool to create extra
    directories inside directories that the caller does not usually have
    access to.  This can be partly addressed by checking that the file
    is a domain socket: then this only applies to directories that
    contain domain sockets.
- * Bigger problem:  the subdirectory could be renamed and replaced with
+ }
+ \li{
+   Bigger problem:  the subdirectory could be renamed and replaced with
    a symlink.  This can be solved: chdir() in the directory, do
    stat(".") and check that it is root-owned and not world readable.
    Then do link(): the source path can be given as "../<leafname>":
    this is not itself reliable, but we check that the correct source
    object was linked anyway.
+ }
+}
 
 Another possibility is to have a lock that is shared between Plash
 servers, to ensure that no server creates a symlink while another is
@@ -96,53 +137,69 @@ Hard linking won't work on read-only filesystems, but that's okay,
 because you can't create domain sockets on those in the first place.
 
 See
-http://cert.uni-stuttgart.de/archive/bugtraq/1999/10/msg00011.html
+<http://cert.uni-stuttgart.de/archive/bugtraq/1999/10/msg00011.html>:
 SSH authentication agent follows symlinks via a UNIX domain socket
+
+
+\h2- chmod() race condition
 
 There is a similar symlink race condition in using chmod(), which
 follows symlinks.
- * glibc exports an lchmod() function, but it isn't implemented (it
+
+\ul{
+  \li\paras{
+   glibc exports an lchmod() function, but it isn't implemented (it
    always returns ENOSYS).
- * We do the equivalent of lchmod() by opening the file and doing fchmod().
+  }
+  \li\paras{
+   We do the equivalent of lchmod() by opening the file and doing fchmod().
    Problem:  open() fails if read permissions aren't set (even if the
    user owns the file).  So this call can't enable read permissions if
    they are not currently enabled.
-    * For now, this probably isn't a serious problem.  I expect that
+
+      For now, this probably isn't a serious problem.  I expect that
       chmod() will mostly be used for setting the executable bit.
       Note that this problem makes it possible to unset a permission
       and then not be able to change it back (from within Plash).
- * Note that root *can* open() a file even if no read permissions are
+  }
+  \li\paras{
+   Note that root *can* open() a file even if no read permissions are
    enabled for it.  So we *could* create a setuid root tool to implement
    lchmod() that opens a file (using O_NOFOLLOW) and then switches back
    to the original user identity before doing fchmod().
- * Note that fchmod() checks the calling process's user identity and
+  }
+  \li\paras{
+   Note that fchmod() checks the calling process's user identity and
    looks at the owner of the FD's file inode.
- * A more serious problem:  you can't open() a socket, so you can't
+  }
+  \li\paras{
+   A more serious problem:  you can't open() a socket, so you can't
    do fchmod() on a socket.
+
    This is causing Konqueror to fail.  It runs kdeinit, which does
    bind() on /tmp/ksocket-mrs/kdeinit__0, and then tries to chmod()
    the socket.
+
    (This is dubious practice, because there's a race: if the socket is
    created with excessive permissions, it will be accessible for a
    while.  However, it is created in a non-world-readable directory.
    This looks like a just-in-case measure.)
+  }
+}
 
 utimes() is similar to chmod():
- * glibc exports an lutimes() function, but it isn't implemented (it
+   glibc exports an lutimes() function, but it isn't implemented (it
    always returns ENOSYS).
- * We use open() and futimes().  futimes() uses /proc/self/fd/N.
+   We use open() and futimes().  futimes() uses /proc/self/fd/N.
 
-Running as root:
- * /dev/tty is a writable slot; it should be a writable object in a
-   read-only slot.  Now fixed.
- * The same applies to /tmp/.X11-unix.  Not fixed yet.
-}
+
+\h2- Running pola-shell as root
+
+When X11 access is enabled, /tmp/.X11-unix is mapped as a writable
+slot.  It should be a writable object in a read-only slot.
 
 
 \h1 name={bugs}- Bugs
-
-No thread safety in libc
- * Causes ogg123 at least to segfault
 
 stat64() doesn't work properly
 
@@ -165,12 +222,17 @@ Actually, I have realised that following the symlink is not good from
 a security point of view.
 
 
+\h1- Aspects that need more testing
+
+libc thread safety
+
+
 \h1 name={problems}- Might be problems in future
 
 Re-entrancy: run_server_step() is called while waiting for a reply on
 a return continuation object.  It will handle incoming requests --
 these should be queued instead.
- * I don't think this actually causes any bugs, since there are no
+   I don't think this actually causes any bugs, since there are no
    TOCTTOU problems in the code.  (There aren't really any invariants
    that are broken during a method call.)
 
@@ -178,7 +240,7 @@ No resource accountability (not really a bug)
 
 Make sure that messages are encoded and decoded properly on 64-bit and
 other-endian machines.
- * Currently I assume sizeof(int) == 4.
+Currently I assume sizeof(int) == 4.
 
 Sending on a socket is never queued.  This could lead to DoS of
 servers.  It could potentially lead to deadlocks, if both ends of a
@@ -195,42 +257,33 @@ the real filesystem.  This may not be expected.  Actually, symlinks
 are immutable and the inode would change if you replaced one.
 
 
-\h1 name={compatibility}- Programs that don't work under Plash
-
-\pre{
-rm -r:
-needs to open directory FDs and use fchdir() to work without being
-vulnerable to symlink races.  fchdir() isn't implemented.
-
-install:
-uses fchdir() too, it seems.
-}
-
-
 ### \h3- gcc
 
-gcc tries 1000 times to open files in /tmp in a loop (so hangs for a
-while), then aborts, without a descriptive error.  It should really
-test for EEXIST.
+### gcc tries 1000 times to open files in /tmp in a loop (so hangs for a
+### while), then aborts, without a descriptive error.  It should really
+### test for EEXIST.
 
 
-mkisofs:
-/usr/bin/mkisofs: Operation not permitted. Panic cannot set back efective uid.
-It does the following:
-setreuid32(0xffffffff, 0x1f6)           = -1 EPERM (Operation not permitted)
-where 0x1f6 = 502 (mrs), the UID it believes it already has
+### mkisofs:
+### /usr/bin/mkisofs: Operation not permitted. Panic cannot set back efective uid.
+### It does the following:
+### setreuid32(0xffffffff, 0x1f6)           = -1 EPERM (Operation not permitted)
+### where 0x1f6 = 502 (mrs), the UID it believes it already has
 
-make:
-setresuid32(0xffffffff, 0x1f6, 0xffffffff) = -1 EPERM (Operation not permitted)
-(but this doesn't happen with Debian, even though make is 3.79.1 on both)
+### make:
+### setresuid32(0xffffffff, 0x1f6, 0xffffffff) = -1 EPERM (Operation not permitted)
+### (but this doesn't happen with Debian, even though make is 3.79.1 on both)
 
-mailq:
-masqmail is setuid root, and it tries to close all file descriptors,
-and consequently cuts off its access to the server.
+### mailq:
+### masqmail is setuid root, and it tries to close all file descriptors,
+### and consequently cuts off its access to the server.
 
 
 
-### \h2- GNU Emacs (resolved)
+\h1- Problems running specific programs
+
+
+\h2- GNU Emacs (resolved)
 
 When run under Plash, GNU Emacs 21 prints the following and exits:
 
@@ -293,21 +346,3 @@ Running a subprocess from XEmacs would give:
 XEmacs was closing the file descriptor that Plash uses.
 
 This is fixed: Plash's libc will refuse to close that file descriptor.
-
-
-xemacs: also relies on pseudo-terminals; do this:
-nm /usr/bin/xemacs | egrep 'getpt|grantpt|unlockpt|ptsname|openpty|forkpty'
-
-xemacs:
-Filename completion doesn't seem to work on fabricated directories,
-only real directories.  Is it relying on the object type being included
-in directory listings?
-
-
-
-Fixed
-
-Now works:
-
-xemacs
-(uses open() on directories)

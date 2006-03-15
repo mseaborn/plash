@@ -77,14 +77,20 @@ my $transform_map =
   };
 
 
+run_cmd('mkdir', '-p', 'out');
+
+
 # Generate smaller versions of images
 foreach my $base (qw(screenshot-gnumeric
 		     screenshot-inkscape
 		     screenshot-xemacs)) {
-  my @cmd = ('convert', '-scale', '30%x30%',
-	     "$base.png", "out/${base}-small.png");
-  my $rc = system(@cmd);
-  if($rc != 0) { die "Exited with code $rc: ".join(' ', @cmd) }
+  my $file = "$base.png";
+  if(!-e $file) {
+    warn "$file not present (but not in source package)"
+  }
+  else {
+    run_cmd('convert', '-scale', '30%x30%', $file, "out/${base}-small.png");
+  }
 }
 
 
@@ -346,4 +352,13 @@ sub write_file {
   my $f = IO::File->new($out_file, 'w') || die "Can't open '$out_file'";
   XXMLParse::to_html($f, $data);
   $f->close();
+}
+
+
+sub run_cmd {
+  my $rc = system(@_);
+  if($rc != 0) {
+    print join(' ', @_)."\n";
+    die "Return code $rc";
+  }
 }

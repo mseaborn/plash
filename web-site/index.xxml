@@ -22,8 +22,8 @@ with graphical user interfaces:
     outside the application in a separate process, as a trusted
     component.  This file chooser is known as a {\strong\a
     href={powerbox.html}: powerbox}, because it delegates additional
-    power to the application.  (See {\a href={examples.html#gui-apps}:
-    examples}.)
+    power to the application.  See {\a href={examples.html#gui-apps}:
+    examples} and {\a href={screenshots.html}: screenshots}.
 
   }
   \li{
@@ -34,7 +34,7 @@ with graphical user interfaces:
     machine.  Or you can set up an HTTP or FTP server with a limited
     view of the filesystem to export handpicked files without having
     to rely on the server's application-level access control
-    mechanisms.
+    mechanisms.  See {\a href={examples.html#servers}: examples}.
 
   }
   \li{
@@ -42,31 +42,34 @@ with graphical user interfaces:
     \strong{Command line tools:} Using Plash, you can run tools with
     read-only access to their inputs and write access to their
     outputs.  Sandboxes are lightweight, so you can, for example,
-    create a sandbox for running gcc to compile a single file.
+    create a sandbox for running gcc to compile a single file.  See
+    {\a href={examples.html#command-line}: examples}.
 
   }
 }
 
-Plash provides two main interfaces for granting access rights to the
-sandboxed process:
+Plash \strong{virtualizes the file namespace}, and \strong{provides
+per-process/per-sandbox namespaces}.  Plash grants access to files by
+mapping them into otherwise empty namespaces.  This allows for
+fine-grained control over dependencies: You can link a program with
+specific versions of dynamic libraries by mapping individual files; or
+you can just map the whole /usr directory into the program's
+namespace.
+
+Plash provides two main interfaces for granting access rights to
+sandboxed processes:
 
 \ul{
-  \li\paras{
+  \li{
 
     {\strong\a href={pola-run.html}: The pola-run tool:} This is a
     command line interface for launching programs to run inside a
-    sandbox.
-
-    pola-run gives you fine-grained \em{control over dependencies}.
-    You can link a program with specific versions of dynamic libraries
-    by mapping individual files; or you can just map the whole /usr
-    directory into the program's namespace.
-
-    pola-run can be used from within a sandbox, allowing \em{nested
-    sandboxes}.
+    sandbox.  Its arguments let you grant the sandboxed program access
+    to files and directories.  pola-run can be used from within a
+    sandbox, allowing \strong{nested sandboxes}.
 
   }
-  \li\paras{
+  \li{
 
     {\strong\a href={powerbox.html}: The powerbox:} This is a GUI that
     works transparently -- it adds a security role to a dialog box
@@ -77,6 +80,56 @@ sandboxed process:
 
   }
 }
+
+{\strong\a href={pola-shell.html}: pola-shell} is another way to
+launch sandboxed programs.  It is a shell with syntax similar to the
+Bourne shell or Bash.  It lacks many scripting features so is intended
+for interactive use only.
+
+
+
+\h2- How it works:  virtualizing the file namespace
+
+Plash's sandboxing mechanism works on unmodified Linux kernels (2.6,
+2.4 and earlier) and can run normal Linux executables, provided they
+are dynamically linked.
+
+### \strong{Taking away authority:}
+
+Sandboxed processes do not use the kernel's filename-based system
+calls, such as "open".  Plash effectively disables these system calls
+by putting the sandboxed process in a very minimal chroot() jail.  (It
+also gives the sandboxed process a unique, dynamically-allocated UID
+and GID.)
+
+### \strong{Giving back authority:}
+
+Instead, a sandboxed process accesses the filesystem by making remote
+procedure calls (RPCs) across a socket to a server process.  To open a
+file, the sandboxed process sends an "open" request containing the
+filename.  The server process can send a file descriptor for a file
+across the socket in response.
+
+### \strong{Modified glibc:}
+
+Plash dynamically links sandboxed programs with a modified version of
+GNU libc (glibc), which replaces the filename-related calls (such as
+open()) so that they make RPCs across the socket instead of using the
+usual system calls.  (See the {\a
+href={environment.html#table-glibc-calls}: table of glibc calls} to
+see which functions are affected.)
+
+### \strong{Performance:}
+
+In most cases this does not seriously affect performance because the
+most frequently called system calls, such as read() and write(), are
+not affected.  Once a sandboxed program has opened a file and obtained
+a file descriptor for it, there is no further mediation by the server
+process, and it can use the normal system calls on the file
+descriptor.
+
+See the {\a href={environment.html}: architecture} section for more
+details.
 
 
 
@@ -142,11 +195,50 @@ EROS, Coyotos will be free software.
 
 \h2 name={roadmap}- Roadmap
 
-### python bindings
+These additions are planned for the future:
 
-### persistence
+\ul{
+  \li\paras{
 
-### X11 access control, using proxy
+    \strong{Python bindings} for the Plash object system.  This will
+    be more flexible than pola-run for setting up execution
+    environments for programs.  This would let you implement Plash
+    objects in Python.  For example, you could create a directory
+    object whose contents listing is chosen dynamically by Python
+    code.  You could implement {\a href={exec-objs.html}: executable
+    objects} in Python.
+
+  }
+  \li\paras{
+
+    \strong{Persistence:} Implement a simple persistent store,
+    allowing capabilities to be saved, such as capabilities for file
+    and directory objects and executable objects.
+
+    Having persistence means that an application's installation
+    endowment (eg. its executable, libraries and configuration files)
+    can be saved as object references in the persistent store, rather
+    than listed on the command line in a script that invokes pola-run.
+    When installing an application, it can be granted access to
+    necessary files and objects using a powerbox.
+
+  }
+  \li\paras{
+
+    \strong{X Window System access control:} Initially I plan to write
+    a proxy for the X11 protocol which will isolate an (unmodified) X
+    client from other X clients, with the possible exception of
+    allowing access to the clipboard.
+
+    Later versions could add mechanisms to allow X clients to
+    co-operate securely by sharing X resources; X clients would
+    probably need to be changed to use such mechanisms.
+
+    Ultimately it would be good to get this integrated into the X
+    server, when we figure out what is required.
+
+  }
+}
 
 
 

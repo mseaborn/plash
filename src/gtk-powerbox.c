@@ -466,7 +466,7 @@ struct _ResponseData
   gint response_id;
 };
 
-static gint
+gint
 gtk_dialog_get_response_for_widget(GtkDialog *dialog, GtkWidget *widget)
 {
   ResponseData *rd = g_object_get_data (G_OBJECT (widget),

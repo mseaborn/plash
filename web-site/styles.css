@@ -47,6 +47,7 @@ table.borders td, table.borders th {
   border-style: solid;
   border-width: 1px;
   padding: 4pt;
+  vertical-align: top;
 }
 th {
   background-color: #eee;

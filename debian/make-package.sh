@@ -41,20 +41,13 @@ install -d $DEST/usr/share/man/man1
 cp -pv debian/copyright $DEST/usr/share/doc/$PACKAGE/
 cp -pv debian/changelog $DEST/usr/share/doc/$PACKAGE/changelog
 gzip -9 $DEST/usr/share/doc/$PACKAGE/changelog
-cp -pv README \
-	docs/README.powerbox \
-	docs/README.old \
-	docs/NEWS \
-	docs/NEWS-exec-objs \
-	docs/protocols.txt \
-	$DEST/usr/share/doc/$PACKAGE/
-cp -prv docs/html/ $DEST/usr/share/doc/$PACKAGE/
+cp -prv web-site/out $DEST/usr/share/doc/$PACKAGE/html
 
 # Install man pages
 cp -pv docs/man/* $DEST/usr/share/man/man1/
 gzip -9 $DEST/usr/share/man/man1/*.1
 ( cd $DEST/usr/share/man/man1 &&
-  ln -s plash-opts.1.gz plash-opts-gtk.1.gz )
+  ln -s plash-opts.1.gz plash-opts-gtk.1.gz ) || false
 
 
 ./install.sh debian/tmp/

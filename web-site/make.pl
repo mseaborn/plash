@@ -79,6 +79,7 @@ my $transform_map =
 
 run_cmd('mkdir', '-p', 'out');
 
+run_cmd('cp', '-l', 'logo-abc-trans.png', 'styles.css', 'out');
 
 # Generate smaller versions of images
 foreach my $base (qw(screenshot-gnumeric

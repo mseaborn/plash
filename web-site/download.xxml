@@ -102,6 +102,14 @@ As before, you can do the following, as root, to install Plash:
 >>./install.sh /
 
 
+\h3- Requirements
+
+\ul{
+  \li- You need Gtk >=2.8 to use the powerbox.  Otherwise, use the --without-gtk configure option.
+  \li- GNU Readline
+}
+
+
 
 \h2- SVN repository
 
@@ -146,7 +154,7 @@ gna.org}.
 \th width={45%}- Description of main changes
 }
 
-{\tr valign=top:
+{\tr:
  \td- Version 1.15 \br; (12th December 2005)
  {\td\ul:
    {\li: Debian package:
@@ -168,7 +176,7 @@ Added Powerbox for Gtk.  Fixes to allow Konqueror and Gnumeric to run.
  }
 }
 
-{\tr valign=top:
+{\tr:
  \td- Version 1.14 \br; (9th November 2005)
  {\td\ul:
    {\li: Debian package:
@@ -190,7 +198,7 @@ Added powerboxes.
  }
 }
 
-{\tr valign=top:
+{\tr:
  \td- Version 1.13 \br; (6th October 2005)
  {\td\ul:
    {\li: Debian package:
@@ -212,7 +220,7 @@ Much-improved build system.
  }
 }
 
-{\tr valign=top:
+{\tr:
  \td- Version 1.12 \br; (19th September 2005)
  {\td\ul:
    {\li: Debian package:
@@ -235,7 +243,7 @@ Include libm.so etc. in packages.
  }
 }
 
-{\tr valign=top:
+{\tr:
  \td- Version 1.11 \br; (13th August 2005)
  {\td\ul:
    {\li: Debian package:
@@ -264,7 +272,7 @@ and converted to DocBook format.
  }
 }
 
-{\tr valign=top:
+{\tr:
  \td- Version 1.10 \br; (20th July 2005)
  {\td\ul:
    {\li: Debian package:
@@ -286,7 +294,7 @@ Implemented fchdir().  "rm -r", "install -d" and "mkdir -p" now work.
  }
 }
 
-{\tr valign=top:
+{\tr:
  \td- Version 1.9 \br; (10th July 2005)
  {\td\ul:
    {\li: Debian package:
@@ -315,7 +323,7 @@ directory).
  }
 }
 
-{\tr valign=top:
+{\tr:
  \td- Version 1.8 \br; (22nd May 2005)
  {\td\ul:
    {\li: Debian package:
@@ -345,7 +353,7 @@ descriptors, so that XEmacs works.
  }
 }
 
-{\tr valign=top:
+{\tr:
  \td- Version 1.7 \br; (1st May 2005)
  {\td\ul:
    {\li: Debian package:
@@ -365,7 +373,7 @@ Major new feature: executable objects.
  }
 }
 
-{\tr valign=top:
+{\tr:
  \td- Version 1.6 \br; (18th January 2005)
  {\td\ul:
    {\li: Debian package:
@@ -386,7 +394,7 @@ anywhere in the file namespace.
  }
 }
 
-{\tr valign=top:
+{\tr:
  \td- Version 1.5 \br; (7th January 2005)
  {\td\ul:
    {\li: Debian package:
@@ -407,7 +415,7 @@ first tool to use object-capability protocol.
  }
 }
 
-{\tr valign=top:
+{\tr:
  \td- Version 1.4 \br; (4th January 2005)
  {\td\ul:
    {\li: Debian package:
@@ -430,7 +438,7 @@ layer in the communication between client and server.
  }
 }
 
-{\tr valign=top:
+{\tr:
  \td- Version 1.3 \br; (29th December 2004)
  {\td\ul:
    {\li: Debian package:
@@ -455,7 +463,7 @@ rename() and link().
  }
 }
 
-{\tr valign=top:
+{\tr:
  \td- Version 1.2 \br; (18th December 2004)
  {\td\ul:
    {\li: Debian package:
@@ -479,7 +487,7 @@ options window for enabling logging.
  }
 }
 
-{\tr valign=top:
+{\tr:
  \td- Version 1.1 \br; (10th December 2004)
  {\td\ul:
    {\li: Debian package:
@@ -499,7 +507,7 @@ Added job control to shell.
  }
 }
 
-{\tr valign=top:
+{\tr:
  \td- Version 1.0 \br; (7th December 2004)
  {\td\ul:
    {\li: Debian package:

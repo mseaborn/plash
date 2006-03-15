@@ -8,10 +8,10 @@ See region.h
 A lot of the memory management in Plash is done using regions.
 Regions work like this:
 
-{\orderedlist:
-\listitem\ps- You create a region.  This allocates a medium-sized block (eg. 1k) initially.
-\listitem\ps- You allocate blocks from the region.
-\listitem\ps- You free the whole region.  This frees all the blocks that were allocated from it.
+\ol{
+  \li- You create a region.  This allocates a medium-sized block (eg. 1k) initially.
+  \li- You allocate blocks from the region.
+  \li- You free the whole region.  This frees all the blocks that were allocated from it.
 }
 
 Regions don't provide a way to free individual blocks in the region.
@@ -144,12 +144,34 @@ as "mode/int leaf/string".
 
 \h1 name={xxml}- Documentation format: XXML, an XML surface syntax
 
-I am writing the documentation in DocBook format, but I have created a
-new surface syntax for XML.  XML's standard surface syntax is too
-verbose, and I didn't want to have to write it by hand.
+I was writing the documentation in DocBook format, but I have switched
+to using HTML tags, with some Perl code to generate a contents page.
+In both cases, I have been using an alternative surface syntax for
+HTML/XML.  I'm calling the new surface syntax XXML.  (Let's say it
+stands for Extra Extra Medium Large.)
 
-I'm calling the new surface syntax XXML (let's say it stands for Extra
-Extra Medium Large).
+XXML is a bit more convenient than the usual XML surface syntax:
+
+\ul{
+  \li{
+    You don't have to write the tag name in the closing tag.
+    Curly brackets are used for grouping.
+  }
+  \li{
+    In some cases, you don't have to write closing tags at all.
+    A tag can apply to the rest of the line.  (No DTD is required to
+    determine the tag nesting.)
+  }
+  \li{
+    When writing XML, it's easy to forget that '<' and '&' are special
+    characters that have to be escaped.  '\\' and '\{' and '\}' are
+    perhaps a bit more unusual.  Furthermore, XXML provides the ">>"
+    syntax in which you don't have to quote special characters at all.
+  }
+  \li{
+    It's easier to do search and replace on the name of a tag.
+  }
+}
 
 Here's an example:
 
@@ -280,6 +302,26 @@ A tag without a body can be terminated with a semicolon ";".
 <hr size=4>
 }
 
+The ">>" syntax is a way to write literal data without having to
+remember to quote backslashes or curly brackets.
+
+\xxmlexample{
+\xxml
+>>\pre
+>>  >>int main()
+>>  >>{
+>>  >>  printf("Hello world!\n");
+>>  >>  return 0;
+>>  >>}
+
+\xml
+>><pre>int main()
+>>{
+>>  printf("Hello world!\n");
+>>  return 0;
+>>}</pre>
+}
+
 There is no special escape sequence for writing XML entities.  A tag
 whose name begins with "E" is converted into an entity.  It should not
 have attributes or a body.  (Note that tag names are case sensitive.)
@@ -294,15 +336,3 @@ have attributes or a body.  (Note that tag names are case sensitive.)
 
 You can specify the literal characters '\\', '\{' and '\}' by
 prefixing them with another backslash.
-
-XXML has the following advantages:
-
-\ul{
-\li~ You don't have to write the tag name in the closing tag.
-
-\li~ It's easier to do search and replace on the name of a tag.
-
-\li~ When writing XML, it's easy to forget that '<' and '&' are
-special characters that have to be escaped.  '\\' and '\{' and '\}' are
-perhaps a bit more unusual.
-}

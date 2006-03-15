@@ -275,7 +275,7 @@ In Bash:
 
 \pre- gcc -c foo.c -o foo.o
 
-In the Plash shell:
+In pola-shell:
 
 \pre- gcc -c foo.c => -o foo.o + .
 

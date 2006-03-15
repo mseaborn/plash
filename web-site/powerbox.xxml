@@ -102,112 +102,183 @@ rather than ruling an attack out.
 
 \h3- UI limitations
 
-The system doesn't provide any other way to dynamically grant an
-application access to files.  A gnuclient-style command line tool for
-this would be useful.
+Currently, the powerbox is the only way you can dynamically add files
+to the namespace of an application that has been launched using
+pola-run.  It would be useful to have a command line tool (similar to
+gnuclient, as used with Emacs) for granting an application access
+rights to further files.
+
+\h3- Reviewing and revoking
+
+There is currently no way to review what authority has been granted to
+applications using the powerbox, and no way to revoke this authority.
+
+\h3- Nested use of pola-run
+
+Nested use of pola-run with the --powerbox option is not very useful
+at present: the nested instance of pola-run will provide its own
+powerbox manager.  At the moment, the powerbox_req_filename object is
+only able to attach a file into an existing file namespace and return
+a filename.  It needs to be extended so that it can return a reference
+to a file or slot object.  The nested instance of pola-run can then
+attach this reference into the namespace it created.
+
+\h3- Secure handling of symlinks
+
+As it stands, using Gtk's file chooser, the powerbox does not provide
+a secure UI for handling Unix symlinks.  The user is not shown symlink
+destinations at all, yet the powerbox manager will follow symlinks,
+even though the symlink destination could have been written to the
+filesystem by an untrusted application.
+
+A possible solution is to change the file chooser to display symlink
+information, and perhaps require the user to double click on a symlink
+to follow it.
+
+\h3- Backup and temporary files
+
+Backup files are not handled.  Arguably, when the user chooses
+\tt\r{FILE}, the powerbox should also grant access to \tt{\r{FILE}~}
+and \tt{#\r{FILE}#} (the latter is used by Emacs' auto-save feature).
+
+\h3- Persistence
+
+There is no persistence.  An application's access rights are not saved
+across sessions.
 
 
-\h2- What Gtk applications does this work with?
 
-This is an early version and has had limited testing with these
-applications:
+\h2- Integrations: powerbox for Gtk applications
 
-{\ul:
+The powerbox/Gtk integration reimplements Gtk's GtkFileChooserDialog
+interface so that it opens a file powerbox for choosing files or
+directories.  This means that existing, unmodified Gtk applications
+can use the powerbox.
 
-\li~ Leafpad (a simple text editor): works
+GtkFileChooserDialog is replaced using an LD_PRELOADed shared object
+(\tt{powerbox-for-gtk.so}), which replaces the
+gtk_file_chooser_dialog_*() functions.  This shared object will work
+across different versions of Gtk.  (Perhaps in the future, it could be
+compiled into Gtk.)
 
-\li~ Gnumeric: has some problems
+The powerbox/Gtk integration does not change the older
+GtkFileSelection interface, which is deprecated and exposes too many
+internal details to change.
 
+\h3- How it works
+
+The replacement GtkFileChooserDialog class inherits from GtkDialog,
+and hence from GtkWindow etc.  However, it must prevent GtkWindow from
+ever opening a window on the screen; this is done by the powerbox
+manager instead.  GtkFileChooserDialog achieves this by overriding the
+GtkWidget "map" method with code that does not pass the call on to
+GtkWindow.  Instead, the "map" method invokes the powerbox API.
+
+\h3- Limitations
+
+\ul{
+  \li\paras{
+    Selecting multiple files in one go is not implemented yet.
+  }
+  \li\paras{
+    The dialog's "extra widget" is not supported: it does not get
+    displayed at all.  This is a serious problem, as it means file
+    type selection widgets (as used by, e.g., Gimp) are not displayed.
+    To fix this requires doing inter-client widget embedding.
+    A temporary fix would be to display the extra widget in a separate
+    top-level window.
+  }
+  \li\paras{
+    The preview widget is not supported.  It does not get displayed.
+  }
+  \li\paras{
+    Filters are not yet implemented.  GtkFileChooserDialog does not
+    pass file type filter parameters to the powerbox manager.  This is
+    not a serious problem; it is just a convenience.
+  }
+  \li\paras{
+    GtkDialog offers the application an unconstrained choice over the
+    action buttons that appear in the dialog box, while the powerbox
+    always displays Open/Save and Cancel buttons.  GtkFileChooserDialog
+    must make a guess at which of GtkDialog's actions to map the
+    powerbox's Open/Save action to. If GtkDialog has more than one
+    action besides Cancel, only one will be usable.
+  }
+  \li\paras{
+
+    Confirmation and warning dialog boxes:
+
+    Some applications implement file overwrite confirmation dialog
+    boxes themselves.  In this case, two confirmation boxes will
+    appear sequentially, because the powerbox also asks for
+    confirmation.
+
+    Usually, when choosing a file results in the application opening a
+    confirmation or warning box, the file chooser stays open, and the
+    user can then pick a different file.  However, with powerbox/Gtk,
+    the file chooser is closed when the user chooses a file.
+
+  }
+  \li\paras{
+
+    The GtkFileChooserIface interface allows applications to interact
+    with the file chooser widget while it is open -- for example, to
+    find out which file is currently selected.  This will not work
+    with the powerbox/Gtk integration, because the powerbox API is a
+    simple call-return interface, and it does not give the application
+    any way to interact with the file chooser while it is open.
+
+  }
+  \li\paras{
+    GtkFileChooserButton and GtkFileChooserWidget are not replaced.
+  }
 }
 
+\h3- Earlier version of the GtkFileChooserDialog replacement
 
-\h2- How does the Powerbox for Gtk work?
+My first attempt at a replacement GtkFileChooserDialog class did not
+inherit from the GtkDialog class, on the grounds that it did not need
+to open a GtkDialog window itself.  It inherited from GtkObject and
+nothing else.
 
-The Powerbox for Gtk reimplements Gtk's GtkFileChooserDialog
-interface.  It provides an LD_PRELOADed shared object, {\tt:
-powerbox-for-gtk.so}, which intercepts or outright replaces a number
-of Gtk functions.
+This caused some problems, because applications expect
+GtkFileChooserDialog to inherit from GtkDialog (and so, indirectly,
+from GtkWindow, GtkWidget, etc.) as documented.  This did not cause
+applications to crash: the Gtk API functions just print a warning and
+return if passed objects that don't belong to the expected class.
 
-Unfortunately, the GtkFileChooserDialog interface was not designed
-as a call-return style interface.  The interface allows the
-application to control the file chooser while it is open.  It lets the
-application treat the file chooser as a GtkWidget, as a GtkWindow, and
-as an instance of many other classes.  This is not suitable when the
-file chooser window is implemented by another process.  So,
-reimplementing GtkFileChooserDialog is not seamless.
-
-{\tt: powerbox-for-gtk.so} implements a new object class,
-FilePowerbox, which inherits from GtkObject and nothing else.  It then
-changes various Gtk functions to operate on this type:
-
-{\dl:
-
-\dt\tt- gtk_file_chooser_dialog_new()
-\dt\tt- gtk_file_chooser_dialog_new_with_backend()
-\dt\tt- gtk_file_chooser_dialog_get_type()
-\dt\tt- gtk_file_chooser_get_type()
-\dt\tt- GTK_FILE_CHOOSER()
-\dt\tt- GTK_FILE_CHOOSER_DIALOG()
-
-\dd~ The GtkFileChooserDialog constructors are redirected so that it
-instead creates FilePowerbox instances, and the type description is
-redirected so that the type checks work.
-
-\dt\tt- gtk_widget_show()
-\dt\tt- gtk_widget_show_all()
-\dt\tt- gtk_dialog_run()
-
-\dd~ These functions are changed to check for the FilePowerbox as a
-special case, and they will send the powerbox manager process a
-message to open the powerbox window.  We have to intercept these
-functions in an ad-hoc way because GtkWidget and GtkDialog are
-classes, not interfaces.
-
-\dt\tt- gtk_file_chooser_set_current_folder()
-\dt\tt- gtk_file_chooser_get_filename()
-\dt\tt- gtk_file_chooser_get_uri()
-
-\dd~ The GtkFileChooserIface interface's public functions are
-replaced.
-
-\dt\tt- gtk_file_chooser_set_extra_widget()
-\dt\tt- gtk_file_chooser_add_filter()
-
-\dd~ Some of the GtkFileChooserIface functions become no-ops.  The
-powerbox doesn't support embedding an extra widget from the
-application.  Filters are not supported yet.
-
-\dt\tt- gtk_message_dialog_new()
-
-   {\dd: \p~ This is an annoying case.  Leafpad uses
-   gtk_message_dialog_new() to open an overwrite confirmation dialog
-   box with the "file save" dialog box as its parent window.
-   Unfortunately, gtk_message_dialog_new() requires that its "parent"
-   argument is either NULL or a GtkWindow.  FilePowerbox does not
-   inherit from GtkWindow, so passing that as the parent causes
-   gtk_message_dialog_new() to do nothing.  This stops Leafpad from
-   being able to save the file, since it never receives the
-   confirmation from the user.
-
-   \p~ This is frustrating because gtk_message_dialog_new() works when
-   there is no parent, when NULL is given.  I really want it to treat
-   a non-GtkWindow the same as NULL.
-
-   \p~ My solution is to copy the code for gtk_message_dialog_new()
-   into {\tt: powerbox-for-gtk.so}, and change its test for GtkWindow.
-   This works for this one case, but I expect similar problems will
-   crop up with other Gtk functions when I test powerbox-for-gtk.so
-   with other applications.}
-
-}
-
-I would have preferred it if the FilePowerbox could use the
-GtkFileChooserIface interface.  However, the interface itself (its
-vtable) is not part of Gtk's public interface.  The interface's vtable
-also depends on GtkFileSystem, which is also not public.
+The old version is still included, as gtk-powerbox-noninherit.c.
 
 
-\h2- How Plash's powerbox works
+### I would have preferred it if the FilePowerbox could use the
+### GtkFileChooserIface interface.  However, the interface itself (its
+### vtable) is not part of Gtk's public interface.  The interface's vtable
+### also depends on GtkFileSystem, which is also not public.
+
+
+
+\h2- Integrations: powerbox for Emacs/XEmacs
+
+The powerbox.el Emacs Lisp module changes Emacs to use a powerbox.  It
+replaces Emacs' read-file-name function, which usually prompts for a
+filename using the minibuffer.  This function is used when you type
+C-x C-f, or when you choose "Open" from the "File" menu.  The
+replacement read-file-name function opens a "File Open" powerbox
+instead.
+
+To run XEmacs to use the powerbox, use:
+
+\pre
+>>pola-run --prog /usr/bin/xemacs -B -f /etc --cwd / \
+>>  --powerbox --pet-name "XEmacs" --x11 \
+>>  -a=-l -a=/usr/share/emacs/site-lisp/plash/powerbox.el
+
+GNU Emacs 21 does not work under Plash.  The CVS version (to be
+released as GNU Emacs 22) has reportedly been fixed.
+
+
+
+\h2- The powerbox API
 
 The powerbox manager is compiled into the {\tt:pola-run} program
 launcher.  When the {\tt:--powerbox} option is used, {\tt:pola-run}
@@ -234,11 +305,16 @@ some arguments, such as:
    \li~ A start directory.  The powerbox manager checks that this
    directory is already in the application's namespace, so that the
    application can't confuse the user into granting it the wrong file.
-   }
+
+   \li~ The X window ID of the parent window.  The powerbox manager
+   uses this to mark the powerbox window as a child of its parent,
+   using the WM_TRANSIENT_FOR window property (a window manager hint).
+
+}
 
 There is a simpler helper program called {\tt:powerbox-req} which
-invokes the {\tt:powerbox_req_filename} capability.  It is a command
-line program, so it is easy to use from XEmacs.
+invokes the {\tt:powerbox_req_filename} capability.  This is a command
+line program which is used by the Emacs integration.
 
 The {\tt:--pet-name} argument provides a name for the powerbox manager
 to put in the title bar of the powerbox, so the user can tell which

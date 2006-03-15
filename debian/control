@@ -1,35 +1,38 @@
 Source: plash
-Section: shells
+Section: misc
 Priority: optional
-Maintainer: Mark Seaborn <mseaborn@onetel.com>
+Maintainer: Mark Seaborn <mrs@mythic-beasts.com>
 Build-Depends: perl, gcc-3.3, libc6-pic, dietlibc, libgtk2.0-dev, libreadline4-dev
 
 Package: plash
 Architecture: any
-Depends: libc6 (>= 2.3.2.ds1-13), libncurses5 (>= 5.4-1), libreadline4 (>= 4.3-1)
-Description: The Principle of Least Authority shell (Plash)
- Plash (the Principle of Least Authority shell) is a replacement Unix
- shell which lets the user run Linux programs with access only to the
- files and directories that they need to run.
+Depends: libc6 (>= 2.3.5-6), libncurses5 (>= 5.4-1), libreadline4 (>= 4.3-1)
+Description: Sandbox programs to run them with minimum authority
+ Plash is a sandbox for running GNU/Linux programs with the minimum
+ necessary privileges.  It is similar to chroot jails, but is more
+ lightweight and flexible.  You can use Plash to grant a process
+ read-only or read-write access to specific files and directories,
+ which can be mapped at any point in its private filesystem namespace.
  .
- It works by virtualizing the filesystem.  Each process can have its
- own file namespace.
+ Plash provides a command line tool (pola-run) for running programs in
+ a sandbox, granting access to specific files and directories.
  .
- This implemented in two steps: Firstly, processes are run in a
- chroot() environment under different UIDs, so they can't access files
- using the normal Linux system calls and are isolated from each other.
- Secondly, in order to open files, a process makes requests to a server
- process via a socket; the server can send file descriptors across the
- socket in reply.
+ Plash also provides a "powerbox" user interface by which the user can
+ grant an application the right to access files.  A powerbox is just
+ like a normal file chooser dialog box, except that it also grants
+ access rights.  The powerbox is implemented as a trusted component --
+ applications must ask the system to open a file chooser, rather than
+ implementing it themselves.  Plash comes with a patch to Gtk to
+ implement GtkFileChooserDialog in terms of the powerbox API.
  .
- Plash dynamically links programs with a modified version of GNU libc
- so that they can do filesystem operations using this different
- mechanism.
+ The Plash execution environment doesn't require a modified Linux
+ kernel -- it uses chroot() and UIDs.  It works with existing Linux
+ executables, provided they are dynamically linked, because Plash uses
+ a modified version of GNU libc.
  .
- No kernel modifications are required.  Plash can run Linux binaries
- unmodified, provided they are dynamically linked with libc, which is
- almost always the case.
- .
- In most cases this does not affect performance because the most
- frequently called system calls, such as read() and write(), are not
- affected.
+ Plash virtualizes the filesystem.  With the modified libc, open()
+ works by sending a request across a socket.  The server process can
+ send a file descriptor back across the socket in response.  Usually,
+ Plash does not slow programs down because the most frequently used
+ system calls (such as read() and write()) work on kernel-level file
+ descriptors as before.

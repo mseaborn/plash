@@ -1,6 +1,14 @@
 
 \paras:
 
+\h2- Version 1.16
+
+The powerbox/Gtk integration code has been rewritten so that the
+replacement GtkFileChooserDialog class inherits from GtkDialog (and
+hence from GtkWindow, GtkWidget, etc.).  This works much better than
+the previous approach.  It works with more Gtk applications.
+
+
 \h2- Version 1.11
 
 The major new feature in this version is the "plash-run-emacs"

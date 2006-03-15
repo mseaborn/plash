@@ -1,24 +1,45 @@
-plash (1.15.1) unstable; urgency=low
+plash (1.16) unstable; urgency=low
 
-  * Add autoconf script (configure.in).
-  * add PLASH_LIBC_DEBUG env var
-  * pola-shell.c:  Command lists don't have to end with ';'.  Command line now accepts command lists as well as individual commands.
-  * exec-object.c:  fix to check for error code from install_fds().
-  * libc-comms.c:  plash_libc_reset_connection() now allows close() and dup2() to clobber comm FD.
-  * powerbox.c, gtk-powerbox2.c:  Add support for WM_TRANSIENT_FOR hint.
-  * Fork gtk-powerbox that inherits from GtkDialog and suppresses the opening of a window by implementing the "map" method.
-  * gtk-powerbox.c:  Fix handling of cancel case.
-  * filesysobj-real.c:  real_file_socket_connect():  Fixed
-    symlink-related race condition.  It now works by hard linking the
-    Unix domain socket into a directory in /tmp, so it only works if
-    the socket is on the same device as /tmp.
-     * Wrote a test case that exploits the old race condition.
-  * filesysobj-real.c:  real_file_chmod():  Removed use of chmod() call
-    to fix symlink-related race condition.  Now use open() and fchmod().
-    Unfortunately, this will not work if read permission is not already
-    enabled for the file.
-  * filesysobj-real.c:  real_file_utimes():  Fixed symlink-related race
-    condition.  Now use open() and futimes() instead of utimes().
+  * Overhaul documentation, combining the Web site and docs into one.
+    Now only use DocBook for the man pages.  Add examples, screenshots,
+    etc.
+  * Added autoconf script (configure.in).  This is used for locating gcc
+    and for setting the glibc object files directory.  Note that we do
+    not use automake.
+  * tests:  new directory, containing test cases.
+  * libc-comms.c, libc-misc.c:  add PLASH_LIBC_DEBUG environment
+    variable.
+  * pola-shell.c:  Command lists don't have to end with ';'.  Command
+    line now accepts command lists as well as individual commands.
+  * Fix bug found by Thomas Leonard:  exec-object was failing to change
+    the namespace used by the processes it launched.
+     * exec-object.c:  Fix to check for error code from install_fds().
+       Since previous libc changes, dup2() can fail (refusing to clobber
+       connection socket FD), so install_fds() could fail too.
+     * libc-comms.c:  plash_libc_reset_connection() now allows close()
+       and dup2() to clobber connection socket FD.
+  * powerbox.c, gtk-powerbox.c:  Add support for WM_TRANSIENT_FOR hint.
+  * gtk-powerbox.c, gtk-powerbox-noninherit.c:  Fix handling of cancel
+    case.
+  * gtk-powerbox.c, gtk-powerbox-noninherit.c:  Created new version of
+    our GtkFileChooserDialog class that inherits from GtkDialog and
+    suppresses the opening of a window by implementing the "map" method.
+    New version is in gtk-powerbox.c; old version has been renamed to
+    gtk-powerbox-noninherit.c.
+  * filesysobj-real.c:  Added code to fix symlink-related race
+    conditions.  However, it cannot be used in all cases.
+     * real_file_socket_connect():  Added case that works by hard linking
+       the Unix domain socket into a directory in /tmp.  This only works
+       if the socket is on the same device as /tmp.  This new code has
+       been #if'd out since it can't be used in all cases.
+        * Wrote a test case for exploiting the race condition.
+     * real_file_chmod():  Added case that uses open() and fchmod()
+       instead of chmod().  Unfortunately, this will not work if read
+       permission is not already enabled for the file.  New code is
+       therefore #if'd out.
+     * real_file_utimes():  Now use open() and futimes() instead of
+       utimes().  (This new code *is* enabled.)
+  * Transforms.pm:  new file.
   * XXMLParse.pm:  Add >> quoting syntax.
   * pola-run.c:  Set up the PLASH_FAKE_{E,}[UG]ID environment variables
     (as shell.c does).
@@ -27,7 +48,7 @@ plash (1.15.1) unstable; urgency=low
     filename in the callee's namespace (since removal of "--fd" option
     in 1.13).  No cwd is used for resolving this.
 
- -- Mark Seaborn <mseaborn@onetel.com>  Tue,  6 Dec 2005 21:21:55 +0000
+ -- Mark Seaborn <mrs@mythic-beasts.com>  Wed, 15 Mar 2006 20:27:40 +0000
 
 plash (1.15) unstable; urgency=low
 

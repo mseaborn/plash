@@ -99,3 +99,59 @@ Plash, because the Linux kernel treats it specially: the information
 Linux returns from it depends on the PID of the process that is
 asking.  When running under Plash, a server process asks on behalf of
 the application process.
+
+
+
+\h1 name={command-line}- Running command line programs
+
+\h2- Running gcc
+
+The following invocation:
+
+\pre
+>>gcc -c code.c -o code.o
+
+can be changed to:
+
+\pre
+>>pola-run --prog /usr/bin/gcc \
+>>  -a=-c -fa code.c -a=-o -faw code.o \
+>>  -B -f .
+
+
+\h2- Running rpm to build a package as a non-root user
+
+\pre
+>>pola-run --prog /usr/bin/rpm -B -f /etc \
+>>  -a=-bb \
+>>  -tal /stuff/plash.spec ../plash.spec \
+>>  -f ~/projects/plash \
+>>  -fl ~/projects/plash/glibc \
+>>  -f ~/projects-source/plash \
+>>  -t  /usr/src/rpm/SOURCES/plash-$PLASH_VERSION.tar.gz plash-$PLASH_VERSION.tar.gz \
+>>  -tw /usr/src/rpm/BUILD build \
+>>  -tw /usr/src/rpm/RPMS/i386 out \
+>>  -tw /var/tmp tmp
+
+
+
+\h1 name={servers}- Running servers
+
+\h2- Running a webmail server
+
+\pre
+>>pola-run \
+>>  --prog sparkymail.pl -f sparkymail.pl \
+>>  -f classifier.pl \
+>>  -fl ~/Mail \
+>>  -fw mail-db \
+>>  -fw /tmp \
+>>  -f /etc/protocols \
+>>  -f /etc/hosts \
+>>  -t /lib           /debian/lib \
+>>  -t /usr/bin       /debian/usr/bin \
+>>  -t /usr/share     /debian/usr/share \
+>>  -t /usr/lib/perl5 /debian/usr/lib/perl5 \
+>>  -t /usr/lib/perl  /debian/usr/lib/perl \
+>>  -f /usr/lib/plash \
+>>  -f ~/projects/sparkymail --log

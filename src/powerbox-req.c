@@ -58,6 +58,20 @@ int main(int argc, const char *argv[])
       a[0] = argmk_str(argbuf, mk_string(r, "Save"));
       i++;
     }
+    else if(!strcmp(argv[i], "--help") ||
+	    !strcmp(argv[i], "-h")) {
+      printf(_("Usage: %i [options]\n"
+	       "Asks the system to open a powerbox file chooser dialog.\n"
+	       "Allows the user to choose a file and grant the caller the\n"
+	       "right to access it.\n"
+	       "This prints the filename of the file that was chosen.\n"
+	       "Options:\n"
+	       "  --save           use a \"save as\" dialog\n"
+	       "                   (default is an \"open file\" dialog)\n"
+	       "  --dir <dir>      request start directory to be displayed\n"
+	       "  --desc <reason>  text to be displayed in the powerbox window\n"));
+      return 0;
+    }
     else {
       fprintf(stderr, _("powerbox-req: unknown argument, \"%s\"\n"), argv[i]);
       return 1;

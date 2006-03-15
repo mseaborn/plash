@@ -1,108 +1,15 @@
 
-How to install Plash
-====================
+See web-site/out/download.html for building/installation instructions.
+See web-site/out for general documentation.
+See docs/man for man pages.
 
-There are three ways in which you might install Plash, depending on
-how much you want to build from scratch:
+See http://plash.beasts.org for new releases, and for newest
+documentation.
 
- 1) Install pre-built packages.  RPMs and Debian packages are available.
- 2) Build Plash from source using pre-built glibc object files.
- 3) Build both Plash and glibc from source.
-
-
-1) Binary packages:
-
-RPMs and Debian packages are available from <http://plash.beasts.org>,
-for i386 only.  The requirements are minimal.
-
-
-2) Plash from source, using pre-built glibc object files:
-
-You'll need to download the following:
- * plash-1.XX.tar.gz
- * glibc-i386-objs-2.3.5_1.tar.gz
-See <http://plash.beasts.org>.
-
-Then follow these steps:
- * Unpack plash-1.XX.tar.gz
- * Unpack glibc-i386-objs-2.3.5_1.tar.gz inside the "plash-1.XX" directory
- * Edit the configuration file "src/config.sh" if you want to change the
-   installation directories.  You might need to change the name of the
-   compiler (the "CC" parameter).
- * Run:
-     ./make.sh
- * As root, run:
-     ./install.sh /
-   You can specify a different destination directory here if you want
-   to see what it will install.  (This won't change the pathnames that
-   are compiled into the executables.)
-   Note that this requires only a couple of programs to be installed
-   as setuid root.  These are in the "setuid" directory.  The rest of
-   Plash does not need to run as root.
-
-Requirements:
- * A relatively recent version of binutils.  2.11 is too old; 2.16 is okay.
- * An i386 system:  I have only built object files for i386.
-
-Note that you *don't* need to have glibc 2.3.5 installed on the host
-system.  Older versions are fine.  (As of October 2005, 2.3.5 is the
-most recent glibc.)
-
-
-3) Plash and glibc from source:
-
-This is more convoluted.  glibc requires a lot of resources to build.
-The steps are as follows:
-
- * Download these packages:
-     glibc-2.3.5
-     glibc-linuxthreads-2.3.5
-   (Available from any mirror of the GNU libc source.)
- * Unpack glibc-2.3.5
- * Unpack glibc-linuxthreads-2.3.5 inside glibc-2.3.5
- * Apply Plash's glibc patch, "glibc-2005-10-04.diff".
-   (This patch prevents some syscalls from being inlined.)
- * Configure glibc with options such as:
-     ./configure \
-        --enable-add-ons=linuxthreads \
-        --with-tls --without-__thread \
-	--enable-kernel=2.2.0 \
-	CC=gcc-3.3 CPP=cpp-3.3
- * Then build glibc.  From the glibc build directory, do:
-     make
- * Run Plash's script "make-glibc-extra.sh".
-   ***You will need to edit this to tell it where to find the glibc
-   source and build directories.***
-   This builds some files that Plash needs that are not normally built
-   as part of glibc's build process.
- * Edit Plash's src/config.sh file so that the GLIBC parameter
-   points to your glibc build directory.
- * Build and install Plash:
-     ./make.sh
-   As root:
-     ./install.sh /
-
-Note that I have not had the chance to test this last set of
-instructions thoroughly.
-
-Currently I am building glibc from source using Debian's glibc 2.3.5
-package.  There is a patch for the Debian packaging in the "patches"
-directory.  This puts the glibc object files that Plash needs into the
-"libc6-pic" Debian package.
-
-
-More info
-=========
-
-See the "docs" directory for more information about Plash.
-
-Any questions?  E-mail the mailing list or me.
-
-Mailing list:
- * plash@nongnu.org
- * http://lists.nongnu.org/mailman/listinfo/plash
-
-http://plash.beasts.org
+Mailing list for announcements and general discussion:
+ * Send mail to the list at:  plash@nongnu.org
+ * For archives or to subscribe, see:
+   http://lists.nongnu.org/mailman/listinfo/plash
 
 Mark Seaborn
-mseaborn@onetel.com
+mrs@mythic-beasts.com

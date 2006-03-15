@@ -14,13 +14,13 @@ Debian and RPM packages are available, for i386:
 \ul{
   \li{
     Debian package:
-    {\a href={http://plash.beasts.org/releases/plash_1.15_i386.deb}:
-     plash_1.15_i386.deb}
+    {\a href={http://plash.beasts.org/releases/plash_1.16_i386.deb}:
+     plash_1.16_i386.deb}
   }
   \li{
     RPM package:
-    {\a href={http://plash.beasts.org/releases/plash-1.15-1.i386.rpm}:
-     plash-1.15-1.i386.rpm}
+    {\a href={http://plash.beasts.org/releases/plash-1.16-1.i386.rpm}:
+     plash-1.16-1.i386.rpm}
   }
 }
 
@@ -31,8 +31,8 @@ Download these files:
 
 \ul{
   \li{
-    {\a href={http://plash.beasts.org/releases/plash-1.15.tar.gz}:
-     plash-1.15.tar.gz}, the Plash source
+    {\a href={http://plash.beasts.org/releases/plash-1.16.tar.gz}:
+     plash-1.16.tar.gz}, the Plash source
   }
   \li{
     {\a href={http://plash.beasts.org/releases/glibc-i386-objs-2.3.5_2.tar.gz}:
@@ -44,8 +44,8 @@ Unpack the Plash source and unpack the glibc object files inside
 Plash's build directory:
 
 \pre
->>tar -xvzf plash-1.15.tar.gz
->>cd plash-1.15
+>>tar -xvzf plash-1.16.tar.gz
+>>cd plash-1.16
 >>tar -xvzf ../glibc-i386-objs-2.3.5_2.tar.gz
 
 Configure and build Plash:
@@ -66,8 +66,8 @@ Download these files:
 
 \ul{
   \li{
-    {\a href={http://plash.beasts.org/releases/plash-1.15.tar.gz}:
-     plash-1.15.tar.gz}, the Plash source
+    {\a href={http://plash.beasts.org/releases/plash-1.16.tar.gz}:
+     plash-1.16.tar.gz}, the Plash source
   }
   \li{
     {\a href={ftp://ftp.gnu.org/gnu/glibc/glibc-2.3.5.tar.bz2}:
@@ -152,6 +152,28 @@ gna.org}.
 \th width={20%}- Version
 \th width={35%}- Files
 \th width={45%}- Description of main changes
+}
+
+{\tr:
+ \td- Version 1.16 \br; (15th March 2006)
+ {\td\ul:
+   {\li: Debian package:
+     \a href={http://plash.beasts.org/releases/plash_1.16_i386.deb}:
+       plash_1.16_i386.deb}
+   {\li: RPM:
+     \a href={http://plash.beasts.org/releases/plash-1.16-1.i386.rpm}:
+       plash-1.16-1.i386.rpm}
+   {\li: Source:
+     \a href={http://plash.beasts.org/releases/plash-1.16.tar.gz}:
+       plash-1.16.tar.gz}
+ }
+ {\td:
+
+    Rewrite Powerbox for Gtk: now inherits from GtkDialog and so works
+    with more applications.  Overhauled documentation and
+    build/install process.
+
+ }
 }
 
 {\tr:

@@ -4,6 +4,10 @@
 # This means including added files, leaving out deleted files.
 # Allows us to test the source package before checking in.
 
+
+if(scalar(@ARGV) != 1) { die "Usage: $0 <dest-dir>" }
+my $dest = $ARGV[0];
+
 my $files = {};
 
 # It would be nice to use the SVN API instead of parsing the output.
@@ -39,7 +43,6 @@ foreach my $f (@hide) {
 }
 
 
-my $dest = 'plash-src-pkg';
 mkdir($dest);
 
 foreach my $file (sort(keys(%$files))) {

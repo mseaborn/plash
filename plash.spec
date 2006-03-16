@@ -67,8 +67,8 @@ mkdir -p %{buildroot}/usr/share/man/man1
 cp -L -rv plash/COPYRIGHT \
 	plash/debian/changelog \
 	%{buildroot}/usr/share/doc/plash-%{version}/
-cp -rv plash/web-site/out \
-	%{buildroot}/usr/share/doc/plash-%{version}/html
+cp -rv plash/web-site/out/* \
+	%{buildroot}/usr/share/doc/plash-%{version}/html/
 
 # Install man pages
 cp -v plash/docs/man/* %{buildroot}/usr/share/man/man1/

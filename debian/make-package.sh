@@ -41,7 +41,7 @@ install -d $DEST/usr/share/man/man1
 cp -pv debian/copyright $DEST/usr/share/doc/$PACKAGE/
 cp -pv debian/changelog $DEST/usr/share/doc/$PACKAGE/changelog
 gzip -9 $DEST/usr/share/doc/$PACKAGE/changelog
-cp -prv web-site/out $DEST/usr/share/doc/$PACKAGE/html
+cp -prv web-site/out/* $DEST/usr/share/doc/$PACKAGE/html/
 
 # Install man pages
 cp -pv docs/man/* $DEST/usr/share/man/man1/

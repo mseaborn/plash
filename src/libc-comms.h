@@ -65,6 +65,9 @@ weak_extern(pthread_mutex_lock)
 weak_extern(pthread_mutex_unlock)
 weak_extern(pthread_mutex_trylock)
 
+/* NB. gcc 4.0 breaks this code.  It wrongly infers that
+   pthread_mutex_lock is always non-null, and optimises away the
+   conditional.  This causes ld.so to segfault. */
 inline static void plash_libc_lock()
 {
 #if 0

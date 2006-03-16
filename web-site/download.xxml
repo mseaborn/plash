@@ -107,6 +107,7 @@ As before, you can do the following, as root, to install Plash:
 \ul{
   \li- You need Gtk >=2.8 to use the powerbox.  Otherwise, use the --without-gtk configure option.
   \li- GNU Readline
+  \li- Plash cannot be built with gcc 4.0 yet, so use an earlier gcc (gcc 3.3 works)
 }
 
 

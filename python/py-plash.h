@@ -1,0 +1,51 @@
+/* Copyright (C) 2006 Mark Seaborn
+
+   This file is part of Plash.
+
+   Plash is free software; you can redistribute it and/or modify it
+   under the terms of the GNU Lesser General Public License as
+   published by the Free Software Foundation; either version 2.1 of
+   the License, or (at your option) any later version.
+
+   Plash is distributed in the hope that it will be useful, but
+   WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   Lesser General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public
+   License along with Plash; if not, write to the Free Software
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
+   USA.  */
+
+#ifndef INC_PLASH_PYTHON_H
+#define INC_PLASH_PYTHON_H
+
+
+#include "filesysobj.h"
+
+typedef struct {
+  PyObject_HEAD;
+  int fd;
+} plpy_fd;
+
+typedef struct {
+  PyObject_HEAD;
+  cap_t obj;
+} plpy_obj;
+
+extern PyTypeObject plpy_fd_type;
+extern PyTypeObject plpy_obj_type;
+
+
+void plpy_close(int fd);
+
+PyObject *plpy_wrap_fd(int fd);
+
+PyObject *plpy_obj_to_py(cap_t obj);
+cap_t plpy_obj_from_py(PyObject *obj);
+
+PyObject *cap_args_to_py(region_t r, struct cap_args args);
+int plpy_cap_args_from_py(region_t r, PyObject *args, struct cap_args *out);
+
+
+#endif

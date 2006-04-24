@@ -22,6 +22,7 @@
 
 
 #include "filesysobj.h"
+#include "resolve-filename.h"
 
 int process_open(struct filesys_obj *root, struct dir_stack *cwd,
 		 seqf_t pathname, int flags, int mode, int *err);

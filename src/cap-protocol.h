@@ -31,7 +31,7 @@ cap_t *cap_make_connection(region_t r, int sock_fd,
 /* This handles connections until there are no more objects exported.
    It prints a warning if imported objects remain. */
 void cap_run_server(void);
-int cap_server_exporting();
+int cap_server_exporting(void);
 /* Returns 0 when there are no connections left to handle: */
 int cap_run_server_step(void);
 void cap_close_all_connections(void);

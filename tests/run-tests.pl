@@ -2,13 +2,23 @@
 
 use IO::File;
 
+my $verbose = 1;
+
 my $start_dir = `pwd`;
 chomp($start_dir);
 $start_dir =~ /^\// || die;
 
-$pola_run = "$ENV{'HOME'}/projects/plash/bin/pola-run";
-$pola_shell = "$ENV{'HOME'}/projects/plash/bin/pola-shell";
-$exec_object = "$ENV{'HOME'}/projects/plash/bin/exec-object";
+run_cmd('rm -rf out/');
+
+$pola_run = "$start_dir/../bin/pola-run";
+$pola_shell = "$start_dir/../bin/pola-shell";
+$exec_object = "$start_dir/../bin/exec-object";
+
+# @pola_run = ($pola_run);
+$ENV{'PLASH_DIR'} = "$start_dir/..";
+@pola_run = ($pola_run, '--sandbox-prog', "$start_dir/strace-wrapper.sh");
+
+
 
 test('shell_hello',
      sub {
@@ -44,7 +54,7 @@ END
 
 test('hello',
      sub {
-       my $data = cmd_capture($pola_run, qw(-B --prog /bin/echo),
+       my $data = cmd_capture(@pola_run, qw(-B --prog /bin/echo),
 			      '-a', 'Hello world');
        if($data ne "Hello world\n") { die "Got: \"$data\"" }
      });
@@ -53,21 +63,21 @@ test('hello',
 test('bash_exec',
      sub {
        # do "--cwd /" to stop bash complaining about unset cwd
-       my $data = cmd_capture($pola_run, qw(-B --prog /bin/bash --cwd /),
+       my $data = cmd_capture(@pola_run, qw(-B --prog /bin/bash --cwd /),
 			      '-a=-c', '-a', '/bin/echo yeah');
        if($data ne "yeah\n") { die "Got: \"$data\"" }
      });
 
 test('bash_fork',
      sub {
-       my $data = cmd_capture($pola_run, qw(-B --prog /bin/bash --cwd /),
+       my $data = cmd_capture(@pola_run, qw(-B --prog /bin/bash --cwd /),
 			      '-a=-c', '-a', '/bin/echo yeah; /bin/true');
        if($data ne "yeah\n") { die "Got: \"$data\"" }
      });
 
 test('strace',
      sub {
-       my $data = cmd_capture($pola_run,
+       my $data = cmd_capture(@pola_run,
 			      qw(-B --prog /usr/bin/strace -a=/bin/echo),
 			      '-a', 'Hello world');
        if($data !~ /Hello world/) { die "Got: \"$data\"" }
@@ -77,7 +87,7 @@ test('chmod_x',
      sub {
        my $f = IO::File->new('file', O_CREAT | O_EXCL | O_WRONLY) || die;
        $f->close();
-       run_cmd($pola_run, qw(--prog /bin/bash -B -fw . -a=-c),
+       run_cmd(@pola_run, qw(--prog /bin/bash -B -fw . -a=-c),
 	       '-a', 'chmod +x file');
      });
 
@@ -85,7 +95,7 @@ test('chmod_unreadable',
      sub {
        my $f = IO::File->new('file', O_CREAT | O_EXCL | O_WRONLY) || die;
        $f->close();
-       run_cmd($pola_run, qw(--prog /bin/bash -B -fw . -a=-c),
+       run_cmd(@pola_run, qw(--prog /bin/bash -B -fw . -a=-c),
 	       '-a', 'chmod a-r file && chmod a+r file');
      });
 
@@ -95,7 +105,7 @@ test('utimes',
        my $mtime = 76000000;
        my $f = IO::File->new('file', O_CREAT | O_EXCL | O_WRONLY) || die;
        $f->close();
-       run_cmd($pola_run, qw(--prog /usr/bin/perl -B -fw file -a=-e),
+       run_cmd(@pola_run, qw(--prog /usr/bin/perl -B -fw file -a=-e),
 	       '-a', "utime($atime, $mtime, 'file') || die \"utime: $!\"");
        my @st = stat('file');
        if($st[8] != $atime) { die "atime mismatch" }
@@ -110,6 +120,7 @@ sub test {
     my $dir = "$start_dir/out/$name";
     run_cmd('mkdir', '-p', $dir);
     chdir($dir) || die;
+    print "\n--- running $name\n" if $verbose;
     &$f();
   };
   if($@) { print "** $name failed: $@\n" }
@@ -130,7 +141,7 @@ sub cmd_capture {
   if($pid == 0) {
     close(PIPE_READ);
     open(STDOUT, ">&PIPE_WRITE") || die;
-    open(STDERR, ">&PIPE_WRITE") || die;
+    # open(STDERR, ">&PIPE_WRITE") || die;
     exec(@cmd);
     die;
   }

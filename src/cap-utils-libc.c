@@ -60,13 +60,13 @@ int get_process_caps(const char *arg, ...)
   cap_t *caps;
 
   var = getenv("PLASH_CAPS");
-  if(!var) { fprintf(stderr, _("PLASH_CAPS variable is not set\n")); return 1; }
+  if(!var) { fprintf(stderr, _("PLASH_CAPS variable is not set\n")); return -1; }
   if(!plash_libc_duplicate_connection) {
     fprintf(stderr, _("plash_libc_duplicate_connection not defined\n"));
     return -1;
   }
   sock_fd = plash_libc_duplicate_connection();
-  if(sock_fd < 0) { fprintf(stderr, _("plash_libc_duplicate_connection() failed\n")); return 1; }
+  if(sock_fd < 0) { fprintf(stderr, _("plash_libc_duplicate_connection() failed\n")); return -1; }
 
   cap_list = seqf_string(var);
   list = cap_list;

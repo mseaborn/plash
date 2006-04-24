@@ -135,9 +135,9 @@ struct arg_list {
 };
 
 struct state {
-  struct filesys_obj *root_dir;
-  struct dir_stack *cwd;
-  fs_node_t root_node;
+  struct filesys_obj *root_dir; /* Caller's root directory */
+  struct dir_stack *cwd; /* Current working directory in caller's namespace */
+  fs_node_t root_node; /* Callee's root directory */
   struct arg_list *args;
   int args_count;
   const char *executable_filename;
@@ -145,9 +145,6 @@ struct state {
   int debug;
   const char *pet_name;
   int powerbox;
-#if 0
-  int comm_fd_number;
-#endif
 };
 
 void usage(FILE *fp)
@@ -462,17 +459,6 @@ int handle_arguments(region_t r, struct state *state,
       goto arg_handled;
     }
 
-#if 0
-    if(!strcmp(arg, "--high-fd")) {
-      if(i + 1 > argc) {
-	fprintf(stderr, NAME_MSG _("--high-fd expects 1 parameter\n"));
-	return 1;
-      }
-      state->comm_fd_number = atoi(argv[i++]);
-      goto arg_handled;
-    }
-#endif
-
     if(!strcmp(arg, "--help")) { usage(stdout); return 1; }
 
   unknown:
@@ -596,9 +582,6 @@ int main(int argc, char **argv)
   state.debug = FALSE;
   state.pet_name = NULL;
   state.powerbox = FALSE;
-#if 0
-  state.comm_fd_number = 0;
-#endif
 
   /* Don't call gtk_init(): don't open an X11 connection at this stage,
      because we don't know if we'll need one and X11 might not be
@@ -660,7 +643,6 @@ int main(int argc, char **argv)
   }
   {
     int executable_fd;
-    // int executable_fd2;
     const char *executable_filename2; /* of interpreter for #! scripts */
     const char **args_array, **args_array2;
     int args_count2;
@@ -730,7 +712,6 @@ int main(int argc, char **argv)
       if(exec_for_scripts(r, child_root, child_cwd,
 			  state.executable_filename, executable_fd,
 			  state.args_count + 1, args_array,
-			  // &executable_fd2,
 			  NULL,
 			  &executable_filename2,
 			  &args_count2, &args_array2, &err) < 0) {
@@ -808,7 +789,6 @@ int main(int argc, char **argv)
 	  /* NB. We have already processed arguments!  Gtk should not
 	     take anything from this arg list, we hope. */
 	  gtk_init(&argc, &argv);
-	  // gdk_display_get_default();
 	  
 	  /* It seems that if the X11 connection is broken, gtk_main() calls
 	     exit() rather than returning.  That's not what we want. */
@@ -831,24 +811,6 @@ int main(int argc, char **argv)
 
       close(socks[1]);
 
-#if 0
-      /* This is a hack to deal with programs which close all the file
-         descriptors in a range, even if they didn't open them
-         themselves.  This includes XEmacs, which closes file
-         descriptors 0 through to 64 (inclusive) when it forks a child
-         process.  The real solution is to have libc virtualise FDs,
-         or at least move its FD out of the way. */
-      {
-	int fd = fcntl(socks[0], F_DUPFD, state.comm_fd_number);
-	if(fd < 0) {
-	  perror(NAME_MSG "fcntl/dup");
-	  return 1;
-	}
-	close(socks[0]);
-	socks[0] = fd;
-      }
-#endif
-
       {
 	char buf[20];
 	snprintf(buf, sizeof(buf), "%i", socks[0]);
@@ -865,18 +827,6 @@ int main(int argc, char **argv)
 				 args_count2, args_array2,
 				 &cmd, &args_count2, &args_array2,
 				 state.debug);
-#if 0
-	/* We must clear the close-on-exec flag explicitly for the
-	   executable FD. */
-	{
-	  int flags = fcntl(executable_fd2, F_GETFD);
-	  if(flags < 0) { perror(NAME_MSG "fcntl"); return 1; }
-	  if(fcntl(executable_fd2, F_SETFD, flags &~ FD_CLOEXEC) < 0) {
-	    perror(NAME_MSG "fcntl");
-	    return 1;
-	  }
-	}
-#endif
 
 	if(0) {
 	  print_args(args_count2, args_array2);
@@ -911,7 +861,7 @@ int main(int argc, char **argv)
 	else {
 	  execve(cmd, (char **) args_array2, environ);
 	}
-	perror(NAME_MSG "exec");
+	fprintf(stderr, NAME_MSG "execve: %s: %s\n", cmd, strerror(errno));
 	return 1;
       }
     }

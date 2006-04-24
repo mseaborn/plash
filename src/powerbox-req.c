@@ -60,7 +60,7 @@ int main(int argc, const char *argv[])
     }
     else if(!strcmp(argv[i], "--help") ||
 	    !strcmp(argv[i], "-h")) {
-      printf(_("Usage: %i [options]\n"
+      printf(_("Usage: %s [options]\n"
 	       "Asks the system to open a powerbox file chooser dialog.\n"
 	       "Allows the user to choose a file and grant the caller the\n"
 	       "right to access it.\n"
@@ -69,7 +69,8 @@ int main(int argc, const char *argv[])
 	       "  --save           use a \"save as\" dialog\n"
 	       "                   (default is an \"open file\" dialog)\n"
 	       "  --dir <dir>      request start directory to be displayed\n"
-	       "  --desc <reason>  text to be displayed in the powerbox window\n"));
+	       "  --desc <reason>  text to be displayed in the powerbox window\n"),
+	     argv[0]);
       return 0;
     }
     else {

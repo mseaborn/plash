@@ -1938,7 +1938,7 @@ struct server_shared *make_server_shared(struct shell_state *state)
 	close_our_fds();
 	dup2(pipe_fd[0], 3);
 	execl("/usr/bin/X11/xterm",
-	      "xterm", "-e", "sh", "-c", "less <&3", 0);
+	      "xterm", "-e", "sh", "-c", "less <&3", NULL);
 	perror("exec: xterm");
 	exit(1);
       }
@@ -2552,7 +2552,7 @@ void run_gc_uid_locks()
   if(pid == 0) {
     /* Put it into its own process group, just in case user presses Ctrl-C. */
     setpgid(0, 0);
-    execl(PLASH_SETUID_BIN_INSTALL "/gc-uid-locks", "gc-uid-locks", "--gc", 0);
+    execl(PLASH_SETUID_BIN_INSTALL "/gc-uid-locks", "gc-uid-locks", "--gc", NULL);
     perror("plash/gc-uid-locks: exec");
     exit(1);
   }

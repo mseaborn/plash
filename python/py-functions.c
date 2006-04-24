@@ -102,6 +102,8 @@ void initplash(void)
   if(PyType_Ready(&plpy_fd_type) < 0) { return; }
   if(PyType_Ready(&plpy_obj_type) < 0) { return; }
 
+  plpy_init();
+
   mod = Py_InitModule3("plash", module_methods,
 		       "Plash module.");
 
@@ -109,4 +111,9 @@ void initplash(void)
   PyModule_AddObject(mod, "FD", (PyObject *) &plpy_fd_type);
   Py_INCREF(&plpy_obj_type);
   PyModule_AddObject(mod, "Plash", (PyObject *) &plpy_obj_type);
+
+  Py_INCREF(plpy_wrapper_class);
+  PyModule_AddObject(mod, "Wrapper", (PyObject *) plpy_wrapper_class);
+  Py_INCREF(plpy_pyobj_class);
+  PyModule_AddObject(mod, "Pyobj", (PyObject *) plpy_pyobj_class);
 }

@@ -33,8 +33,21 @@ typedef struct {
   cap_t obj;
 } plpy_obj;
 
+struct plpy_pyobj {
+  struct filesys_obj hdr;
+  PyObject *obj;
+};
+
 extern PyTypeObject plpy_fd_type;
 extern PyTypeObject plpy_obj_type;
+
+extern PyTypeObject *plpy_wrapper_class;
+extern PyTypeObject *plpy_pyobj_class;
+
+extern PyObject *plpy_str_cap_invoke;
+extern PyObject *plpy_str_cap_call;
+
+DECLARE_VTABLE(plpy_pyobj_vtable);
 
 
 void plpy_close(int fd);
@@ -44,8 +57,10 @@ PyObject *plpy_wrap_fd(int fd);
 PyObject *plpy_obj_to_py(cap_t obj);
 cap_t plpy_obj_from_py(PyObject *obj);
 
-PyObject *cap_args_to_py(region_t r, struct cap_args args);
+PyObject *plpy_cap_args_to_py(region_t r, struct cap_args args);
 int plpy_cap_args_from_py(region_t r, PyObject *args, struct cap_args *out);
+
+void plpy_init(void);
 
 
 #endif

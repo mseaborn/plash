@@ -593,6 +593,17 @@ put('gensrc/out-vtable-powerbox-for-gtk.h',
      }
     ]);
 
+put('gensrc/out-vtable-python.h',
+    [{ Name => 'plpy_pyobj_vtable',
+       Interfaces => [],
+       Contents =>
+         [['free', 'plpy_pyobj_free'],
+	  ['mark', 'NULL'],
+	  ['cap_invoke', 'plpy_pyobj_cap_invoke'],
+	  ['cap_call', 'plpy_pyobj_cap_call'],
+	 ]
+     }]);
+
 print "vtables use $bytes bytes\n";
 
 

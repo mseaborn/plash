@@ -21,22 +21,82 @@
 
 #include "filesysobj.h"
 #include "cap-utils.h"
+#include "marshal.h"
 
 #include "py-plash.h"
 
+PyObject *plpy_str_cap_invoke;
+PyObject *plpy_str_cap_call;
+
+
+PyTypeObject *plpy_wrapper_class = NULL;
+PyTypeObject *plpy_pyobj_class = NULL;
+
+void plpy_init(void)
+{
+  PyObject *bases = NULL, *dict = NULL, *name = NULL;
+  
+  plpy_str_cap_invoke = PyString_InternFromString("cap_invoke");
+  if(!plpy_str_cap_invoke) { goto error; }
+  plpy_str_cap_call = PyString_InternFromString("cap_call");
+  if(!plpy_str_cap_call) { goto error; }
+
+  bases = Py_BuildValue("(O)", (PyObject *) &plpy_obj_type);
+  if(!bases) { goto error; }
+  dict = PyDict_New();
+  if(!dict) { goto error; }
+  name = Py_BuildValue("s", "plash_object");
+  if(!name) { goto error; }
+  
+  plpy_wrapper_class = (PyTypeObject *) PyClass_New(bases, dict, name);
+  if(!PyType_Check(plpy_wrapper_class)) {
+    assert(0);
+  }
+
+ error:
+  Py_XDECREF(bases);
+  Py_XDECREF(dict);
+  Py_XDECREF(name);
+
+  {
+    PyObject *dict = NULL, *name = NULL;
+  
+    dict = PyDict_New();
+    if(!dict) { goto error2; }
+    name = Py_BuildValue("s", "pyobj");
+    if(!name) { goto error2; }
+  
+    plpy_pyobj_class = (PyTypeObject *) PyClass_New(NULL, dict, name);
+    if(!PyType_Check(plpy_pyobj_class)) {
+      assert(0);
+    }
+
+  error2:
+    Py_XDECREF(dict);
+    Py_XDECREF(name);
+  }
+}
 
 /* Takes an owning reference to a C Plash object, and returns a Python
    Plash object (owning reference). */
 PyObject *plpy_obj_to_py(cap_t obj)
 {
-  plpy_obj *wrapper =
-    (plpy_obj *) plpy_obj_type.tp_alloc(&plpy_obj_type, 0);
-  if(!wrapper) {
-    filesys_obj_free(obj);
-    return NULL;
+  if(obj->vtable == &plpy_pyobj_vtable) {
+    /* Return the Python object being wrapped. */
+    struct plpy_pyobj *wrapper = (void *) obj;
+    Py_INCREF(wrapper->obj);
+    return wrapper->obj;
   }
-  wrapper->obj = obj;
-  return (PyObject *) wrapper;
+  else {
+    plpy_obj *wrapper =
+      (plpy_obj *) plpy_wrapper_class->tp_alloc(plpy_wrapper_class, 0);
+    if(!wrapper) {
+      filesys_obj_free(obj);
+      return NULL;
+    }
+    wrapper->obj = obj;
+    return (PyObject *) wrapper;
+  }
 }
 
 /* Takes a borrowed reference to a Python object, and returns a C
@@ -44,11 +104,20 @@ PyObject *plpy_obj_to_py(cap_t obj)
    conversion cannot be done. */
 cap_t plpy_obj_from_py(PyObject *obj)
 {
-  if(!PyObject_TypeCheck(obj, &plpy_obj_type)) {
+  if(PyObject_IsInstance(obj, (PyObject *) plpy_pyobj_class)) {
+    struct plpy_pyobj *wrapper =
+      filesys_obj_make(sizeof(struct plpy_pyobj), &plpy_pyobj_vtable);
+    Py_INCREF(obj);
+    wrapper->obj = obj;
+    return (cap_t) wrapper;
+  }
+  else if(PyObject_TypeCheck(obj, &plpy_obj_type)) {
+    return inc_ref(((plpy_obj *) obj)->obj);
+  }
+  else {
     PyErr_SetString(PyExc_TypeError, "arg is not a Plash object");
     return NULL;
   }
-  return inc_ref(((plpy_obj *) obj)->obj);
 }
 
 
@@ -78,7 +147,9 @@ static int plpy_obj_hash(plpy_obj *self)
 }
 
 
-PyObject *cap_args_to_py(region_t r, struct cap_args args)
+/* Takes "args" as an owned reference.  Converts it to a Python version.
+   The region r is only used to flatten the data argument. */
+PyObject *plpy_cap_args_to_py(region_t r, struct cap_args args)
 {
   int i;
   PyObject *caps = NULL, *fds = NULL, *result;
@@ -128,6 +199,7 @@ int plpy_cap_args_from_py(region_t r, PyObject *args, struct cap_args *out)
   int data_size;
   PyObject *caps, *fds;
   cap_t *caps2;
+  int *fds2;
   int i;
 
   if(!PyArg_ParseTuple(args, "s#OO", &data, &data_size, &caps, &fds) ||
@@ -155,14 +227,37 @@ int plpy_cap_args_from_py(region_t r, PyObject *args, struct cap_args *out)
     caps2[i] = obj2;
   }
 
-  /* File descriptors not copied yet. */
-  out->fds.fds = NULL;
-  out->fds.count = 0;
+  /* Copy file descriptors. */
+  out->fds.count = PyTuple_GET_SIZE(fds);
+  fds2 = region_alloc(r, out->fds.count * sizeof(int));
+  out->fds.fds = fds2;
+  for(i = 0; i < out->fds.count; i++) {
+    int fd_copy;
+    PyObject *fd = PyTuple_GET_ITEM(fds, i);
+    if(!PyObject_TypeCheck(fd, &plpy_fd_type)) {
+      /* Error */
+      int j;
+      for(j = 0; j < i; j++) { plpy_close(fds2[j]); }
+      caps_free(out->caps);
+      PyErr_SetString(PyExc_TypeError, "arg is not a wrapped FD");
+      return FALSE;
+    }
+    fd_copy = dup(((plpy_fd *) fd)->fd);
+    if(fd_copy < 0) {
+      /* Error */
+      int j;
+      for(j = 0; j < i; j++) { plpy_close(fds2[j]); }
+      caps_free(out->caps);
+      PyErr_SetFromErrno(PyExc_Exception);
+      return FALSE;
+    }
+    fds2[i] = fd_copy;
+  }
   
   return TRUE;
 }
 
-static PyObject *plpy_cap_invoke(plpy_obj *self, PyObject *args)
+static PyObject *plpy_obj_cap_invoke(plpy_obj *self, PyObject *args)
 {
   region_t r = region_make();
   struct cap_args args2;
@@ -177,7 +272,7 @@ static PyObject *plpy_cap_invoke(plpy_obj *self, PyObject *args)
   return Py_None;
 }
 
-static PyObject *plpy_cap_call(plpy_obj *self, PyObject *args)
+static PyObject *plpy_obj_cap_call(plpy_obj *self, PyObject *args)
 {
   region_t r = region_make();
   struct cap_args args2, result;
@@ -189,16 +284,16 @@ static PyObject *plpy_cap_call(plpy_obj *self, PyObject *args)
   }
   cap_call(self->obj, r, args2, &result);
   
-  result2 = cap_args_to_py(r, result);
+  result2 = plpy_cap_args_to_py(r, result);
   region_free(r);
   return result2;
 }
 
 static PyMethodDef plpy_obj_object_methods[] = {
-  { "cap_call", (PyCFunction) plpy_cap_call, METH_O,
+  { "cap_call", (PyCFunction) plpy_obj_cap_call, METH_O,
     "Invoke Plash object, getting a result back."
   },
-  { "cap_invoke", (PyCFunction) plpy_cap_invoke, METH_O,
+  { "cap_invoke", (PyCFunction) plpy_obj_cap_invoke, METH_O,
     "Send a message to a Plash object, without getting a result back directly."
   },
   {NULL}  /* Sentinel */
@@ -245,3 +340,58 @@ PyTypeObject plpy_obj_type = {
   0,                         /* tp_alloc */
   0                          /* tp_new */
 };
+
+
+void plpy_pyobj_free(struct filesys_obj *obj1)
+{
+  struct plpy_pyobj *obj = (void *) obj1;
+  Py_DECREF(obj->obj);
+}
+
+void plpy_pyobj_cap_invoke(struct filesys_obj *obj1, struct cap_args args)
+{
+  struct plpy_pyobj *obj = (void *) obj1;
+  PyObject *result;
+  region_t r = region_make();
+  PyObject *args2 = plpy_cap_args_to_py(r, args);
+  region_free(r);
+  if(!args2) {
+    /* Error: but must be ignored. */
+    return;
+  }
+  result = PyObject_CallMethodObjArgs(obj->obj, plpy_str_cap_invoke,
+				      args2, NULL);
+  if(!result) {
+    /* Any error is ignored. */
+    PyErr_Clear();
+  }
+  Py_DECREF(args2);
+}
+
+void plpy_pyobj_cap_call(struct filesys_obj *obj1, region_t r,
+			 struct cap_args args, struct cap_args *result2)
+{
+  struct plpy_pyobj *obj = (void *) obj1;
+  PyObject *result;
+  PyObject *args2 = plpy_cap_args_to_py(r, args);
+  if(!args2) {
+    /* Error */
+    *result2 = cap_args_d(mk_int(r, METHOD_FAIL));
+    return;
+  }
+  result = PyObject_CallMethodObjArgs(obj->obj, plpy_str_cap_invoke,
+				      args2, NULL);
+  if(!result) {
+    /* Any error is ignored. */
+    PyErr_Clear();
+    *result2 = cap_args_d(mk_int(r, METHOD_FAIL));
+  }
+  else {
+    if(!plpy_cap_args_from_py(r, result, result2)) {
+      *result2 = cap_args_d(mk_int(r, METHOD_FAIL));
+    }
+  }
+  Py_DECREF(args2);
+}
+
+#include "out-vtable-python.h"

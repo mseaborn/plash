@@ -26,6 +26,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#include "config.h"
+
 #ifdef USE_GTK
 #include <gtk/gtkwindow.h>
 #include <gtk/gtk.h>
@@ -40,7 +42,6 @@
 #include "fs-operations.h"
 #include "cap-protocol.h"
 #include "cap-utils.h"
-#include "config.h"
 #include "marshal.h"
 #include "plash-libc.h"
 #include "powerbox.h"
@@ -145,7 +146,23 @@ struct state {
   int debug;
   const char *pet_name;
   int powerbox;
+  const char *sandbox_prog;
 };
+
+void init_state(struct state *state)
+{
+  state->root_dir = NULL;
+  state->cwd = NULL;
+  state->root_node = NULL;
+  state->args = NULL;
+  state->args_count = 0;
+  state->executable_filename = NULL;
+  state->log_summary = FALSE;
+  state->debug = FALSE;
+  state->pet_name = NULL;
+  state->powerbox = FALSE;
+  state->sandbox_prog = NULL;
+}
 
 void usage(FILE *fp)
 {
@@ -459,6 +476,15 @@ int handle_arguments(region_t r, struct state *state,
       goto arg_handled;
     }
 
+    if(!strcmp(arg, "--sandbox-prog")) {
+      if(i + 1 > argc) {
+	fprintf(stderr, NAME_MSG _("--sandbox-prog expects 1 parameter\n"));
+	return 1;
+      }
+      state->sandbox_prog = argv[i++];
+      goto arg_handled;
+    }
+
     if(!strcmp(arg, "--help")) { usage(stdout); return 1; }
 
   unknown:
@@ -475,7 +501,7 @@ int handle_arguments(region_t r, struct state *state,
 static int ld_library_env = 1;
 
 static void args_to_exec_elf_program
-  (region_t r, const char *executable_filename,
+  (region_t r, struct state *state, const char *executable_filename,
    int argc, const char **argv,
    const char **cmd_out, int *argc_out, const char ***argv_out,
    int debug)
@@ -487,80 +513,52 @@ static void args_to_exec_elf_program
   assert(argc >= 1);
   argv2 = region_alloc(r, (argc + extra_args + 1) * sizeof(char *));
   argv2[0] = argv[0];
-  if(under_plash) {
-    *cmd_out = "/run-as-anonymous";
-  }
-  else {
-    *cmd_out = PLASH_SETUID_BIN_INSTALL "/run-as-anonymous";
-  }
   i = 1;
-  if(debug) argv2[i++] = "--debug";
-  /* NB. When running inside the Plash environment, run-as-anonymous
-     is statically linked and so won't unset LD_LIBRARY_PATH, so we
-     don't need to restore it. */
-  if(ld_library_env && !under_plash) {
-    char *path = getenv("LD_LIBRARY_PATH");
-    argv2[i++] = "-s";
-    argv2[i++] =
-      flatten_str(r, cat2(r, mk_string(r, "LD_LIBRARY_PATH=" LIB_INSTALL),
-			  path ? cat2(r, mk_string(r, ":"),
-				      mk_string(r, path))
-			       : seqt_empty));
-  }
-  /* Make sure LD_PRELOAD is copied through.  It might have been set in
-     our current environment using the --env option. */
-  {
-    char *str = getenv("LD_PRELOAD");
-    if(str) {
+  if(!state->sandbox_prog) {
+    if(under_plash) {
+      *cmd_out = "/run-as-anonymous";
+    }
+    else {
+      *cmd_out = PLASH_SETUID_BIN_INSTALL "/run-as-anonymous";
+    }
+    if(debug) argv2[i++] = "--debug";
+    /* NB. When running inside the Plash environment, run-as-anonymous
+       is statically linked and so won't unset LD_LIBRARY_PATH, so we
+       don't need to restore it. */
+    if(ld_library_env && !under_plash) {
+      char *path = getenv("LD_LIBRARY_PATH");
       argv2[i++] = "-s";
-      argv2[i++] = flatten_str(r, cat2(r, mk_string(r, "LD_PRELOAD="),
-				       mk_string(r, str)));
+      argv2[i++] =
+	flatten_str(r, cat2(r, mk_string(r, "LD_LIBRARY_PATH=" LIB_INSTALL),
+			    path ? cat2(r, mk_string(r, ":"),
+					mk_string(r, path))
+			         : seqt_empty));
+    }
+    /* Make sure LD_PRELOAD is copied through.  It might have been set in
+       our current environment using the --env option. */
+    {
+      char *str = getenv("LD_PRELOAD");
+      if(str) {
+	argv2[i++] = "-s";
+	argv2[i++] = flatten_str(r, cat2(r, mk_string(r, "LD_PRELOAD="),
+					 mk_string(r, str)));
+      }
+    }
+    argv2[i++] = "/special/ld-linux.so.2";
+    if(!ld_library_env) {
+      argv2[i++] = "--library-path";
+      argv2[i++] = PLASH_LD_LIBRARY_PATH;
     }
   }
-  argv2[i++] = "/special/ld-linux.so.2";
-  if(!ld_library_env) {
-    argv2[i++] = "--library-path";
-    argv2[i++] = PLASH_LD_LIBRARY_PATH;
+  else {
+    *cmd_out = state->sandbox_prog;
   }
+  
   argv2[i++] = executable_filename;
   assert(i <= extra_args + 1);
   for(j = 1; j < argc; j++) { argv2[i++] = argv[j]; }
   argv2[i] = NULL;
   *argc_out = i;
-  *argv_out = argv2;
-}
-
-static void args_to_exec_elf_program_from_fd
-  (region_t r, int fd, int argc, const char **argv,
-   const char **cmd_out, int *argc_out, const char ***argv_out)
-{
-  int debug = 0;
-  int extra_args = 6 + (debug ? 1:0);
-  int buf_size = 20;
-  char *buf = region_alloc(r, buf_size);
-  const char **argv2;
-  int i;
-
-  assert(argc >= 1);
-  argv2 = region_alloc(r, (argc + extra_args + 1) * sizeof(char *));
-  argv2[0] = argv[0];
-  if(under_plash) {
-    *cmd_out = "/run-as-anonymous";
-  }
-  else {
-    *cmd_out = PLASH_SETUID_BIN_INSTALL "/run-as-anonymous";
-  }
-  i = 1;
-  if(debug) argv2[i++] = "--debug";
-  argv2[i++] = "/special/ld-linux.so.2";
-  argv2[i++] = "--library-path";
-  argv2[i++] = PLASH_LD_LIBRARY_PATH;
-  argv2[i++] = "--fd";
-  snprintf(buf, buf_size, "%i", fd);
-  argv2[i++] = buf;
-  for(i = 0; i < argc; i++) { argv2[extra_args+i] = argv[i]; }
-  argv2[extra_args + argc] = NULL;
-  *argc_out = extra_args + argc;
   *argv_out = argv2;
 }
 
@@ -572,16 +570,7 @@ int main(int argc, char **argv)
   int err;
   
   struct state state;
-  // state.root_dir = NULL;
-  // state.cwd = NULL;
-  // state.root_node = NULL;
-  state.args = NULL;
-  state.args_count = 0;
-  state.executable_filename = NULL;
-  state.log_summary = FALSE;
-  state.debug = FALSE;
-  state.pet_name = NULL;
-  state.powerbox = FALSE;
+  init_state(&state);
 
   /* Don't call gtk_init(): don't open an X11 connection at this stage,
      because we don't know if we'll need one and X11 might not be
@@ -823,7 +812,7 @@ int main(int argc, char **argv)
 
       {
 	const char *cmd;
-	args_to_exec_elf_program(r, executable_filename2,
+	args_to_exec_elf_program(r, &state, executable_filename2,
 				 args_count2, args_array2,
 				 &cmd, &args_count2, &args_array2,
 				 state.debug);

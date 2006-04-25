@@ -64,23 +64,24 @@ test('hello',
 test('bash_exec',
      sub {
        # do "--cwd /" to stop bash complaining about unset cwd
-       my $data = cmd_capture(@pola_run, qw(-B --prog /bin/bash --cwd /),
-			      '-a=-c', '-a', '/bin/echo yeah');
+       my $data = cmd_capture(@pola_run, qw(-B --cwd /),
+			      '-e', '/bin/bash', '-c', '/bin/echo yeah');
        if($data ne "yeah\n") { die "Got: \"$data\"" }
      });
 
 test('bash_fork',
      sub {
-       my $data = cmd_capture(@pola_run, qw(-B --prog /bin/bash --cwd /),
-			      '-a=-c', '-a', '/bin/echo yeah; /bin/true');
+       my $data = cmd_capture(@pola_run, qw(-B --cwd /),
+			      '-e', '/bin/bash', '-c',
+			      '/bin/echo yeah; /bin/true');
        if($data ne "yeah\n") { die "Got: \"$data\"" }
      });
 
 test('strace',
      sub {
-       my $data = cmd_capture(@pola_run,
-			      qw(-B --prog /usr/bin/strace -a=/bin/echo),
-			      '-a', 'Hello world');
+       my $data = cmd_capture(@pola_run, '-B',
+			      '-e', '/usr/bin/strace',
+			      '/bin/echo', 'Hello world');
        if($data !~ /Hello world/) { die "Got: \"$data\"" }
      });
 
@@ -88,16 +89,18 @@ test('chmod_x',
      sub {
        my $f = IO::File->new('file', O_CREAT | O_EXCL | O_WRONLY) || die;
        $f->close();
-       run_cmd(@pola_run, qw(--prog /bin/bash -B -fw . -a=-c),
-	       '-a', 'chmod +x file');
+       run_cmd(@pola_run, qw(-B -fw .),
+	       '-e', '/bin/bash', '-c', 'chmod +x file');
+       if(!-x 'file') { die 'file not executable' }
      });
 
 test('chmod_unreadable',
      sub {
        my $f = IO::File->new('file', O_CREAT | O_EXCL | O_WRONLY) || die;
        $f->close();
-       run_cmd(@pola_run, qw(--prog /bin/bash -B -fw . -a=-c),
-	       '-a', 'chmod a-r file && chmod a+r file');
+       run_cmd(@pola_run, qw(-B -fw .),
+	       '-e', '/bin/bash', '-c',
+	       'chmod a-r file && chmod a+r file');
      });
 
 test('utimes',
@@ -106,8 +109,9 @@ test('utimes',
        my $mtime = 76000000;
        my $f = IO::File->new('file', O_CREAT | O_EXCL | O_WRONLY) || die;
        $f->close();
-       run_cmd(@pola_run, qw(--prog /usr/bin/perl -B -fw file -a=-e),
-	       '-a', "utime($atime, $mtime, 'file') || die \"utime: \$!\"");
+       run_cmd(@pola_run, qw(-B -fw file),
+	       '-e', '/usr/bin/perl', '-e',
+	       qq{ utime($atime, $mtime, 'file') || die "utime: \$!" });
        my @st = stat('file');
        if($st[8] != $atime) { die "atime mismatch" }
        if($st[9] != $mtime) { die "atime mismatch" }

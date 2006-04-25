@@ -185,7 +185,9 @@ void usage(FILE *fp)
 	  "  [--net]         Grant access to network config files\n"
 	  "  [--log]         Print method calls client makes to file server\n"
 	  "  [--pet-name <name>]\n"
-	  "  [--powerbox]\n"));
+	  "  [--powerbox]\n"
+	  "  [-e <command> <arg>...]\n"
+	  ));
 }
 
 struct flags {
@@ -354,6 +356,19 @@ int handle_arguments(region_t r, struct state *state,
 	}
 	add_to_arg_list(r, state, str);
 	goto arg_handled;
+      }
+
+      case 'e': {
+	for(; i < argc; i++) {
+	  if(!state->executable_filename) {
+	    /* If --prog has not been specified, the first argument is
+	       taken as the program to run. */
+	    state->executable_filename = argv[i];
+	  }
+	  else {
+	    add_to_arg_list(r, state, argv[i]);
+	  }
+	}
       }
 
       case 'B': {

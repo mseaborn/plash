@@ -16,7 +16,8 @@ $exec_object = "$start_dir/../bin/exec-object";
 
 # @pola_run = ($pola_run);
 $ENV{'PLASH_DIR'} = "$start_dir/..";
-@pola_run = ($pola_run, '--sandbox-prog', "$start_dir/strace-wrapper.sh");
+@pola_run = ($pola_run, '--sandbox-prog', "$start_dir/strace-wrapper.sh",
+	     '-fl', "$start_dir/../lib");
 
 
 
@@ -106,7 +107,7 @@ test('utimes',
        my $f = IO::File->new('file', O_CREAT | O_EXCL | O_WRONLY) || die;
        $f->close();
        run_cmd(@pola_run, qw(--prog /usr/bin/perl -B -fw file -a=-e),
-	       '-a', "utime($atime, $mtime, 'file') || die \"utime: $!\"");
+	       '-a', "utime($atime, $mtime, 'file') || die \"utime: \$!\"");
        my @st = stat('file');
        if($st[8] != $atime) { die "atime mismatch" }
        if($st[9] != $mtime) { die "atime mismatch" }

@@ -73,6 +73,7 @@ gcc('src/shell-wait.c', 'obj/shell-wait.o', @opts_s);
 gcc('src/shell-options.c', 'obj/shell-options.o', @opts_s);
 gcc('src/resolve-filename.c', 'obj/resolve-filename.o', @opts_s);
 gcc('src/fs-operations.c', 'obj/fs-operations.o', @opts_s);
+gcc('src/config-read.c', 'obj/config-read.o', @opts_s);
 if($use_gtk) {
   gcc('src/powerbox.c', 'obj/powerbox.o', @opts_s);
 }

@@ -449,7 +449,8 @@ build_shell_etc() {
 	obj/log-proxy.o \
 	obj/reconnectable-obj.o \
 	obj/parse-filename.o obj/comms.o \
-	obj/serialise.o obj/serialise-utils.o obj/region.o obj/utils.o"
+	obj/serialise.o obj/serialise-utils.o obj/region.o obj/utils.o
+	obj/config-read.o"
   if [ "$USE_GTK" = yes ]; then
     LIBPLASH_OBJS="$LIBPLASH_OBJS obj/powerbox.o"
   fi

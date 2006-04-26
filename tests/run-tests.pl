@@ -14,10 +14,15 @@ $pola_run = "$start_dir/../bin/pola-run";
 $pola_shell = "$start_dir/../bin/pola-shell";
 $exec_object = "$start_dir/../bin/exec-object";
 
-# @pola_run = ($pola_run);
-$ENV{'PLASH_DIR'} = "$start_dir/..";
-@pola_run = ($pola_run, '--sandbox-prog', "$start_dir/strace-wrapper.sh",
-	     '-fl', "$start_dir/../lib");
+if(0) {
+  @pola_run = ($pola_run);
+}
+else {
+  $ENV{'PLASH_DIR'} = "$start_dir/..";
+  @pola_run = ($pola_run, '--sandbox-prog', "$start_dir/strace-wrapper.sh",
+	       '--config', "ldso-path=$start_dir/../shobj/ld.so",
+	       '-fl', "$start_dir/../lib");
+}
 
 
 

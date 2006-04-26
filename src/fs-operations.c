@@ -34,6 +34,7 @@
 #include "resolve-filename.h"
 #include "comms.h"
 #include "config.h"
+#include "config-read.h"
 #include "serialise.h"
 #include "cap-protocol.h"
 #include "cap-utils.h"
@@ -949,7 +950,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
       argv2 = region_alloc(r, (argc + extra_args) * sizeof(seqf_t));
       assert(argc >= 1);
       argv2[0] = argv[0];
-      cmd_filename2 = seqf_string("/special/ld-linux.so.2");
+      cmd_filename2 = seqf_string(pl_ldso_path);
       argv2[1] = executable_filename;
       if(0) {
 	argv2[1] = "--library-path";

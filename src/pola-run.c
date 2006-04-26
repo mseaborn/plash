@@ -500,6 +500,15 @@ int handle_arguments(region_t r, struct state *state,
       goto arg_handled;
     }
 
+    if(!strcmp(arg, "--config")) {
+      if(i + 1 > argc) {
+	fprintf(stderr, NAME_MSG _("--config expects 1 parameter\n"));
+	return 1;
+      }
+      read_config_string(argv[i++]);
+      goto arg_handled;
+    }
+
     if(!strcmp(arg, "--help")) { usage(stdout); return 1; }
 
   unknown:

@@ -28,7 +28,6 @@ my $methods =
    ['Okay', 'okay'],
    ['Fail', 'fail', Args => 'errno_val/int'],
 
-   ['Fork', 'fsop_fork'], # scheduled for removal
    ['Copy', 'fsop_copy'],
    ['Gdir', 'fsop_get_dir'],
    ['Grtd', 'fsop_get_root_dir'],

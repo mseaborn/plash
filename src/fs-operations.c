@@ -482,10 +482,6 @@ static void fs_op_log_file_accesses(region_t r, struct fs_op_object *obj,
   int method_id;
   m_int(&ok, &msg, &method_id);
   if(ok) switch(method_id) {
-  case METHOD_FSOP_FORK: /* scheduled for removal */
-    {
-      return;
-    }
   case METHOD_FSOP_COPY:
     {
       return;
@@ -763,38 +759,6 @@ void handle_fs_op_message(region_t r, struct process *proc,
   int method_id;
   m_int(&ok, &msg, &method_id);
   if(ok) switch(method_id) {
-  case METHOD_FSOP_FORK: /* scheduled for removal */
-  {
-    m_end(&ok, &msg);
-    if(ok) {
-      int socks[2];
-      cap_t new_server;
-      
-      *log_msg = mk_string(r, "fork");
-
-      if(socketpair(AF_LOCAL, SOCK_STREAM, 0, socks) < 0) {
-	*reply = cat2(r, mk_int(r, METHOD_FAIL),
-		      mk_int(r, errno));
-	*log_reply = mk_string(r, "fail");
-	return;
-      }
-      set_close_on_exec_flag(socks[0], 1);
-      set_close_on_exec_flag(socks[1], 1);
-      obj->shared->refcount++;
-      inc_ref(proc->root);
-      if(proc->cwd) proc->cwd->hdr.refcount++;
-      new_server = make_fs_op_server(obj->shared, proc->root, proc->cwd);
-      cap_make_connection(r, socks[1], mk_caps1(r, new_server), 0, "to-client");
-      filesys_obj_free(new_server);
-      
-      *reply = mk_string(r, "RFrk");
-      *reply_fds = mk_fds1(r, socks[0]);
-      *log_reply = mk_printf(r, "ok, created #%i",
-			     ((struct fs_op_object *) new_server)->id);
-      return;
-    }
-    break;
-  }
   case METHOD_FSOP_COPY:
   {
     m_end(&ok, &msg);

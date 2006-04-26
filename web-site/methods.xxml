@@ -182,15 +182,13 @@ Resolved `pathname' to get any object; will follow symlinks.
 
 \pre~
 // part of execve() call
+// Arguments are:
+//  * command pathname (in "cmd" and "cmd-len" below)
+//  * a list of string arguments (in "ref" and "data")
 // The RExe result tells the client what it should pass to the exec syscall.
-// The client allocates a spare FD slot; it tells the server the number.
-// The server can then use this FD number in the arguments it returns.
-// The client receives an FD; it must copy it into that slot using "dup2".
-// This will be extended so that the server can also carry out the work of
-// the new process.
 // The RExo result returns an executable object which the client must invoke
 // with full arguments, including the root directory.
-"Exec" fd-number/int cmd-len/int cmd argc/int (arg-len/int arg)*
+"Exec" cmd-len/int cmd ref/int data
 =>
 "RExe" cmd-len/int cmd argc/int (arg-len/int arg)* + FD
 "RExo" + CAP

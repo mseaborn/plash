@@ -878,10 +878,8 @@ void handle_fs_op_message(region_t r, struct process *proc,
   }
   case METHOD_FSOP_EXEC:
   {
-    int fd_number;
     seqf_t cmd_filename;
     bufref_t argv_ref;
-    m_int(&ok, &msg, &fd_number);
     m_lenblock(&ok, &msg, &cmd_filename);
     m_int(&ok, &msg, &argv_ref);
     if(ok) {
@@ -973,9 +971,6 @@ void handle_fs_op_message(region_t r, struct process *proc,
 		      mk_leaf(r, cmd_filename2),
 		      mk_int(r, argc + extra_args),
 		      got);
-	/*
-	*reply_fds = mk_fds1(r, fd);
-	*/
 	*log_reply = mk_string(r, "ok");
 	return;
       }

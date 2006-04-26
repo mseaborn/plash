@@ -378,7 +378,6 @@ int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
 {
   region_t r = region_make();
   struct cap_args result;
-  int exec_fd = -1;
   if(libc_debug) fprintf(stderr, "libc: execve()\n");
 
   /* Pack the arguments. */
@@ -395,17 +394,7 @@ int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
     }
   }
 
-  /* Allocate an FD number which we will copy an FD into later. */
-  /* NB. FD 0 might have been closed by the program, in which case this
-     will fail. */
-  /* This part is scheduled for removal; the FD isn't needed any more. */
-  exec_fd = dup(0);
-  if(exec_fd < 0) {
-    if(libc_debug) fprintf(stderr, "libc: execve: could not dup slot\n");
-    goto error;
-  }
-
-  if(plash_init() < 0) { goto error; }
+  if(plash_init() < 0) { __set_errno(ENOSYS); goto error; }
   if(!fs_server) {
     if(libc_debug) fprintf(stderr, "libc: execve: fs_server not defined\n");
     __set_errno(ENOSYS);
@@ -416,13 +405,11 @@ int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
   if(fcntl(comm_sock, F_SETFD, 0) < 0) { goto error; }
       
   cap_call(fs_server, r,
-	   cap_args_make(cat6(r, mk_string(r, "Exec"),
-			      mk_int(r, exec_fd),
-			      mk_int(r, strlen(cmd_filename)),
-			      mk_string(r, cmd_filename),
-			      mk_int(r, args),
-			      argbuf_data(argbuf)),
-			 caps_empty, fds_empty),
+	   cap_args_d(cat5(r, mk_string(r, "Exec"),
+			   mk_int(r, strlen(cmd_filename)),
+			   mk_string(r, cmd_filename),
+			   mk_int(r, args),
+			   argbuf_data(argbuf))),
 	   &result);
   {
     seqf_t msg = flatten_reuse(r, result.data);
@@ -443,28 +430,6 @@ int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
       }
       argv2[argc] = 0;
       
-      close(exec_fd); /* this line can be removed later */
-      
-      execve(region_strdup_seqf(r, cmd_filename2), argv2, envp);
-      goto error;
-    }
-
-    /* This case is scheduled for removal. */
-    if(ok && result.fds.count == 1 && result.caps.size == 0) {
-      int exec_fd2 = result.fds.fds[0];
-      int i;
-      char **argv2 = alloca((argc + 1) * sizeof(char *));
-      for(i = 0; i < argc; i++) {
-	seqf_t arg;
-	m_lenblock(&ok, &msg, &arg);
-	if(!ok) { __set_errno(EIO); goto error; }
-	argv2[i] = region_strdup_seqf(r, arg);
-      }
-      argv2[argc] = 0;
-
-      if(dup2(exec_fd2, exec_fd) < 0) goto error;
-      close(exec_fd2);
-      
       execve(region_strdup_seqf(r, cmd_filename2), argv2, envp);
       goto error;
     }
@@ -477,8 +442,9 @@ int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
     if(ok && result.fds.count == 0 && result.caps.size == 1) {
       cap_t exec_obj = result.caps.caps[0];
       region_free(r);
-      close(exec_fd);
-      return exec_object(exec_obj, argc, argv, envp);
+      return exec_object(exec_obj, argc,
+			 (const char **) argv,
+			 (const char **) envp);
     }
   }
   {
@@ -498,41 +464,7 @@ int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
   __set_errno(ENOSYS);
  error:
   region_free(r);
-  if(exec_fd >= 0) close(exec_fd);
   return -1;
-
-#if 0
-  /* Call the kernel to check whether we can do "exec" using the kernel
-     on the file. */
-  /* This is necessary because if we do "exec" on ld-linux.so instead
-     of the real executable file, it will always succeed, even if the
-     executable file doesn't exist.  Some programs, such as gcc, rely
-     on "exec" failing on files that don't exist, because they call
-     exec repeatedly in order to search PATH. */
-  if(access(file, X_OK) < 0) return -1;
-  
-  /* If this is a threaded application kill all other threads.  */
-  if (__pthread_kill_other_threads_np)
-    __pthread_kill_other_threads_np ();
-#if __BOUNDED_POINTERS__
-  #error "I removed the __BOUNDED_POINTERS__ case because it wasn't used."
-#else
-  {
-    int extra_args = 3;
-    char **argv2;
-    int i;
-    for(i = 0; argv[i]; i++) /* do nothing */;
-    argv2 = alloca((i + extra_args + 1) * sizeof(char*));
-    argv2[0] = argv[0];
-    argv2[1] = "--library-path";
-    argv2[2] = "/usr/local/mrs:/lib:/usr/lib:/usr/X11R6/lib";
-    argv2[3] = (char *) file;
-    for(i = 1; argv[i]; i++) argv2[i + extra_args] = argv[i];
-    argv2[i + extra_args] = 0;
-    return execve("/usr/local/mrs/ld-linux.so.2", argv2, envp);
-  }
-#endif
-#endif
 }
 
 

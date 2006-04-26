@@ -1,4 +1,4 @@
-/* Copyright (C) 2004 Mark Seaborn
+/* Copyright (C) 2004, 2005, 2006 Mark Seaborn
 
    This file is part of Plash, the Principle of Least Authority Shell.
 
@@ -38,6 +38,7 @@
 #include "plash-libc.h"
 #include "cap-protocol.h"
 #include "cap-utils.h"
+#include "marshal.h"
 
 
 /* EXPORT: new_fork => WEAK:fork WEAK:__fork WEAK:vfork WEAK:__vfork __libc_fork __GI___fork __GI___vfork */
@@ -59,7 +60,7 @@ pid_t new_fork(void)
 
   r = region_make();
   cap_call(fs_server, r,
-	   cap_args_make(mk_string(r, "Copy"), caps_empty, fds_empty),
+	   cap_args_d(mk_int(r, METHOD_FSOP_COPY)),
 	   &result);
   if(expect_cap1(result, &new_fs_server) < 0) {
     region_free(r);
@@ -85,9 +86,8 @@ pid_t new_fork(void)
     assert(i == process_caps.size);
     filesys_obj_free(new_fs_server);
     cap_call(conn_maker, r,
-	     cap_args_make(cat2(r, mk_string(r, "Mkco"), mk_int(r, 0)),
-			   cap_seq_make(a, process_caps.size),
-			   fds_empty),
+	     cap_args_dc(cat2(r, mk_int(r, METHOD_MAKE_CONN), mk_int(r, 0)),
+			 cap_seq_make(a, process_caps.size)),
 	     &result);
   }
   if(expect_fd1(result, &fd) < 0) {
@@ -228,8 +228,7 @@ static int exec_object(cap_t obj, int argc, const char **argv,
   {
     cap_t root_dir;
     cap_call(fs_server, r,
-	     cap_args_make(mk_string(r, "Grtd"),
-			   caps_empty, fds_empty),
+	     cap_args_d(mk_int(r, METHOD_FSOP_GET_ROOT_DIR)),
 	     &result);
     if(expect_cap1(result, &root_dir) < 0) {
       filesys_obj_free(obj);
@@ -329,7 +328,7 @@ static int exec_object(cap_t obj, int argc, const char **argv,
     }
   }
   cap_call(obj, r,
-	   cap_args_make(cat3(r, mk_string(r, "Exeo"),
+	   cap_args_make(cat3(r, mk_int(r, METHOD_EO_EXEC),
 			      mk_int(r, args),
 			      argbuf_data(argbuf)),
 			 argbuf_caps(argbuf),
@@ -405,7 +404,7 @@ int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
   if(fcntl(comm_sock, F_SETFD, 0) < 0) { goto error; }
       
   cap_call(fs_server, r,
-	   cap_args_d(cat5(r, mk_string(r, "Exec"),
+	   cap_args_d(cat5(r, mk_int(r, METHOD_FSOP_EXEC),
 			   mk_int(r, strlen(cmd_filename)),
 			   mk_string(r, cmd_filename),
 			   mk_int(r, args),

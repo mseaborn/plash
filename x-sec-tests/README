@@ -1,0 +1,4 @@
+
+These programs make dubious requests of an X server, doing things such
+as snooping for keypresses.  The purpose of the programs is to test
+the effectiveness of X security extensions.

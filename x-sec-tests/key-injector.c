@@ -1,6 +1,10 @@
 
 /* Repeatedly send a keypress event to the window with the current
-   input focus. */
+   input focus.
+
+   Note that the "send_event" bit will be set in these events, and
+   some X clients (e.g. xterm) will notice this and ignore the
+   event. */
 
 #include <stdio.h>
 #include <unistd.h>

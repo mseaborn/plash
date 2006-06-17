@@ -1,6 +1,8 @@
 plash (1.16.1) unstable; urgency=low
 
   * exec-object.c:  Sets cwd instead of leaving it undefined.
+  * shell.c:  For executable objects, use debug message "sending cwd
+    argument" instead of "cwd set successfully".
 
 plash (1.16) unstable; urgency=low
 

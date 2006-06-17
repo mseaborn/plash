@@ -1404,8 +1404,8 @@ int command_invocation_object(region_t r, struct shell_state *state,
     cwd = flatten(r, string_of_cwd(r, state->cwd));
     ds = resolve_dir(r, root, 0 /* cwd */, cwd, SYMLINK_LIMIT, &err);
     if(state->print_fs_tree) {
-      if(ds) printf("plash: cwd set successfully\n");
-      else printf("plash: cwd left undefined for this process\n");
+      if(ds) printf("plash: sending cwd argument\n");
+      else printf("plash: not sending cwd argument\n");
     }
     if(ds) {
       got_cwd = 1;

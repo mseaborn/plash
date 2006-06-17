@@ -159,6 +159,28 @@ void exec_obj_invoke(struct filesys_obj *obj1, struct cap_args args)
 	  goto exec_error;
 	}
 
+	/* If we were passed a cwd (current working directory) argument,
+	   set the cwd.  If this fails, abort starting the new process. */
+	if(ea.got_cwd) {
+	  struct cap_args result;
+	  cap_call(new_fs_server, r,
+		   cap_args_d(cat2(r, mk_int(r, METHOD_FSOP_CHDIR),
+				   mk_leaf(r, ea.cwd))),
+		   &result);
+	  {
+	    seqf_t msg = flatten_reuse(r, result.data);
+	    int ok = 1;
+	    m_str(&ok, &msg, "RSuc");
+	    m_end(&ok, &msg);
+	    if(!(ok && result.caps.size == 0 && result.fds.count == 0)) {
+	      caps_free(result.caps);
+	      close_fds(result.fds);
+	      err = EIO;
+	      goto exec_error;
+	    }
+	  }
+	}
+
 	cap_count = 3;
 	a = region_alloc(r, cap_count * sizeof(cap_t));
 	a[0] = new_fs_server;

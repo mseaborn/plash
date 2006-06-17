@@ -13,6 +13,9 @@ my $files = {};
 # It would be nice to use the SVN API instead of parsing the output.
 # But can't find documentation yet.
 
+# Actually, we can do all of this using "svn export" on a working copy.
+# Replace this...
+
 my @lines = `svn status -v`;
 foreach my $line (@lines) {
   chomp($line);

@@ -1,3 +1,7 @@
+plash (1.16.1) unstable; urgency=low
+
+  * exec-object.c:  Sets cwd instead of leaving it undefined.
+
 plash (1.16) unstable; urgency=low
 
   * Overhaul documentation, combining the Web site and docs into one.

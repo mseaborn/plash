@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 
 use IO::File;
+use Cwd;
 
 my $verbose = 1;
 
@@ -44,7 +45,7 @@ test('shell_execobj_hello',
 def myecho = capcmd $exec_object /bin/echo / ;
 myecho 'Hello there'
 END
-       if($data ne "Hello there\n") { die "Got: \"$data\"" }
+       if($data !~ /^Hello there$/m) { die "Got: \"$data\"" }
      });
 
 test('shell_execobj_2',
@@ -53,7 +54,56 @@ test('shell_execobj_2',
 def mycmd = capcmd $exec_object /bin/ls /x=(mkfs /lib /bin /usr);
 mycmd '/'
 END
-       if($data ne "bin\nlib\nusr\n") { die "Got: \"$data\"" }
+       if($data !~ /^bin\nlib\nusr$/m) { die "Got: \"$data\"" }
+     });
+
+# The cwd should not be set in the callee if the caller's cwd is not
+# visible in the callee's namespace.
+test('shell_cwd_unset',
+     sub {
+       # Assumes we start off in a temporary directory that is not
+       # visible by default.
+       my $data = cmd_capture
+	 ($pola_shell, '-c',
+	  q(perl -e 'use Cwd; my $cwd = getcwd();
+                     print (defined $cwd ? $cwd : "unset")'));
+       if($data ne 'unset') { die "Got: \"$data\"" }
+     });
+
+# Check that cwd is defined when we explicitly add the argument "+ .".
+test('shell_cwd_set',
+     sub {
+       my $caller_cwd = getcwd();
+       my $data = cmd_capture
+	 ($pola_shell, '-c',
+	  q(perl -e 'use Cwd; my $cwd = getcwd();
+                     print (defined $cwd ? $cwd : "unset")'
+	    + .));
+       if($data ne $caller_cwd) { die "Got: \"$data\"" }
+     });
+
+test('shell_execobj_cwd_unset',
+     sub {
+       my $data = cmd_capture($pola_shell, '-c', <<END);
+def mycmd = capcmd $exec_object /bin/pwd /x=(mkfs /lib /bin /usr);
+mycmd
+END
+       # Ensure that pwd printed an error.
+       # Would be better to invoke perl via exec-object, but exec-object
+       # doesn't allow passing extra arguments.
+       if($data !~ m#^/bin/pwd:#m) { die "Got: \"$data\"" }
+     });
+
+test('shell_execobj_cwd_set',
+     sub {
+       my $caller_cwd = getcwd();
+       my $data = cmd_capture($pola_shell, '-c', <<END);
+def mycmd = capcmd $exec_object /bin/pwd /x=(mkfs /lib /bin /usr);
+mycmd + .
+END
+       # Check that output contains string.
+       # Would be better to check for equality, but there's output noise.
+       if($data !~ /^$caller_cwd$/m) { die "Got: \"$data\"" }
      });
 
 
@@ -85,7 +135,7 @@ test('bash_fork',
 test('strace',
      sub {
        my $data = cmd_capture(@pola_run, '-B',
-			      '-e', '/usr/bin/strace',
+			      '-e', '/usr/bin/strace', '-c',
 			      '/bin/echo', 'Hello world');
        if($data !~ /Hello world/) { die "Got: \"$data\"" }
      });
@@ -151,7 +201,7 @@ sub cmd_capture {
   if($pid == 0) {
     close(PIPE_READ);
     open(STDOUT, ">&PIPE_WRITE") || die;
-    # open(STDERR, ">&PIPE_WRITE") || die;
+    open(STDERR, ">&PIPE_WRITE") || die;
     exec(@cmd);
     die;
   }

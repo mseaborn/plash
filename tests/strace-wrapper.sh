@@ -8,6 +8,6 @@
 #  -E LD_LIBRARY_PATH=/usr/lib/plash/lib \
 #  /var/lib/plash-chroot-jail/special/ld-linux.so.2 "$@"
 
-strace -fc \
+strace -fc -o /dev/null \
   env LD_LIBRARY_PATH=$PLASH_DIR/lib \
   $PLASH_DIR/shobj/ld.so "$@"

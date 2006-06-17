@@ -360,9 +360,6 @@ the "Exeo" method call.
 
 \h2- exec-object limitations
 
-exec-object does not set the current working directory of the
-processes it starts.
-
 exec-object doesn't provide any control over the arguments and
 environment variables it passes to the processes it starts.
 

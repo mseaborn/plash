@@ -237,7 +237,7 @@ int plash_libc_duplicate_connection()
   r = region_make();
   for(i = 0; i < process_caps.size; i++) process_caps.caps[i]->refcount++;
   cap_call(conn_maker, r,
-	   cap_args_make(cat2(r, mk_string(r, "Mkco"), mk_int(r, 0)),
+	   cap_args_make(cat2(r, mk_int(r, METHOD_MAKE_CONN), mk_int(r, 0)),
 			 process_caps, fds_empty),
 	   &result);
   if(expect_fd1(result, &fd) < 0) {

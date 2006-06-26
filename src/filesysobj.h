@@ -330,6 +330,8 @@ static inline cap_seq_t cap_seq_dup(region_t r, cap_seq_t s)
   return result;
 }
 
+void pl_args_free(const struct cap_args *args);
+
 
 static inline cap_t inc_ref(cap_t x)
 {

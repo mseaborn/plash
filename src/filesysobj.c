@@ -176,6 +176,12 @@ cap_seq_t cap_seq_append(region_t r, cap_seq_t seq1, cap_seq_t seq2)
   return seq;
 }
 
+void pl_args_free(const struct cap_args *args)
+{
+  caps_free(args->caps);
+  close_fds(args->fds);
+}
+
 void generic_free(struct filesys_obj *obj)
 {
 }
@@ -461,7 +467,7 @@ void marshal_cap_call(struct filesys_obj *obj, region_t r,
 				caps_empty, fds_empty);
       }
       else {
-	*result = cap_args_make(mk_int(r, METHOD_OKAY),
+	*result = cap_args_make(mk_int(r, METHOD_R_MAKE_CONN),
 				cap_seq_make(import, import_count),
 				mk_fds1(r, fd));
       }
@@ -895,7 +901,7 @@ int marshal_make_conn(struct filesys_obj *obj, region_t r, cap_seq_t export,
   {
     seqf_t msg = flatten_reuse(r, result.data);
     int ok = 1;
-    m_int_const(&ok, &msg, METHOD_OKAY);
+    m_int_const(&ok, &msg, METHOD_R_MAKE_CONN);
     m_end(&ok, &msg);
     if(ok && result.caps.size == import_count && result.fds.count == 1) {
       *import = (cap_t *) result.caps.caps;

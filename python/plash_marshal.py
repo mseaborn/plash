@@ -1,34 +1,218 @@
+# Copyright (C) 2006 Mark Seaborn
+#
+# This file is part of Plash.
+#
+# Plash is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Lesser General Public License as
+# published by the Free Software Foundation; either version 2.1 of
+# the License, or (at your option) any later version.
+#
+# Plash is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with Plash; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
+# USA.
 
 import plash
 import struct
+import string
 
-def unpack2(fmt, string):
-    size = struct.calcsize(fmt)
-    rest = string[size:]
-    return (struct.unpack(fmt, string[0:size]), rest)
 
-def unpack_method(args):
-    (data, caps, fds) = args
-    ((method,), rest) = unpack2('4s', data)
-    return (method, (rest, caps, fds))
+methods_by_name = {}
+methods_by_code = {}
 
-def fsobj_type(self): return self.cap_call(('Otyp', (), ()))
-def dir_list(self):
-    fmt = "iii"
-    size = struct.calcsize(fmt)
-    (method, (data, _, _)) = unpack_method(self.cap_call(('Olst', (), ())))
-    entries = []
-    i = 4
-    if method == 'Okay':
-        while i < len(data):
-            a = struct.unpack(fmt, data[i:i+size])
-            i += size
-            name = data[i : i + a[2]]
-            i += a[2]
-            entries.append({ 'inode': a[0], 'type': a[1], 'name': name })
-        return entries
+def method_id(name, code):
+    x = { 'code': code, 'name': name }
+    assert not (name in methods_by_name)
+    assert not (code in methods_by_code)
+    methods_by_name[name] = x
+    methods_by_code[code] = x
+
+import methods
+
+
+def add_format(name, format):
+    assert not ('format' in methods_by_name[name])
+    methods_by_name[name]['format'] = format
+
+add_format('fsop_open', 'iiS')
+add_format('fsop_stat', 'iS')
+add_format('fsop_readlink', '')
+add_format('fsop_chdir', 'S')
+add_format('fsop_fchdir', 'c')
+add_format('fsop_dir_fstat', 'c')
+add_format('fsop_getcwd', '')
+add_format('fsop_dirlist', 'S')
+add_format('fsop_access', 'iS')
+add_format('fsop_mkdir', 'iS')
+add_format('fsop_chmod', 'iS')
+add_format('fsop_utime', 'iiiiiS')
+add_format('fsop_rename', 'sS')
+add_format('fsop_link', 'sS')
+add_format('fsop_symlink', 'sS')
+add_format('fsop_unlink', 'S')
+add_format('fsop_rmdir', 'S')
+add_format('fsop_connect', 'fS')
+add_format('fsop_bind', 'fS')
+# 'Exec'
+
+add_format('okay', '')
+add_format('fail', 'i')
+
+add_format('r_fsop_open', 'f')
+add_format('r_fsop_open_dir', 'fc')
+add_format('r_fsop_stat', 'iiiiiiiiiiiii')
+#add_format('r_fsop_readlink', 'S')
+add_format('r_fsop_getcwd', 'S')
+
+add_format('fsobj_type', '')
+
+add_format('make_conn', 'iC')
+add_format('r_make_conn', 'fC')
+
+
+int_size = struct.calcsize('i')
+
+def format_pack(method, pattern, *args):
+    data = [method]
+    caps = []
+    fds = []
+    assert len(pattern) == len(args)
+    
+    for i in range(len(pattern)):
+        p = pattern[i]
+        arg = args[i]
+        if p == 'i':
+            data.append(struct.pack('i', arg))
+        elif p == 's':
+            data.append(struct.pack('i', len(s)))
+            data.append(arg)
+        elif p == 'S':
+            data.append(arg)
+        elif p == 'c':
+            caps.append(arg)
+        elif p == 'C':
+            caps.extend(arg)
+        elif p == 'd':
+            if arg == None:
+                data.append(struct.pack('i', 0))
+            else:
+                data.append(struct.pack('i', 1))
+                caps.append(arg)
+        elif p == 'f':
+            fds.append(arg)
+        elif p == 'F':
+            fds.extend(arg)
+        else: raise "Unknown format string char"
+    return (string.join(data, ''), tuple(caps), tuple(fds))
+
+def method_unpack(message):
+    (data, caps, fds) = message
+    return (data[0:int_size],
+            (data[int_size:],
+             caps,
+             fds))
+
+def format_unpack(pattern, msg):
+    (data, caps, fds) = msg
+    data_pos = 0
+    caps_pos = 0
+    fds_pos = 0
+    args = []
+
+    for f in pattern:
+        if f == 'i':
+            (v,) = struct.unpack('i', data[data_pos:data_pos+int_size])
+            data_pos += int_size
+        elif f == 's':
+            length = struct.unpack('i', data[data_pos:data_pos+int_size])
+            data_pos += int_size
+            v = data[data_pos:data_pos+len]
+            data_pos += length
+        elif f == 'S':
+            v = data[data_pos:]
+            data_pos = len(data)
+        elif f == 'c':
+            v = caps[caps_pos]
+            caps_pos += 1
+        elif f == 'C':
+            v = caps[caps_pos:]
+            caps_pos = len(caps)
+        elif f == 'd':
+            (present,) = struct.unpack('i', data[data_pos:data_pos+int_size])
+            data_pos += int_size
+            if present == 0:
+                v = None
+            else:
+                v = caps[caps_pos]
+                caps_pos += 1
+        elif f == 'f':
+            v = fds[fds_pos]
+            fds_pos += 1
+        elif f == 'F':
+            v = fds[fds_pos:]
+            fds_pos = len(fds)
+        else: raise "Unknown format string char"
+        args.append(v)
+
+    # Ensure that all the data has been matched
+    assert data_pos == len(data)
+    assert caps_pos == len(caps)
+    assert fds_pos == len(fds)
+    return tuple(args)
+
+
+def pack(name, *args):
+    method = methods_by_name[name]
+    return format_pack(method['code'], method['format'], *args)
+
+def unpack(args):
+    (method_code, rest) = method_unpack(args)
+    method = methods_by_code[method_code]
+    return (method['name'], format_unpack(method['format'], rest))
+
+
+# Not used yet
+def add_method(name, result):
+    def outgoing(self, *args):
+        (m, r) = self.cap_call(pack(name, *args))
+        if m == result:
+            return r
+        else:
+            raise "No match"
+
+    plash.Wrapper.__dict__[name] = outgoing
+
+
+def make_conn(self, caps, imports=None):
+    if imports == None:
+        (m, r) = unpack(self.cap_call(pack('make_conn', 0, caps)))
+        if m == 'r_make_conn':
+            (fd, caps2) = r
+            assert len(caps2) == 0
+            return fd
     else:
-        raise 'Unrecognised response'
+        (m, r) = unpack(self.cap_call(pack('make_conn', imports, caps)))
+        if m == 'r_make_conn':
+            return r
+    fail()
 
-plash.Wrapper.fsobj_type = fsobj_type
-plash.Wrapper.dir_list = dir_list
+plash.Wrapper.make_conn = make_conn
+
+
+def local_cap_invoke(self, args):
+    "Converts incoming invocations to calls to cap_call."
+    (method, args2) = method_unpack(args)
+    if method == 'Call':
+        # Invoke the method, and call the return continuation with the result
+        (data, caps, fds) = args2
+        caps[0].cap_invoke(self.cap_call((data, caps[1:], fds)))
+    else:
+        # There is nothing we can do, besides warning
+        pass
+
+plash.Pyobj.cap_invoke = local_cap_invoke

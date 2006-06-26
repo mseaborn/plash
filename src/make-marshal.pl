@@ -109,6 +109,7 @@ my $methods =
        Result => 'dest/string'],
 
    ['Mkco', 'make_conn'],
+     ['RMkc', 'r_make_conn'],
    ['Mkfs', 'make_fs_op',
        Args => 'root_dir/obj',
        Result => 'fs_op/obj'],

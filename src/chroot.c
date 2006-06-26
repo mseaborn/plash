@@ -29,6 +29,7 @@
 #include "cap-utils.h"
 #include "plash-libc.h"
 #include "marshal.h"
+#include "marshal-pack.h"
 
 
 __asm__(".weak plash_libc_reset_connection");
@@ -79,7 +80,7 @@ int main(int argc, const char *argv[])
       a[1] = conn_maker;
       a[2] = fs_op_maker;
       cap_call(conn_maker, r,
-	       cap_args_make(cat2(r, mk_string(r, "Mkco"), mk_int(r, 0)),
+	       cap_args_make(cat2(r, mk_int(r, METHOD_MAKE_CONN), mk_int(r, 0)),
 			     cap_seq_make(a, count),
 			     fds_empty),
 	       &result);
@@ -87,7 +88,7 @@ int main(int argc, const char *argv[])
     {
       int fd;
       char buf[20];
-      if(expect_fd1(result, &fd) < 0) {
+      if(pl_unpack(r, result, METHOD_R_MAKE_CONN, "f", &fd) < 0) {
 	printf(_("mkco failed\n"));
 	return 1;
       }

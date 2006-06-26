@@ -26,6 +26,9 @@
 #include "filesysobj-real.h"
 #include "cap-protocol.h"
 #include "fs-operations.h"
+#include "marshal.h"
+#include "marshal-pack.h"
+#include "build-fs.h"
 
 #include "py-plash.h"
 
@@ -82,6 +85,148 @@ static PyObject *plpy_run_server(PyObject *self, PyObject *args)
   return Py_None;
 }
 
+
+static void plpy_resolve_dir(cap_t obj, region_t r, struct cap_args args,
+			     struct cap_args *result)
+{
+  cap_t root, cwd;
+  int symlink_limit;
+  seqf_t pathname;
+  if(pl_unpack(r, args, METHOD_RESOLVE_DIR, "cdiS",
+	       &root, &cwd, &symlink_limit, &pathname) &&
+     (cwd == NULL || dir_stack_upcast(cwd) != NULL))
+  {
+    int err;
+    struct dir_stack *dir =
+      resolve_dir(r, root, cwd ? dir_stack_upcast(cwd) : NULL, pathname,
+		  symlink_limit, &err);
+    
+    if(dir) {
+      *result = pl_pack(r, METHOD_R_CAP, "c", dir_stack_downcast(dir));
+    }
+    else {
+      *result = pl_pack(r, METHOD_FAIL, "i", err);
+    }
+  }
+  else {
+    *result = pl_pack(r, METHOD_FAIL_UNKNOWN_METHOD, "");
+  }
+  pl_args_free(&args);
+}
+
+static void plpy_fs_make_node(cap_t obj, region_t r, struct cap_args args,
+			      struct cap_args *result)
+{
+  if(pl_unpack(r, args, METHOD_FS_MAKE_NODE, "")) {
+    *result = pl_pack(r, METHOD_R_CAP, "c", (cap_t) fs_make_empty_node());
+  }
+  else {
+    *result = pl_pack(r, METHOD_FAIL_UNKNOWN_METHOD, "");
+  }
+  pl_args_free(&args);
+}
+
+static void plpy_fs_attach_at_path(cap_t obj1, region_t r, struct cap_args args,
+				   struct cap_args *result)
+{
+  cap_t root, obj;
+  fs_node_t root_node;
+  seqf_t pathname;
+  if(pl_unpack(r, args, METHOD_FS_ATTACH_AT_PATH, "cSc",
+	       &root, &pathname, &obj) &&
+     (root_node = fs_node_upcast(root))) {
+    int err;
+    if(fs_attach_at_pathname(root_node, NULL /* cwd */, pathname,
+			     inc_ref(obj), &err) < 0) {
+      *result = pl_pack(r, METHOD_FAIL, "i", err);
+    }
+    else {
+      *result = pl_pack(r, METHOD_OKAY, "");
+    }
+  }
+  else {
+    *result = pl_pack(r, METHOD_FAIL_UNKNOWN_METHOD, "");
+  }
+  pl_args_free(&args);
+}
+
+static void plpy_fs_resolve_populate(cap_t obj1, region_t r, struct cap_args args,
+				     struct cap_args *result)
+{
+  cap_t root_dir, root_node, cwd;
+  seqf_t pathname;
+  int flags;
+  if(pl_unpack(r, args, METHOD_FS_RESOLVE_POPULATE, "ccdiS",
+	       &root_dir, &root_node, &cwd, &flags, &pathname) &&
+     fs_node_upcast(root_node) &&
+     (cwd == NULL || dir_stack_upcast(cwd)))
+  {
+    int err;
+    if(fs_resolve_populate(root_dir, fs_node_upcast(root_node),
+			   cwd ? dir_stack_upcast(cwd) : NULL,
+			   pathname, flags, &err) < 0) {
+      *result = pl_pack(r, METHOD_FAIL, "i", err);
+    }
+    else {
+      *result = pl_pack(r, METHOD_OKAY, "");
+    }
+  }
+  else {
+    *result = pl_pack(r, METHOD_FAIL_UNKNOWN_METHOD, "");
+  }
+  pl_args_free(&args);
+}
+
+static void plpy_fs_dir_of_node(cap_t obj1, region_t r, struct cap_args args,
+				struct cap_args *result)
+{
+  cap_t arg;
+  if(pl_unpack(r, args, METHOD_FS_DIR_OF_NODE, "c", &arg) &&
+     fs_node_upcast(arg)) {
+    *result = pl_pack(r, METHOD_R_CAP, "c",
+		      fs_make_root(fs_node_upcast(arg)));
+  }
+  else {
+    *result = pl_pack(r, METHOD_FAIL_UNKNOWN_METHOD, "");
+  }
+  pl_args_free(&args);
+}
+
+static void plpy_fs_print_tree(cap_t obj1, region_t r, struct cap_args args,
+			       struct cap_args *result)
+{
+  cap_t node;
+  if(pl_unpack(r, args, METHOD_FS_PRINT_TREE, "c", &node) &&
+     fs_node_upcast(node)) {
+    fs_print_tree(0, fs_node_upcast(node));
+    *result = pl_pack(r, METHOD_OKAY, "");
+  }
+  else {
+    *result = pl_pack(r, METHOD_FAIL_UNKNOWN_METHOD, "");
+  }
+  pl_args_free(&args);
+}
+
+
+DECLARE_VTABLE(defaults_vtable);
+#include "out-vtable-defaults.h"
+
+struct fun_wrapper {
+  struct filesys_obj hdr;
+  struct filesys_obj_vtable vtable;
+};
+cap_t wrap_function(void (*fun)(cap_t obj, region_t r, struct cap_args args,
+				struct cap_args *result))
+{
+  struct fun_wrapper *obj =
+    filesys_obj_make(sizeof(struct fun_wrapper),
+		     NULL /* vtable */);
+  obj->hdr.vtable = &obj->vtable;
+  obj->vtable = defaults_vtable;
+  obj->vtable.cap_call = fun;
+  return (cap_t) obj;
+}
+
 static PyMethodDef module_methods[] = {
   { "initial_dir", plpy_initial_dir, METH_VARARGS,
     "Get an initial real_dir object." },
@@ -116,4 +261,14 @@ void initplash(void)
   PyModule_AddObject(mod, "Wrapper", (PyObject *) plpy_wrapper_class);
   Py_INCREF(plpy_pyobj_class);
   PyModule_AddObject(mod, "Pyobj", (PyObject *) plpy_pyobj_class);
+
+#define ADD_FUNCTION(py_name, c_function) \
+  PyModule_AddObject(mod, py_name, plpy_obj_to_py(wrap_function(c_function)))
+
+  ADD_FUNCTION("resolve_dir", plpy_resolve_dir);
+  ADD_FUNCTION("fs_make_node", plpy_fs_make_node);
+  ADD_FUNCTION("fs_attach_at_path", plpy_fs_attach_at_path);
+  ADD_FUNCTION("fs_resolve_populate", plpy_fs_resolve_populate);
+  ADD_FUNCTION("fs_dir_of_node", plpy_fs_dir_of_node);
+  ADD_FUNCTION("fs_print_tree", plpy_fs_print_tree);
 }

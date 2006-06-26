@@ -44,6 +44,11 @@ struct node *fs_make_empty_node()
   return n;
 }
 
+fs_node_t fs_node_upcast(cap_t obj)
+{
+  return obj->vtable == &node_vtable ? (fs_node_t) obj : NULL;
+}
+
 void node_free(struct filesys_obj *obj)
 {
   struct node *node = (void *) obj;

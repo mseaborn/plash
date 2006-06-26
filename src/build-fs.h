@@ -28,7 +28,7 @@
 struct node;
 typedef struct node *fs_node_t;
 
-fs_node_t fs_make_empty_node();
+fs_node_t fs_make_empty_node(void);
 void fs_print_tree(int indent, fs_node_t node);
 fs_node_t tree_traverse(fs_node_t node, const char *name);
 int attach_ro_obj(fs_node_t node, cap_t obj);
@@ -70,6 +70,8 @@ static inline void mark_node(struct node *node) {
   filesys_obj_mark((cap_t) node);
 }
 #endif
+
+fs_node_t fs_node_upcast(cap_t obj);
 
 
 /* This is a private data structure */

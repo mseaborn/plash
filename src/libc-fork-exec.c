@@ -70,30 +70,31 @@ pid_t new_fork(void)
 
   {
     cap_t *a = region_alloc(r, process_caps.size * sizeof(cap_t));
+    cap_t *imports; /* Contents not used */
     seqf_t list = seqf_string(process_caps_names);
     seqf_t elt;
     int i = 0;
     while(parse_cap_list(list, &elt, &list)) {
       assert(i < process_caps.size);
       if(seqf_equal(elt, seqf_string("fs_op"))) {
-	a[i] = inc_ref(new_fs_server);
+	a[i] = new_fs_server;
       }
       else {
-	a[i] = inc_ref(process_caps.caps[i]);
+	a[i] = process_caps.caps[i];
       }
       i++;
     }
     assert(i == process_caps.size);
+
+    fd = conn_maker->vtable->make_conn(conn_maker, r,
+				       cap_seq_make(a, process_caps.size),
+				       0 /* import_count */, &imports);
     filesys_obj_free(new_fs_server);
-    cap_call(conn_maker, r,
-	     cap_args_dc(cat2(r, mk_int(r, METHOD_MAKE_CONN), mk_int(r, 0)),
-			 cap_seq_make(a, process_caps.size)),
-	     &result);
-  }
-  if(expect_fd1(result, &fd) < 0) {
-    region_free(r);
-    __set_errno(ENOSYS);
-    return -1;
+    if(fd < 0) {
+      region_free(r);
+      __set_errno(ENOSYS);
+      return -1;
+    }
   }
 
   {

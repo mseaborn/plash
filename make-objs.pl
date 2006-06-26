@@ -49,6 +49,7 @@ gcc('src/cap-protocol.c', 'obj/cap-protocol.o', @opts_s);
 gcc('src/cap-call-return.c', 'obj/cap-call-return.o', @opts_s);
 gcc('src/cap-utils.c', 'obj/cap-utils.o', @opts_s);
 gcc('src/cap-utils-libc.c', 'obj/cap-utils-libc.o', @opts_s);
+gcc('src/marshal-pack.c', 'obj/marshal-pack.o', @opts_s);
 gcc('src/marshal-exec.c', 'obj/marshal-exec.o', @opts_s);
 gcc('src/utils.c', 'obj/utils.o', @opts_s);
 gcc('src/parse-filename.c', 'obj/parse-filename.o', @opts_s);
@@ -114,6 +115,7 @@ gcc('src/cap-protocol.c', 'obj/rtld-cap-protocol.os', @opts_c,
     '-DIN_RTLD');
 gcc('src/cap-call-return.c', 'obj/cap-call-return.os', @opts_c);
 gcc('src/cap-utils.c', 'obj/cap-utils.os', @opts_c);
+gcc('src/marshal-pack.c', 'obj/marshal-pack.os', @opts_c);
 gcc('src/dont-free.c', 'obj/dont-free.os', @opts_c);
 gcc('src/filesysobj.c', 'obj/filesysobj.os', @opts_c);
 gcc('src/libc-misc.c', 'obj/libc-misc.os', @opts_c,

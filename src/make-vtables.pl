@@ -127,6 +127,17 @@ my @i_slot = ('slot_get',
 	      'slot_socket_bind');
 
 
+# This is copied at run-time to generate one-off objects that only
+# implement cap_call.
+put('gensrc/out-vtable-defaults.h',
+    [{ Name => 'defaults_vtable',
+       Interfaces => [],
+       Contents =>
+         [['free', 'generic_free'],
+	  ['mark', 'NULL'],
+	 ]
+     }]);
+
 put('gensrc/out-vtable-filesysobj.h',
     [{ Name => 'invalid_vtable',
        Interfaces => [@$methods],

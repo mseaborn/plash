@@ -229,21 +229,15 @@ void libc_log(const char *msg)
 int plash_libc_duplicate_connection()
 {
   region_t r;
-  int i, fd;
-  struct cap_args result;
+  int fd;
+  cap_t *import; /* Contents not used */
   if(plash_init() < 0) return -1;
   if(!conn_maker) { __set_errno(ENOSYS); return -1; }
 
   r = region_make();
-  for(i = 0; i < process_caps.size; i++) process_caps.caps[i]->refcount++;
-  cap_call(conn_maker, r,
-	   cap_args_make(cat2(r, mk_int(r, METHOD_MAKE_CONN), mk_int(r, 0)),
-			 process_caps, fds_empty),
-	   &result);
-  if(expect_fd1(result, &fd) < 0) {
-    region_free(r);
-    return -1;
-  }
+  fd = conn_maker->vtable->make_conn(conn_maker, r,
+				     process_caps, 0 /* import_count */,
+				     &import);
   region_free(r);
   return fd;
 }

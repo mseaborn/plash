@@ -198,6 +198,7 @@ build_libc_ldso_extras () {
 	obj/cap-utils.os \
 	obj/cap-call-return.os \
 	obj/cap-protocol.os \
+	obj/marshal-pack.os \
 	obj/filesysobj.os \
 	obj/comms.os \
 	obj/serialise.os \
@@ -211,6 +212,7 @@ build_libc_ldso_extras () {
 	obj/cap-utils.os \
 	obj/cap-call-return.os \
 	obj/rtld-cap-protocol.os \
+	obj/marshal-pack.os \
 	obj/filesysobj.os \
 	obj/rtld-comms.os \
 	obj/region.os \
@@ -438,7 +440,9 @@ build_shell_etc() {
 	obj/shell-wait.o \
 	obj/build-fs.o obj/build-fs-static.o obj/build-fs-dynamic.o \
 	obj/fs-operations.o obj/resolve-filename.o \
-	obj/cap-utils.o obj/cap-utils-libc.o obj/marshal-exec.o \
+	obj/cap-utils.o obj/cap-utils-libc.o \
+	obj/marshal-pack.o \
+	obj/marshal-exec.o \
 	obj/cap-call-return.o obj/cap-protocol.o \
 	obj/filesysslot.o \
 	obj/filesysobj-fab.o \

@@ -612,6 +612,7 @@ put('gensrc/out-vtable-python.h',
 	  ['mark', 'NULL'],
 	  ['cap_invoke', 'plpy_pyobj_cap_invoke'],
 	  ['cap_call', 'plpy_pyobj_cap_call'],
+	  @$marshal_methods
 	 ]
      }]);
 

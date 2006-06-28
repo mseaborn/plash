@@ -62,6 +62,7 @@ my $methods =
    # File, directory and symlink objects:
    ['Otyp', 'fsobj_type',
        Args => '',
+       Result_code => 'ROty',
        Result => 'type/int'],
    ['Osta', 'fsobj_stat',
        Args => ''],
@@ -72,6 +73,7 @@ my $methods =
    # File objects:
    ['Oopn', 'file_open',
        Args => 'flags/int',
+       Result_code => 'ROop',
        Result => 'fd'],
    ['Ocon', 'file_socket_connect',
        Args => 'sock/fd',
@@ -79,12 +81,15 @@ my $methods =
    # Directory objects:
    ['Otra', 'dir_traverse',
        Args => 'leaf/string',
+       Result_code => 'ROtr',
        Result => 'obj'],
    ['Olst', 'dir_list',
        Args => '',
+       Result_code => 'ROls',
        Result => 'count/int data/string'],
    ['Ocre', 'dir_create_file',
        Args => 'flags/int mode/int leaf/string',
+       Result_code => 'ROcr',
        Result => 'fd'],
    ['Omkd', 'dir_mkdir',
        Args => 'mode/int leaf/string',
@@ -110,15 +115,18 @@ my $methods =
    # Symlink objects:
    ['Ordl', 'symlink_readlink',
        Args => '',
+       Result_code => 'ROrl',
        Result => 'dest/string'],
 
    ['Mkco', 'make_conn'],
      ['RMkc', 'r_make_conn'],
    ['Mkfs', 'make_fs_op',
        Args => 'root_dir/obj',
+       Result_code => 'RMfs',
        Result => 'fs_op/obj'],
    ['Mkud', 'make_union_dir',
        Args => 'dir1/obj dir2/obj',
+       Result_code => 'RMud',
        Result => 'dir/obj'],
 
    # Executable objects
@@ -151,6 +159,11 @@ my $methods =
   ];
 
 
+# List of hashes:
+#   Code
+#   Name
+my @message_ids;
+
 my @py_decls = ('from plash_marshal import method_id', '');
 
 my @defines;
@@ -161,23 +174,23 @@ my @ex_call;
 foreach my $m (@$methods) {
   my ($id, $name, %x) = @$m;
 
-  my $id_name = "METHOD_".uc($name);
-  push(@defines,
-       sprintf("#define %s %s0x%8x /* \"%s\" */",
-	       $id_name,
-	       ' ' x (30-length($id_name)),
-	       unpack('I', $id),
-	       $id));
-  push(@py_decls,
-       sprintf("method_id('%s', '%s')",
-	       $name, $id));
+  push(@message_ids,
+       { Code => $id,
+	 Name => $name });
+  if(defined $x{Result_code}) {
+    push(@message_ids,
+	 { Code => $x{Result_code},
+	   Name => "r_$name" });
+  }
 
   push(@ex_call,
        indent('region_t r = region_make();',
 	      'struct cap_args result;'));
   if(defined $x{Args}) {
+    my $message_name = "METHOD_".uc($name);
+    
     my $list = parse_arg_string($x{Args});
-    my $a = make_unpacker($name, $id_name, $list);
+    my $a = make_unpacker($name, $message_name, $list);
     push(@funs,
 	 @{$a->{Unpack_fun}},
 	 @{$a->{Pack_fun}});
@@ -185,7 +198,16 @@ foreach my $m (@$methods) {
     push(@ex_call, concat(['cap_call(obj, r, '], $a->{Pack_ex}, [', &result);']));
   }
   if(defined $x{Result}) {
-    my $a = make_unpacker($name.'_result', 'METHOD_OKAY',
+    my $result_name;
+    if(defined $x{Result_code}) {
+      $result_name = "METHOD_R_".uc($name);
+    }
+    else {
+      $result_name = "METHOD_OKAY";
+      if($x{Result} ne '') { die "Need message code for non-empty results ($name)" }
+    }
+    
+    my $a = make_unpacker($name.'_result', $result_name,
 			  parse_arg_string($x{Result}));
     push(@funs,
 	 @{$a->{Unpack_fun}},
@@ -203,6 +225,19 @@ foreach my $m (@$methods) {
        indent('region_free(r);',
 	      'return ..;'),
        '');
+}
+
+foreach my $x (@message_ids) {
+  my $id_name = "METHOD_".uc($x->{Name});
+  push(@defines,
+       sprintf("#define %s %s0x%8x /* \"%s\" */",
+	       $id_name,
+	       ' ' x (30-length($id_name)),
+	       unpack('I', $x->{Code}),
+	       $x->{Code}));
+  push(@py_decls,
+       sprintf("method_id('%s', '%s')",
+	       $x->{Name}, $x->{Code}));
 }
 
 if(1) {

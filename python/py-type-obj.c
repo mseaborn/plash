@@ -380,7 +380,7 @@ void plpy_pyobj_cap_call(struct filesys_obj *obj1, region_t r,
     *result2 = cap_args_d(mk_int(r, METHOD_FAIL));
     return;
   }
-  result = PyObject_CallMethodObjArgs(obj->obj, plpy_str_cap_invoke,
+  result = PyObject_CallMethodObjArgs(obj->obj, plpy_str_cap_call,
 				      args2, NULL);
   if(!result) {
     /* Any error is ignored. */

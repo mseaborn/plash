@@ -70,6 +70,23 @@ add_format('r_fsop_stat', 'iiiiiiiiiiiii')
 add_format('r_fsop_getcwd', 'S')
 
 add_format('fsobj_type', '')
+add_format('r_fsobj_type', 'i')
+
+add_format('dir_traverse', 'S')
+add_format('r_dir_traverse', 'c')
+# dir_list
+add_format('dir_create_file', 'iiS')
+add_format('r_dir_create_file', 'f')
+add_format('dir_mkdir', 'iS')
+add_format('dir_symlink', 'sS')
+add_format('dir_rename', 'scS')
+add_format('dir_link', 'scS')
+add_format('dir_unlink', 'S')
+add_format('dir_rmdir', 'S')
+add_format('dir_socket_bind', 'Sf')
+
+add_format('symlink_readlink', '')
+add_format('r_symlink_readlink', 'S')
 
 add_format('make_conn', 'iC')
 add_format('r_make_conn', 'fC')
@@ -176,16 +193,51 @@ def unpack(args):
     return (method['name'], format_unpack(method['format'], rest))
 
 
-# Not used yet
+# See cap_call below
+plash.Pyobj.methods = {}
+
 def add_method(name, result):
+    assert name in methods_by_name
+    assert result in methods_by_name
+    
     def outgoing(self, *args):
-        (m, r) = self.cap_call(pack(name, *args))
+        (m, r) = unpack(self.cap_call(pack(name, *args)))
         if m == result:
-            return r
+            if len(r) == 1:
+                return r[0]
+            else:
+                return r
         else:
             raise "No match"
 
-    plash.Wrapper.__dict__[name] = outgoing
+    setattr(plash.Wrapper, name, outgoing)
+
+    method_format = methods_by_name[name]['format']
+    result_format = methods_by_name[result]['format']
+    result_code = methods_by_name[result]['code']
+    def incoming(self, args):
+        arg_list = format_unpack(method_format, args)
+        print "incoming:"
+        r = getattr(self, name)(*arg_list)
+        if len(result_format) == 1:
+            return format_pack(result_code, result_format, r)
+        else:
+            return format_pack(result_code, result_format, *r)
+
+    plash.Pyobj.methods[methods_by_name[name]['code']] = incoming
+
+add_method('fsobj_type', 'r_fsobj_type')
+
+add_method('dir_traverse', 'r_dir_traverse')
+# dir_list
+add_method('dir_create_file', 'r_dir_create_file')
+add_method('dir_mkdir', 'okay')
+add_method('dir_symlink', 'okay')
+add_method('dir_rename', 'okay')
+add_method('dir_link', 'okay')
+add_method('dir_unlink', 'okay')
+add_method('dir_rmdir', 'okay')
+add_method('dir_socket_bind', 'okay')
 
 
 def make_conn(self, caps, imports=None):
@@ -215,4 +267,14 @@ def local_cap_invoke(self, args):
         # There is nothing we can do, besides warning
         pass
 
+def local_cap_call(self, args):
+    "Unmarshals incoming calls to invocations of specific Python methods."
+    (method, args2) = method_unpack(args)
+    if method in self.methods:
+        return self.methods[method](self, args2)
+    else:
+        print "cap_call unknown:", method
+        raise "No match"
+
 plash.Pyobj.cap_invoke = local_cap_invoke
+plash.Pyobj.cap_call = local_cap_call

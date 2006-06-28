@@ -82,7 +82,19 @@ class Process_spec:
             return pid
 
 
+class Test_dir(plash.Pyobj):
+    def __init__(self, x): self.x = x
+    def fsobj_type(self): return 2
+    def dir_traverse(self, leaf):
+        print "accessed:", leaf
+        return self.x
+
 root = plash.initial_dir("/")
+#root = logger(root)
+
+test_obj = Test_dir(root)
+
+
 ns.resolve_dir(root, "/bin")
 try:
     ns.resolve_dir(root, "/foo")
@@ -94,8 +106,11 @@ root_node = ns.make_node()
 ns.resolve_populate(root, root_node, "/bin")
 ns.resolve_populate(root, root_node, "/lib")
 ns.resolve_populate(root, root_node, "/usr")
+ns.attach_at_path(root_node, "/test", test_obj)
 root2 = ns.dir_of_node(root_node)
-# print "dir type:", root.fsobj_type()
+print "dir type:", root.fsobj_type()
+print "traverse:", root.dir_traverse("lib")
+#print "traverse2:", root.dir_traverse("doesnt-exist")
 
 # root2 = logger(root2)
 fs_op = plash.make_fs_op(root2)
@@ -107,7 +122,8 @@ p = Process_spec()
 p.env = os.environ.copy()
 p.caps = { 'fs_op': fs_op }
 #p.setcmd('/bin/echo', 'Hello world!')
-p.setcmd('/bin/ls', '-l', '/')
+#p.setcmd('/bin/ls', '-l', '/')
+p.setcmd('/bin/sh', '-c', 'echo /test/foo/*')
 p.plash_setup()
 pid = p.spawn()
 print "entering server"

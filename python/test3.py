@@ -15,7 +15,7 @@ class logger(plash.Pyobj):
         try:
             print "call", plash_marshal.unpack(args)
         except Exception, e:
-            print e
+            print args, "exception:", e
         r = self.x.cap_call(args)
         try:
             print "->", plash_marshal.unpack(r)
@@ -110,6 +110,9 @@ ns.attach_at_path(root_node, "/test", test_obj)
 root2 = ns.dir_of_node(root_node)
 print "dir type:", root.fsobj_type()
 print "traverse:", root.dir_traverse("lib")
+
+assert root.fsobj_type() == 2
+assert isinstance(root.dir_traverse("lib"), plash.Wrapper)
 #print "traverse2:", root.dir_traverse("doesnt-exist")
 
 # root2 = logger(root2)

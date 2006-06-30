@@ -46,6 +46,7 @@ my $methods =
    ['Gcwd', 'fsop_getcwd'],
      ['RCwd', 'r_fsop_getcwd'],
    ['Dlst', 'fsop_dirlist'],
+     ['RDls', 'r_fsop_dirlist'],
    ['Accs', 'fsop_access'],
    ['Mkdr', 'fsop_mkdir'],
    ['Chmd', 'fsop_chmod'],

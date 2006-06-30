@@ -35,9 +35,100 @@ def method_id(name, code):
 import methods
 
 
+class Format_str:
+    def __init__(self, code, fmt):
+        self.code = code
+        self.fmt = fmt
+    def pack_a(self, *x): return format_pack(self.code, self.fmt, *x)
+    def pack_r(self, x): return format_pack(self.code, self.fmt, *x)
+    def unpack_a(self, args): return format_unpack(self.fmt, args)
+    def unpack_r(self, args): return format_unpack(self.fmt, args)
+
+class Format_str1:
+    def __init__(self, code, fmt):
+        assert len(fmt) == 1
+        self.code = code
+        self.fmt = fmt
+    def pack_a(self, x): return format_pack(self.code, self.fmt, x)
+    def pack_r(self, x): return format_pack(self.code, self.fmt, x)
+    def unpack_a(self, args): return format_unpack(self.fmt, args)
+    def unpack_r(self, args): return format_unpack(self.fmt, args)[0]
+
+class Args_write:
+    def __init__(self):
+        self.data = []
+        self.caps = []
+        self.fds = []
+    def put_int(self, x):
+        self.data.append(struct.pack('i', x))
+    def put_strsize(self, x):
+        self.put_int(len(x))
+        self.data.append(x)
+    def pack(self):
+        return (string.join(self.data, ''),
+                self.caps,
+                self.fds)
+
+class Args_read:
+    def __init__(self, args):
+        (self.data, self.caps, self.fds) = args
+        self.data_pos = int_size
+        self.caps_pos = 0
+        self.fds_pos = 0
+    def get_int(self):
+        (v,) = struct.unpack('i', self.data[self.data_pos : self.data_pos + int_size])
+        self.data_pos += int_size
+        return v
+    def get_data(self, len):
+        v = self.data[self.data_pos : self.data_pos + len]
+        self.data_pos += len
+        return v
+    def get_strsize(self):
+        len = self.get_int()
+        return self.get_data(len)
+    def data_endp(self):
+        return self.data_pos == len(self.data)
+    def check_end(self):
+        assert self.data_pos == len(self.data)
+        assert self.caps_pos == len(self.caps)
+        assert self.fds_pos == len(self.fds)
+
+class M_r_dirlist:
+    def pack_r(self, entries):
+        s = Args_output()
+        s.put_int(444)
+        s.put_int(len(entries))
+        for entry in arg:
+            s.put_int(entry['inode'])
+            s.put_int(entry['type'])
+            s.put_strsize(entry['name'])
+        return s.pack()
+    def unpack_r(self, arg):
+        s = Args_read(arg)
+        # msg = s.get_int() # Ignored
+        # size = s.get_int()
+        entries = []
+        while not s.data_endp():
+            inode = s.get_int()
+            type = s.get_int()
+            name = s.get_strsize()
+            entries.append({ 'inode': inode, 'type': type, 'name': name })
+        s.check_end()
+        return entries
+    def pack_a(self, a): return self.pack_r(a)
+    def unpack_a(self, a): return (self.unpack_r(a),)
+
+
 def add_format(name, format):
-    assert not ('format' in methods_by_name[name])
-    methods_by_name[name]['format'] = format
+    assert not ('packer' in methods_by_name[name])
+    if isinstance(format, str):
+        if len(format) == 1:
+            packer = Format_str1(methods_by_name[name]['code'], format)
+        else:
+            packer = Format_str(methods_by_name[name]['code'], format)
+    else:
+        packer = format
+    methods_by_name[name]['packer'] = packer
 
 add_format('fsop_open', 'iiS')
 add_format('fsop_stat', 'iS')
@@ -68,12 +159,25 @@ add_format('r_fsop_open_dir', 'fc')
 add_format('r_fsop_stat', 'iiiiiiiiiiiii')
 #add_format('r_fsop_readlink', 'S')
 add_format('r_fsop_getcwd', 'S')
+add_format('r_fsop_dirlist', M_r_dirlist())
 
+# Files, directories and symlinks
 add_format('fsobj_type', '')
 add_format('r_fsobj_type', 'i')
+add_format('fsobj_stat', '')
+#add_format('r_fsobj_stat', 'iiiiiiiiiiiii')
+#add_format('fsobj_utimes', ...)
+#add_format('fsobj_chmod', ...)
 
+# Files
+add_format('file_open', 'i')
+add_format('r_file_open', 'f')
+add_format('file_socket_connect', 'f')
+
+# Directories
 add_format('dir_traverse', 'S')
 add_format('r_dir_traverse', 'c')
+add_format('dir_list', '')
 # dir_list
 add_format('dir_create_file', 'iiS')
 add_format('r_dir_create_file', 'f')
@@ -85,11 +189,13 @@ add_format('dir_unlink', 'S')
 add_format('dir_rmdir', 'S')
 add_format('dir_socket_bind', 'Sf')
 
+# Symlinks
 add_format('symlink_readlink', '')
 add_format('r_symlink_readlink', 'S')
 
 add_format('make_conn', 'iC')
 add_format('r_make_conn', 'fC')
+
 
 
 int_size = struct.calcsize('i')
@@ -127,6 +233,9 @@ def format_pack(method, pattern, *args):
         else: raise "Unknown format string char"
     return (string.join(data, ''), tuple(caps), tuple(fds))
 
+def get_message_code(args):
+    return args[0][0:int_size]
+
 def method_unpack(message):
     (data, caps, fds) = message
     return (data[0:int_size],
@@ -136,7 +245,7 @@ def method_unpack(message):
 
 def format_unpack(pattern, msg):
     (data, caps, fds) = msg
-    data_pos = 0
+    data_pos = int_size # Skip past message ID
     caps_pos = 0
     fds_pos = 0
     args = []
@@ -185,12 +294,12 @@ def format_unpack(pattern, msg):
 
 def pack(name, *args):
     method = methods_by_name[name]
-    return format_pack(method['code'], method['format'], *args)
+    return method['packer'].pack_a(*args)
 
 def unpack(args):
-    (method_code, rest) = method_unpack(args)
+    method_code = get_message_code(args)
     method = methods_by_code[method_code]
-    return (method['name'], format_unpack(method['format'], rest))
+    return (method['name'], method['packer'].unpack_a(args))
 
 
 # See cap_call below
@@ -212,17 +321,13 @@ def add_method(name, result):
 
     setattr(plash.Wrapper, name, outgoing)
 
-    method_format = methods_by_name[name]['format']
-    result_format = methods_by_name[result]['format']
+    method_packer = methods_by_name[name]['packer']
+    result_packer = methods_by_name[result]['packer']
     result_code = methods_by_name[result]['code']
     def incoming(self, args):
-        arg_list = format_unpack(method_format, args)
-        print "incoming:"
+        arg_list = method_packer.unpack_a(args)
         r = getattr(self, name)(*arg_list)
-        if len(result_format) == 1:
-            return format_pack(result_code, result_format, r)
-        else:
-            return format_pack(result_code, result_format, *r)
+        return result_packer.pack_r(r)
 
     plash.Pyobj.methods[methods_by_name[name]['code']] = incoming
 
@@ -269,10 +374,13 @@ def local_cap_invoke(self, args):
 
 def local_cap_call(self, args):
     "Unmarshals incoming calls to invocations of specific Python methods."
-    (method, args2) = method_unpack(args)
+    method = get_message_code(args)
     if method in self.methods:
-        return self.methods[method](self, args2)
+        return self.methods[method](self, args)
     else:
+        # NB. The exception will not actually get reported.
+        # Need to add a logging/warning mechanism.
+        # Need to convert (selected?) exceptions to error return values.
         print "cap_call unknown:", method
         raise "No match"
 

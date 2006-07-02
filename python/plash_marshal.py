@@ -59,6 +59,8 @@ class Args_write:
         self.data = []
         self.caps = []
         self.fds = []
+    def put_data(self, x):
+        self.data.append(x)
     def put_int(self, x):
         self.data.append(struct.pack('i', x))
     def put_strsize(self, x):
@@ -66,8 +68,8 @@ class Args_write:
         self.data.append(x)
     def pack(self):
         return (string.join(self.data, ''),
-                self.caps,
-                self.fds)
+                tuple(self.caps),
+                tuple(self.fds))
 
 class Args_read:
     def __init__(self, args):
@@ -93,26 +95,50 @@ class Args_read:
         assert self.caps_pos == len(self.caps)
         assert self.fds_pos == len(self.fds)
 
-class M_r_dirlist:
+def pack_dirlist(s, entries):
+    for entry in entries:
+        s.put_int(entry['inode'])
+        s.put_int(entry['type'])
+        s.put_strsize(entry['name'])
+def unpack_dirlist(s):
+    entries = []
+    while not s.data_endp():
+        inode = s.get_int()
+        type = s.get_int()
+        name = s.get_strsize()
+        entries.append({ 'inode': inode, 'type': type, 'name': name })
+    return entries
+
+# These methods are slightly different.  One includes the number of
+# entries.  This should ideally be changed elsewhere.
+class M_r_dir_list:
     def pack_r(self, entries):
-        s = Args_output()
-        s.put_int(444)
+        s = Args_write()
+        s.put_data(methods_by_name['r_dir_list']['code'])
         s.put_int(len(entries))
-        for entry in arg:
-            s.put_int(entry['inode'])
-            s.put_int(entry['type'])
-            s.put_strsize(entry['name'])
+        pack_dirlist(s, entries)
+        return s.pack()
+    def unpack_r(self, arg):
+        s = Args_read(arg)
+        # msg = s.get_int() # Ignored
+        size = s.get_int()
+        entries = unpack_dirlist(s)
+        assert size == len(entries)
+        s.check_end()
+        return entries
+    def pack_a(self, a): return self.pack_r(a)
+    def unpack_a(self, a): return (self.unpack_r(a),)
+class M_r_fsop_dirlist:
+    def pack_r(self, entries):
+        s = Args_write()
+        s.put_int(methods_by_name['r_fsop_dirlist']['code'])
+        pack_dirlist(s, entries)
         return s.pack()
     def unpack_r(self, arg):
         s = Args_read(arg)
         # msg = s.get_int() # Ignored
         # size = s.get_int()
-        entries = []
-        while not s.data_endp():
-            inode = s.get_int()
-            type = s.get_int()
-            name = s.get_strsize()
-            entries.append({ 'inode': inode, 'type': type, 'name': name })
+        entries = unpack_dirlist(s)
         s.check_end()
         return entries
     def pack_a(self, a): return self.pack_r(a)
@@ -130,14 +156,28 @@ def add_format(name, format):
         packer = format
     methods_by_name[name]['packer'] = packer
 
+add_format('fsop_copy', '')
+#add_format('r_fsop_copy', 'c')
+add_format('fsop_get_dir', 'S')
+add_format('fsop_get_root_dir', '')
+add_format('fsop_get_obj', 'S')
+add_format('fsop_log', 'S')
+
+# These correspond to Unix system calls:
 add_format('fsop_open', 'iiS')
+# r_fsop_open...
 add_format('fsop_stat', 'iS')
+add_format('r_fsop_stat', 'iiiiiiiiiiiii')
 add_format('fsop_readlink', '')
+add_format('r_fsop_readlink', 'S')
 add_format('fsop_chdir', 'S')
 add_format('fsop_fchdir', 'c')
 add_format('fsop_dir_fstat', 'c')
+#add_format('r_fsop_dir_fstat', 'iiiiiiiiiiiii')
 add_format('fsop_getcwd', '')
+add_format('r_fsop_getcwd', 'S')
 add_format('fsop_dirlist', 'S')
+add_format('r_fsop_dirlist', M_r_fsop_dirlist())
 add_format('fsop_access', 'iS')
 add_format('fsop_mkdir', 'iS')
 add_format('fsop_chmod', 'iS')
@@ -156,18 +196,17 @@ add_format('fail', 'i')
 
 add_format('r_fsop_open', 'f')
 add_format('r_fsop_open_dir', 'fc')
-add_format('r_fsop_stat', 'iiiiiiiiiiiii')
-#add_format('r_fsop_readlink', 'S')
-add_format('r_fsop_getcwd', 'S')
-add_format('r_fsop_dirlist', M_r_dirlist())
 
 # Files, directories and symlinks
+OBJT_FILE = 1
+OBJT_DIR = 2
+OBJT_SYMLINK = 3
 add_format('fsobj_type', '')
 add_format('r_fsobj_type', 'i')
 add_format('fsobj_stat', '')
-#add_format('r_fsobj_stat', 'iiiiiiiiiiiii')
-#add_format('fsobj_utimes', ...)
-#add_format('fsobj_chmod', ...)
+add_format('r_fsobj_stat', 'iiiiiiiiiiiii')
+add_format('fsobj_utimes', 'iiii')
+add_format('fsobj_chmod', 'i')
 
 # Files
 add_format('file_open', 'i')
@@ -178,7 +217,7 @@ add_format('file_socket_connect', 'f')
 add_format('dir_traverse', 'S')
 add_format('r_dir_traverse', 'c')
 add_format('dir_list', '')
-# dir_list
+add_format('r_dir_list', M_r_dir_list())
 add_format('dir_create_file', 'iiS')
 add_format('r_dir_create_file', 'f')
 add_format('dir_mkdir', 'iS')
@@ -302,8 +341,45 @@ def unpack(args):
     return (method['name'], method['packer'].unpack_a(args))
 
 
-# See cap_call below
-plash.Pyobj.methods = {}
+def local_cap_invoke(self, args):
+    "Converts incoming invocations to calls to cap_call."
+    (method, args2) = method_unpack(args)
+    if method == 'Call':
+        # Invoke the method, and call the return continuation with the result
+        (data, caps, fds) = args2
+        caps[0].cap_invoke(self.cap_call((data, caps[1:], fds)))
+    else:
+        # There is nothing we can do, besides warning
+        pass
+
+# This is a base class for Python objects that implement cap_call()
+# but not other methods.  The other methods are defined in the base
+# class as marshallers which call cap_call().
+class Pyobj_marshal(plash.Pyobj):
+    cap_invoke = local_cap_invoke
+
+# This is a base class for Python objects that implement specific
+# call-return methods but not cap_call() or cap_invoke().
+class Pyobj_demarshal(plash.Pyobj):
+    methods = {}
+
+    cap_invoke = local_cap_invoke
+
+    def cap_call(self, args):
+        "Unmarshals incoming calls to invocations of specific Python methods."
+        method = get_message_code(args)
+        if method in self.methods:
+            return self.methods[method](self, args)
+        else:
+            # NB. The exception will not actually get reported.
+            # Need to add a logging/warning mechanism.
+            # Need to convert (selected?) exceptions to error return values.
+            print "cap_call unknown:", method
+            raise "No match"
+
+def add_marshaller(name, f):
+    setattr(plash.Wrapper, name, f)
+    setattr(Pyobj_marshal, name, f)
 
 def add_method(name, result):
     assert name in methods_by_name
@@ -319,7 +395,7 @@ def add_method(name, result):
         else:
             raise "No match"
 
-    setattr(plash.Wrapper, name, outgoing)
+    add_marshaller(name, outgoing)
 
     method_packer = methods_by_name[name]['packer']
     result_packer = methods_by_name[result]['packer']
@@ -329,12 +405,42 @@ def add_method(name, result):
         r = getattr(self, name)(*arg_list)
         return result_packer.pack_r(r)
 
-    plash.Pyobj.methods[methods_by_name[name]['code']] = incoming
+    Pyobj_demarshal.methods[methods_by_name[name]['code']] = incoming
+
+
+#add_method('fsop_copy', 'r_fsop_copy')
+#add_method('fsop_get_dir', ...)
+#add_method('fsop_get_root_dir', ...)
+#add_method('fsop_get_obj', ...)
+add_method('fsop_log', 'okay')
+
+#add_method('fsop_open', ...)
+add_method('fsop_stat', 'r_fsop_stat')
+add_method('fsop_readlink', 'r_fsop_readlink')
+add_method('fsop_chdir', 'okay')
+add_method('fsop_fchdir', 'okay')
+#add_method('fsop_dir_fstat', 'r_fsop_dir_fstat')
+add_method('fsop_getcwd', 'r_fsop_getcwd')
+add_method('fsop_dirlist', 'r_fsop_dirlist')
+add_method('fsop_access', 'okay')
+add_method('fsop_mkdir', 'okay')
+add_method('fsop_chmod', 'okay')
+add_method('fsop_utime', 'okay')
+add_method('fsop_rename', 'okay')
+add_method('fsop_link', 'okay')
+add_method('fsop_symlink', 'okay')
+add_method('fsop_unlink', 'okay')
+add_method('fsop_rmdir', 'okay')
+add_method('fsop_connect', 'okay')
+add_method('fsop_bind', 'okay')
 
 add_method('fsobj_type', 'r_fsobj_type')
+add_method('fsobj_stat', 'r_fsobj_stat')
+add_method('fsobj_utimes', 'okay')
+add_method('fsobj_chmod', 'okay')
 
 add_method('dir_traverse', 'r_dir_traverse')
-# dir_list
+add_method('dir_list', 'r_dir_list')
 add_method('dir_create_file', 'r_dir_create_file')
 add_method('dir_mkdir', 'okay')
 add_method('dir_symlink', 'okay')
@@ -343,6 +449,8 @@ add_method('dir_link', 'okay')
 add_method('dir_unlink', 'okay')
 add_method('dir_rmdir', 'okay')
 add_method('dir_socket_bind', 'okay')
+
+add_method('symlink_readlink', 'r_symlink_readlink')
 
 
 def make_conn(self, caps, imports=None):
@@ -358,31 +466,4 @@ def make_conn(self, caps, imports=None):
             return r
     fail()
 
-plash.Wrapper.make_conn = make_conn
-
-
-def local_cap_invoke(self, args):
-    "Converts incoming invocations to calls to cap_call."
-    (method, args2) = method_unpack(args)
-    if method == 'Call':
-        # Invoke the method, and call the return continuation with the result
-        (data, caps, fds) = args2
-        caps[0].cap_invoke(self.cap_call((data, caps[1:], fds)))
-    else:
-        # There is nothing we can do, besides warning
-        pass
-
-def local_cap_call(self, args):
-    "Unmarshals incoming calls to invocations of specific Python methods."
-    method = get_message_code(args)
-    if method in self.methods:
-        return self.methods[method](self, args)
-    else:
-        # NB. The exception will not actually get reported.
-        # Need to add a logging/warning mechanism.
-        # Need to convert (selected?) exceptions to error return values.
-        print "cap_call unknown:", method
-        raise "No match"
-
-plash.Pyobj.cap_invoke = local_cap_invoke
-plash.Pyobj.cap_call = local_cap_call
+add_marshaller('make_conn', make_conn)

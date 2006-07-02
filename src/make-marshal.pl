@@ -40,6 +40,7 @@ my $methods =
    ['Stat', 'fsop_stat'],
      ['RSta', 'r_fsop_stat'],
    ['Rdlk', 'fsop_readlink'],
+     ['RRdl', 'r_fsop_readlink'],
    ['Chdr', 'fsop_chdir'],
    ['Fchd', 'fsop_fchdir'],
    ['Dfst', 'fsop_dir_fstat'], # fstat on directory FD objects only
@@ -66,7 +67,8 @@ my $methods =
        Result_code => 'ROty',
        Result => 'type/int'],
    ['Osta', 'fsobj_stat',
-       Args => ''],
+       Args => '',
+       Result_code => 'ROst'],
    ['Outm', 'fsobj_utimes'],
    ['Ochm', 'fsobj_chmod',
        Args => 'mode/int',

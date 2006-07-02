@@ -213,7 +213,7 @@ void marshal_cap_call(struct filesys_obj *obj, region_t r,
 	result->data = cat2(r, mk_string(r, "Fail"), mk_int(r, err));
 	return;
       }
-      result->data = cat4(r, mk_string(r, "Okay"),
+      result->data = cat4(r, mk_int(r, METHOD_R_FSOBJ_STAT),
 			  cat5(r, mk_int(r, stat.st_dev),
 			       mk_int(r, stat.st_ino),
 			       mk_int(r, stat.st_mode),
@@ -252,7 +252,7 @@ void marshal_cap_call(struct filesys_obj *obj, region_t r,
       }
       result->caps = caps_empty;
       result->fds = fds_empty;
-      result->data = mk_string(r, "Okay");
+      result->data = mk_int(r, METHOD_OKAY);
       return;
     }
     goto bad_msg;
@@ -549,7 +549,7 @@ int marshal_stat(struct filesys_obj *obj, struct stat *buf, int *err)
     int myst_dev, myst_ino, myst_mode, myst_nlink, myst_uid, myst_gid, myst_rdev,
       myst_size, myst_blksize, myst_blocks, myst_atime, myst_mtime, myst_ctime;
     int ok = 1;
-    m_int_const(&ok, &msg, METHOD_OKAY);
+    m_int_const(&ok, &msg, METHOD_R_FSOBJ_STAT);
     m_int(&ok, &msg, &myst_dev);
     m_int(&ok, &msg, &myst_ino);
     m_int(&ok, &msg, &myst_mode);

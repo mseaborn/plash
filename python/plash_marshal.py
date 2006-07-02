@@ -144,6 +144,42 @@ class M_r_fsop_dirlist:
     def pack_a(self, a): return self.pack_r(a)
     def unpack_a(self, a): return (self.unpack_r(a),)
 
+class M_r_stat:
+    def __init__(self, code): self.code = code
+    def pack_r(self, st):
+        return format_pack(self.code,
+                           'iiiiiiiiiiiii',
+                           st['st_dev'],
+                           st['st_ino'],
+                           st['st_mode'],
+                           st['st_nlink'],
+                           st['st_uid'],
+                           st['st_gid'],
+                           st['st_rdev'],
+                           st['st_size'],
+                           st['st_blksize'],
+                           st['st_blocks'],
+                           st['st_atime'],
+                           st['st_mtime'],
+                           st['st_ctime'])
+    def unpack_r(self, args):
+        x = format_unpack('iiiiiiiiiiiii', args)
+        return { 'st_dev': x[0],
+                 'st_ino': x[1],
+                 'st_mode': x[2],
+                 'st_nlink': x[3],
+                 'st_uid': x[4],
+                 'st_gid': x[5],
+                 'st_rdev': x[6],
+                 'st_size': x[7],
+                 'st_blksize': x[8],
+                 'st_blocks': x[9],
+                 'st_atime': x[10],
+                 'st_mtime': x[11],
+                 'st_ctime': x[12] }
+    def pack_a(self, a): return self.pack_r(a)
+    def unpack_a(self, a): return (self.unpack_r(a),)
+
 
 def add_format(name, format):
     assert not ('packer' in methods_by_name[name])
@@ -167,7 +203,7 @@ add_format('fsop_log', 'S')
 add_format('fsop_open', 'iiS')
 # r_fsop_open...
 add_format('fsop_stat', 'iS')
-add_format('r_fsop_stat', 'iiiiiiiiiiiii')
+add_format('r_fsop_stat', M_r_stat(methods_by_name['r_fsop_stat']['code']))
 add_format('fsop_readlink', '')
 add_format('r_fsop_readlink', 'S')
 add_format('fsop_chdir', 'S')
@@ -204,7 +240,7 @@ OBJT_SYMLINK = 3
 add_format('fsobj_type', '')
 add_format('r_fsobj_type', 'i')
 add_format('fsobj_stat', '')
-add_format('r_fsobj_stat', 'iiiiiiiiiiiii')
+add_format('r_fsobj_stat', M_r_stat(methods_by_name['r_fsobj_stat']['code']))
 add_format('fsobj_utimes', 'iiii')
 add_format('fsobj_chmod', 'i')
 
@@ -254,6 +290,7 @@ def format_pack(method, pattern, *args):
             data.append(struct.pack('i', len(s)))
             data.append(arg)
         elif p == 'S':
+            assert isinstance(arg, str)
             data.append(arg)
         elif p == 'c':
             caps.append(arg)

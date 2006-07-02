@@ -1,6 +1,7 @@
 
 import os
 import fcntl
+import stat
 import sys
 import string
 import traceback
@@ -71,9 +72,26 @@ root = plash.initial_dir("/")
 #root = logger(root)
 
 class Fab_dir(plash_marshal.Pyobj_demarshal):
-    def __init__(self, dict): self.dict = dict
+    next_inode = [1]
+    def __init__(self, dict):
+        self.dict = dict
+        self.inode = self.next_inode[0]
+        self.next_inode[0] += 1
     def fsobj_type(self): return m.OBJT_DIR
-    def fsobj_stat(self): return root.fsobj_stat() # FIXME
+    def fsobj_stat(self):
+        return { 'st_dev': 1, # Could pick a different device number
+                 'st_ino': self.inode,
+                 'st_mode': stat.S_IFDIR | 0777,
+                 'st_nlink': 0,
+                 'st_uid': 0,
+                 'st_gid': 0,
+                 'st_rdev': 0,
+                 'st_size': 0,
+                 'st_blksize': 1024,
+                 'st_blocks': 0,
+                 'st_atime': 0,
+                 'st_mtime': 0,
+                 'st_ctime': 0 }
     def dir_traverse(self, leaf): return self.dict[leaf]
     def dir_list(self):
         return [{ 'inode': 0, 'type': 0, 'name': name }

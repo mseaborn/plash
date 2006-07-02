@@ -180,6 +180,12 @@ class M_r_stat:
     def pack_a(self, a): return self.pack_r(a)
     def unpack_a(self, a): return (self.unpack_r(a),)
 
+class M_fsop_exec:
+    def unpack_a(self, args):
+        (filename, ref, args2) = format_unpack('si*', args)
+        return (filename, tree_unpack(ref, args2))
+    def unpack_r(self, a): return self.unpack_a(a)
+
 
 def add_format(name, format):
     assert not ('packer' in methods_by_name[name])
@@ -204,7 +210,7 @@ add_format('fsop_open', 'iiS')
 # r_fsop_open...
 add_format('fsop_stat', 'iS')
 add_format('r_fsop_stat', M_r_stat(methods_by_name['r_fsop_stat']['code']))
-add_format('fsop_readlink', '')
+add_format('fsop_readlink', 'S')
 add_format('r_fsop_readlink', 'S')
 add_format('fsop_chdir', 'S')
 add_format('fsop_fchdir', 'c')
@@ -225,7 +231,7 @@ add_format('fsop_unlink', 'S')
 add_format('fsop_rmdir', 'S')
 add_format('fsop_connect', 'fS')
 add_format('fsop_bind', 'fS')
-# 'Exec'
+add_format('fsop_exec', M_fsop_exec())
 
 add_format('okay', '')
 add_format('fail', 'i')
@@ -306,6 +312,11 @@ def format_pack(method, pattern, *args):
             fds.append(arg)
         elif p == 'F':
             fds.extend(arg)
+        elif p == '*':
+            (data2, caps2, fds2) = arg
+            data.append(data2)
+            caps.extend(caps2)
+            fds.extend(fds2)
         else: raise "Unknown format string char"
     return (string.join(data, ''), tuple(caps), tuple(fds))
 
@@ -331,9 +342,9 @@ def format_unpack(pattern, msg):
             (v,) = struct.unpack('i', data[data_pos:data_pos+int_size])
             data_pos += int_size
         elif f == 's':
-            length = struct.unpack('i', data[data_pos:data_pos+int_size])
+            (length,) = struct.unpack('i', data[data_pos:data_pos+int_size])
             data_pos += int_size
-            v = data[data_pos:data_pos+len]
+            v = data[data_pos:data_pos+length]
             data_pos += length
         elif f == 'S':
             v = data[data_pos:]
@@ -358,6 +369,11 @@ def format_unpack(pattern, msg):
         elif f == 'F':
             v = fds[fds_pos:]
             fds_pos = len(fds)
+        elif f == '*':
+            v = (data[data_pos:], caps[caps_pos:], fds[fds_pos:])
+            data_pos = len(data)
+            caps_pos = len(caps)
+            fds_pos = len(fds)
         else: raise "Unknown format string char"
         args.append(v)
 
@@ -366,6 +382,35 @@ def format_unpack(pattern, msg):
     assert caps_pos == len(caps)
     assert fds_pos == len(fds)
     return tuple(args)
+
+
+def get_int(data, i):
+    (x,) = struct.unpack('i', data[i:i+int_size])
+    return x
+def tree_unpack(ref, args):
+    (data, caps, fds) = args
+    type = ref & 7
+    addr = ref >> 3
+    # int
+    if type == 0:
+        return addr
+    # string
+    elif type == 1:
+        size = get_int(data, addr)
+        return data[addr+int_size:addr+int_size+size]
+    # array
+    elif type == 2:
+        size = get_int(data, addr)
+        return [tree_unpack(get_int(data, addr + int_size * (i+1)), args)
+                for i in range(size)]
+    # cap
+    elif type == 3:
+        return caps[addr]
+    # fd
+    elif type == 4:
+        return fds[addr]
+    else:
+        raise "Bad type code in reference", type
 
 
 def pack(name, *args):

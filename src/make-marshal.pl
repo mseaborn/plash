@@ -134,7 +134,8 @@ my $methods =
 
    # Executable objects
    ['Exep', 'eo_is_executable'],
-   ['Exeo', 'eo_exec'],
+   ['Exeo', 'eo_exec',
+       Result_code => 'REex'],
 
    # Powerbox
    ['Pbrf', 'powerbox_req_filename'],

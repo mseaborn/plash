@@ -101,7 +101,7 @@ void handle_process_status(void *x, int status)
     cap_t return_cont = x;
     region_t r = region_make();
     cap_invoke(return_cont,
-	       cap_args_make(cat2(r, mk_int(r, METHOD_OKAY), mk_int(r, status)),
+	       cap_args_make(cat2(r, mk_int(r, METHOD_R_EO_EXEC), mk_int(r, status)),
 			     caps_empty,
 			     fds_empty));
     filesys_obj_free(return_cont);
@@ -264,7 +264,7 @@ void exec_obj_call(struct filesys_obj *obj1, region_t r,
     m_int_const(&ok, &data, METHOD_EO_IS_EXECUTABLE);
     m_end(&ok, &data);
     if(ok) {
-      result->data = mk_string(r, "Okay");
+      result->data = mk_int(r, METHOD_OKAY);
       result->caps = caps_empty;
       result->fds = fds_empty;
       return;

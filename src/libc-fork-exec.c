@@ -56,7 +56,7 @@ pid_t new_fork(void)
   struct cap_args result;
   
   if(plash_init() < 0) return -1;
-  if(!fs_server) { __set_errno(ENOSYS); return -1; }
+  if(!fs_server || !conn_maker) { __set_errno(ENOSYS); return -1; }
 
   r = region_make();
   cap_call(fs_server, r,
@@ -274,7 +274,7 @@ static int exec_object(cap_t obj, int argc, const char **argv,
     seqf_t msg = flatten_reuse(r, result.data);
     int rc;
     int ok = 1;
-    m_str(&ok, &msg, "Okay");
+    m_int_const(&ok, &msg, METHOD_R_EO_EXEC);
     m_int(&ok, &msg, &rc);
     m_end(&ok, &msg);
     if(ok && result.caps.size == 0 && result.fds.count == 0) {

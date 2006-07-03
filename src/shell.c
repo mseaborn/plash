@@ -1234,7 +1234,7 @@ void proc_return_invoke(struct filesys_obj *obj1, struct cap_args args)
     seqf_t msg = flatten_reuse(r, args.data);
     int status;
     int ok = 1;
-    m_str(&ok, &msg, "Okay");
+    m_int_const(&ok, &msg, METHOD_R_EO_EXEC);
     m_int(&ok, &msg, &status);
     m_end(&ok, &msg);
     if(ok && args.caps.size == 0 && args.fds.count == 0) {

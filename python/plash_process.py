@@ -25,7 +25,7 @@ class Process_spec:
     def plash_setup(self):
         cap_names = self.caps.keys()
         fd = self.conn_maker.make_conn([self.caps[x] for x in cap_names])
-        self.env['PLASH_CAPS'] = string.join(cap_names, ':')
+        self.env['PLASH_CAPS'] = string.join(cap_names, ';')
         self.env['PLASH_COMM_FD'] = str(fd.fileno())
         fcntl.fcntl(fd.fileno(), fcntl.F_SETFD, 0) # Unset FD_CLOEXEC flag
 
@@ -47,13 +47,18 @@ class Process_spec:
 
         orig_cmd = self.cmd
         self.cmd = "/usr/bin/strace"
-        self.args = ["/home/mrs/projects/plash/shobj/ld.so",
+        plash_dir = "/home/mrs/projects/plash"
+        self.args = ["-f",
+                     "-c", "-o", "/dev/null",
+                     "-E", "LD_LIBRARY_PATH="+plash_dir+"/lib",
+                     plash_dir+"/shobj/ld.so",
                      orig_cmd] + self.args
 
         # This is a hack to ensure that the FD doesn't get GC'd and closed
         self.fd = fd
 
     def spawn(self):
+        self.plash_setup()
         pid = os.fork()
         if pid == 0:
             os.execve(self.cmd, [self.arg0] + self.args, self.env)

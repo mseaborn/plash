@@ -69,6 +69,11 @@ def dir_of_node(node):
     return call(plash.fs_dir_of_node, 'r_cap',
                 'fs_dir_of_node', node)
 
+FS_READ_ONLY        = 0x0
+FS_SLOW_RWC         = 0x1
+FS_OBJECT_RW        = 0x2
+FS_FOLLOW_SYMLINKS  = 0x4
+
 def resolve_populate(root_dir, root_node, pathname, cwd=None, flags=0):
     return call(plash.fs_resolve_populate, 'okay',
                 'fs_resolve_populate', root_dir, root_node, cwd,

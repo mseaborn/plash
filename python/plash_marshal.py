@@ -185,6 +185,11 @@ class M_fsop_exec:
         (filename, ref, args2) = format_unpack('si*', args)
         return (filename, tree_unpack(ref, args2))
     def unpack_r(self, a): return self.unpack_a(a)
+class M_misc:
+    def unpack_r(self, args):
+        (ref, args2) = format_unpack('i*', args)
+        return tree_unpack(ref, args2)
+    def unpack_a(self, a): return (self.unpack_r(a),)
 
 
 def add_format(name, format):
@@ -273,6 +278,11 @@ add_format('dir_socket_bind', 'Sf')
 # Symlinks
 add_format('symlink_readlink', '')
 add_format('r_symlink_readlink', 'S')
+
+# Executable objects
+add_format('eo_is_executable', '')
+add_format('eo_exec', M_misc())
+add_format('r_eo_exec', 'i')
 
 add_format('make_conn', 'iC')
 add_format('r_make_conn', 'fC')
@@ -393,7 +403,7 @@ def tree_unpack(ref, args):
     addr = ref >> 3
     # int
     if type == 0:
-        return addr
+        return get_int(data, addr)
     # string
     elif type == 1:
         size = get_int(data, addr)
@@ -531,6 +541,9 @@ add_method('dir_link', 'okay')
 add_method('dir_unlink', 'okay')
 add_method('dir_rmdir', 'okay')
 add_method('dir_socket_bind', 'okay')
+
+add_method('eo_is_executable', 'okay')
+add_method('eo_exec', 'r_eo_exec')
 
 add_method('symlink_readlink', 'r_symlink_readlink')
 

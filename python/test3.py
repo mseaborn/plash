@@ -9,6 +9,7 @@ import plash
 import plash_marshal
 import plash_marshal as m
 import plash_namespace as ns
+import plash_process
 from plash_process import Process_spec
 
 
@@ -18,8 +19,9 @@ class logger(plash_marshal.Pyobj_marshal):
     def cap_call(self, args):
         try:
             print "call", plash_marshal.unpack(args)
-        except Exception, e:
-            print args, "exception:", e
+        except:
+            print args, "exception:",
+            traceback.print_exc()
         try:
             r = self.x.cap_call(args)
         except:
@@ -37,10 +39,12 @@ indent = ['>']
 class logger_indent(plash_marshal.Pyobj_marshal):
     def __init__(self, x1): self.x = x1
     def cap_call(self, args):
+        print indent[0], "call",
         try:
-            print indent[0], "call", plash_marshal.unpack(args)
-        except Exception, e:
-            print indent[0], args, "exception:", e
+            print plash_marshal.unpack(args)
+        except:
+            print args, "exception:",
+            traceback.print_exc()
         try:
             i = indent[0]
             indent[0] = i + '  '
@@ -52,10 +56,11 @@ class logger_indent(plash_marshal.Pyobj_marshal):
             print indent[0], "Exception in cap_call:",
             traceback.print_exc()
             return
+        print indent[0], "->",
         try:
-            print indent[0], "->", plash_marshal.unpack(r)
-        except Exception, e:
-            print indent[0], r
+            print plash_marshal.unpack(r)
+        except:
+            print r
         return r
 
 logger = logger_indent
@@ -71,12 +76,41 @@ class Test_dir(plash_marshal.Pyobj_demarshal):
 root = plash.initial_dir("/")
 #root = logger(root)
 
+next_inode = [1]
+
+class Exec_obj(plash_marshal.Pyobj_demarshal):
+    def __init__(self):
+        self.inode = next_inode[0]
+        next_inode[0] += 1
+    def fsobj_type(self): return m.OBJT_FILE
+    def fsobj_stat(self):
+        return { 'st_dev': 1, # Could pick a different device number
+                 'st_ino': self.inode,
+                 'st_mode': stat.S_IFREG | 0777,
+                 'st_nlink': 0,
+                 'st_uid': 0,
+                 'st_gid': 0,
+                 'st_rdev': 0,
+                 'st_size': 0,
+                 'st_blksize': 1024,
+                 'st_blocks': 0,
+                 'st_atime': 0,
+                 'st_mtime': 0,
+                 'st_ctime': 0 }
+    def eo_is_executable(self): return ()
+    def eo_exec(self, args):
+        args = dict(args)
+        fds = dict(args['Fds.'])
+        stdout = fds[1]
+        os.write(stdout.fileno(), "Hello world!\n")
+        os.write(stdout.fileno(), "This is an executable object.\n")
+        return 0
+
 class Fab_dir(plash_marshal.Pyobj_demarshal):
-    next_inode = [1]
     def __init__(self, dict):
         self.dict = dict
-        self.inode = self.next_inode[0]
-        self.next_inode[0] += 1
+        self.inode = next_inode[0]
+        next_inode[0] += 1
     def fsobj_type(self): return m.OBJT_DIR
     def fsobj_stat(self):
         return { 'st_dev': 1, # Could pick a different device number
@@ -112,7 +146,9 @@ root_node = ns.make_node()
 ns.resolve_populate(root, root_node, "/bin")
 ns.resolve_populate(root, root_node, "/lib")
 ns.resolve_populate(root, root_node, "/usr")
+ns.resolve_populate(root, root_node, "/dev/null", flags=ns.FS_OBJECT_RW)
 ns.attach_at_path(root_node, "/test", test_obj)
+ns.attach_at_path(root_node, "/mybin/exec-obj", logger(Exec_obj()))
 root2 = ns.dir_of_node(root_node)
 print "dir type:", root.fsobj_type()
 print "traverse:", root.dir_traverse("lib")
@@ -131,13 +167,28 @@ fs_op = logger(fs_op)
 
 p = Process_spec()
 p.env = os.environ.copy()
-p.caps = { 'fs_op': fs_op }
+p.caps = { 'fs_op': fs_op,
+           'conn_maker': ns.conn_maker }
 #p.setcmd('/bin/echo', 'Hello world!')
 #p.setcmd('/bin/ls', '-l', '/')
 #p.setcmd('/bin/sh', '-c', 'echo /test/foo/*')
-p.setcmd('/bin/ls', '-li', '/test')
-p.plash_setup()
+#p.setcmd('/bin/ls', '-li', '/test')
+#p.setcmd('/bin/sh', '-c', '/bin/echo Hello!')
+#p.setcmd('/bin/echo', 'Hello!')
+#p.setcmd('/usr/bin/strace', '/bin/echo', 'Hello world!')
+#p.setcmd('/usr/bin/perl', '-e', 'print "Hello, world!\\n"')
+#p.setcmd('/bin/sh', '-c', "/mybin/exec-obj arg1 arg2; echo bar")
+p.setcmd('/bin/sh', '-c', """/mybin/exec-obj arg1 arg2 | perl -ne 'print "Your message: $_"' """)
 pid = p.spawn()
 print "entering server"
 plash.run_server()
 print "server done"
+
+(pid2, status) = os.waitpid(pid, 0)
+assert pid == pid2
+if os.WIFEXITED(status):
+    print "exited with status:", os.WEXITSTATUS(status)
+elif os.WIFSIGNALED(status):
+    print "exited with signal:", os.WTERMSIG(status)
+else:
+    print "unknown exit status:", status

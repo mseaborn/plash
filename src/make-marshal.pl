@@ -123,6 +123,8 @@ my $methods =
 
    ['Mkco', 'make_conn'],
      ['RMkc', 'r_make_conn'],
+   ['Mkc2', 'make_conn2'],
+     ['RMc2', 'r_make_conn2'],
    ['Mkfs', 'make_fs_op',
        Args => 'root_dir/obj',
        Result_code => 'RMfs',

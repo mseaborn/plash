@@ -29,6 +29,7 @@
 #include "marshal.h"
 #include "marshal-pack.h"
 #include "build-fs.h"
+#include "plash-libc.h"
 
 #include "py-plash.h"
 
@@ -85,6 +86,65 @@ static PyObject *plpy_run_server(PyObject *self, PyObject *args)
   return Py_None;
 }
 
+__asm__(".weak plash_libc_duplicate_connection");
+
+static PyObject *plpy_libc_duplicate_connection(PyObject *self, PyObject *args)
+{
+  if(plash_libc_duplicate_connection) {
+    int fd = plash_libc_duplicate_connection();
+    if(fd < 0) {
+      PyErr_SetString(PyExc_Exception,
+		      "plash_libc_duplicate_connection() failed");
+      return NULL;
+    }
+    else {
+      return plpy_wrap_fd(fd);
+    }
+  }
+  else {
+    PyErr_SetString(PyExc_Exception,
+		    "The symbol plash_libc_duplicate_connection is not defined; the process is probably not running under the Plash environment");
+    return NULL;
+  }
+}
+
+
+/* Note: This should properly be made into a case in marshal_cap_call().
+   That would make this method available on the regular conn_maker object,
+   instead of requiring a separate object.
+   However, I'm not convinced it's safe for this method to be exported
+   to other processes.  It means the server process would accept
+   connections involving FDs created by other processes.  If the FDs
+   aren't socket FDs, it might do something unexpected. */
+static void plpy_make_conn2(cap_t obj, region_t r, struct cap_args args,
+			    struct cap_args *result)
+{
+  int fd;
+  int import_count;
+  cap_seq_t export_caps;
+  if(pl_unpack(r, args, METHOD_MAKE_CONN2, "fiC",
+	       &fd, &import_count, &export_caps)) {
+    cap_t *import;
+#if 1
+    import = cap_make_connection(r, fd, export_caps, import_count,
+				 "to-client");
+    *result = pl_pack(r, METHOD_R_MAKE_CONN2, "C",
+		      cap_seq_make(import, import_count));
+#else
+    int rc = obj->vtable->make_conn2(obj, r, args.fds.fds[0], args.caps,
+				     import_count, &import);
+    caps_free(args.caps);
+    if(rc < 0) {
+      *result = pl_pack(r, METHOD_FAIL, "i", 0); /* FIXME: fill out error */
+    }
+    else {
+      *result = pl_pack(r, METHOD_R_MAKE_CONN2, "C",
+			cap_seq_make(import, import_count));
+    }
+#endif
+  }
+  else pl_args_free(&args);
+}
 
 static void plpy_resolve_dir(cap_t obj, region_t r, struct cap_args args,
 			     struct cap_args *result)
@@ -236,6 +296,9 @@ static PyMethodDef module_methods[] = {
     "Returns an object that creates connections." },
   { "run_server", plpy_run_server, METH_NOARGS,
     "Enter event loop, handling incoming object invocations as a server." },
+  { "libc_duplicate_connection", plpy_libc_duplicate_connection, METH_NOARGS,
+    "Duplicates the connection that libc has with the server.\n"
+    "Returns a file descriptor for the connection." },
   { NULL, NULL, 0, NULL }  /* Sentinel */
 };
 
@@ -271,4 +334,5 @@ void initplash(void)
   ADD_FUNCTION("fs_resolve_populate", plpy_fs_resolve_populate);
   ADD_FUNCTION("fs_dir_of_node", plpy_fs_dir_of_node);
   ADD_FUNCTION("fs_print_tree", plpy_fs_print_tree);
+  ADD_FUNCTION("cap_make_connection", plpy_make_conn2);
 }

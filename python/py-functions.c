@@ -143,7 +143,10 @@ static void plpy_make_conn2(cap_t obj, region_t r, struct cap_args args,
     }
 #endif
   }
-  else pl_args_free(&args);
+  else {
+    *result = pl_pack(r, METHOD_FAIL_UNKNOWN_METHOD, "");
+    pl_args_free(&args);
+  }
 }
 
 static void plpy_resolve_dir(cap_t obj, region_t r, struct cap_args args,

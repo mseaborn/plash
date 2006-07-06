@@ -125,14 +125,8 @@ my $methods =
      ['RMkc', 'r_make_conn'],
    ['Mkc2', 'make_conn2'],
      ['RMc2', 'r_make_conn2'],
-   ['Mkfs', 'make_fs_op',
-       Args => 'root_dir/obj',
-       Result_code => 'RMfs',
-       Result => 'fs_op/obj'],
-   ['Mkud', 'make_union_dir',
-       Args => 'dir1/obj dir2/obj',
-       Result_code => 'RMud',
-       Result => 'dir/obj'],
+   ['Mkfs', 'make_fs_op'],
+   ['Mkud', 'make_union_dir'],
 
    # Executable objects
    ['Exep', 'eo_is_executable'],

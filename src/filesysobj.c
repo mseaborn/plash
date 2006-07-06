@@ -475,36 +475,6 @@ void marshal_cap_call(struct filesys_obj *obj, region_t r,
     }
     goto bad_msg;
   }
-  case METHOD_MAKE_FS_OP:
-  {
-    cap_t root_dir;
-    cap_t fs_op;
-    if(unpack_make_fs_op(r, args, &root_dir) < 0) goto bad_msg;
-    fs_op = obj->vtable->make_fs_op(obj, root_dir);
-    filesys_obj_free(root_dir);
-    if(!fs_op) {
-      *result = pack_fail(r, EIO);
-      return;
-    }
-    *result = pack_make_fs_op_result(r, fs_op);
-    return;
-  }
-  case METHOD_MAKE_UNION_DIR:
-  {
-    cap_t dir1;
-    cap_t dir2;
-    cap_t result_dir;
-    if(unpack_make_union_dir(r, args, &dir1, &dir2) < 0) goto bad_msg;
-    result_dir = obj->vtable->make_union_dir(obj, dir1, dir2);
-    filesys_obj_free(dir1);
-    filesys_obj_free(dir2);
-    if(!result_dir) {
-      *result = pack_fail(r, EIO);
-      return;
-    }
-    *result = pack_make_union_dir_result(r, result_dir);
-    return;
-  }
   default:
     caps_free(args.caps);
     close_fds(args.fds);
@@ -913,38 +883,6 @@ int marshal_make_conn(struct filesys_obj *obj, region_t r, cap_seq_t export,
   return -1;
 }
 
-cap_t marshal_make_fs_op(struct filesys_obj *obj, cap_t root_dir)
-{
-  cap_t fs_op;
-  region_t r = region_make();
-  struct cap_args result;
-  cap_call(obj, r, pack_make_fs_op(r, inc_ref(root_dir)), &result);
-  if(unpack_make_fs_op_result(r, result, &fs_op) >= 0) { }
-  else {
-    fs_op = 0;
-    caps_free(result.caps);
-    close_fds(result.fds);
-  }
-  region_free(r);
-  return fs_op;
-}
-
-cap_t marshal_make_union_dir(struct filesys_obj *obj, cap_t dir1, cap_t dir2)
-{
-  cap_t result_dir;
-  region_t r = region_make();
-  struct cap_args result;
-  cap_call(obj, r, pack_make_union_dir(r, inc_ref(dir1), inc_ref(dir2)), &result);
-  if(unpack_make_union_dir_result(r, result, &result_dir) >= 0) { }
-  else {
-    result_dir = 0;
-    caps_free(result.caps);
-    close_fds(result.fds);
-  }
-  region_free(r);
-  return result_dir;
-}
-
 
 int objt_unknown(struct filesys_obj *obj) { return 0; }
 int objt_file(struct filesys_obj *obj) { return OBJT_FILE; }
@@ -1092,16 +1030,6 @@ int dummy_make_conn2(struct filesys_obj *obj, region_t r, int sock_fd,
 {
   close(sock_fd);
   return -1;
-}
-
-cap_t dummy_make_fs_op(struct filesys_obj *obj, cap_t root_dir)
-{
-  return 0;
-}
-
-cap_t dummy_make_union_dir(struct filesys_obj *obj, cap_t dir1, cap_t dir2)
-{
-  return 0;
 }
 
 

@@ -36,6 +36,7 @@
 #include "shell-wait.h"
 #include "marshal.h"
 #include "marshal-exec.h"
+#include "marshal-pack.h"
 
 
 __asm__(".weak plash_libc_reset_connection");
@@ -134,6 +135,7 @@ void exec_obj_invoke(struct filesys_obj *obj1, struct cap_args args)
 
       {
 	struct fd_array fds2 = { 0, 0 };
+	struct cap_args result;
 	cap_t new_root_dir;
 	cap_t new_fs_server;
 	int sock_fd, sock_fd_no;
@@ -145,24 +147,30 @@ void exec_obj_invoke(struct filesys_obj *obj1, struct cap_args args)
 	  array_set_fd(r, &fds2, ea.fds[i].fd_no, ea.fds[i].fd);
 	}
 
-	new_root_dir = obj->union_dir_maker->vtable->make_union_dir(obj->union_dir_maker, obj->root_dir, ea.root_dir);
-	if(!new_root_dir) {
+	cap_call(obj->union_dir_maker, r,
+		 pl_pack(r, METHOD_MAKE_UNION_DIR, "cc",
+			 inc_ref(obj->root_dir), inc_ref(ea.root_dir)),
+		 &result);
+	if(!pl_unpack(r, result, METHOD_OKAY, "c", &new_root_dir)) {
 	  err = EIO;
+	  fprintf(stderr, "make_union_dir failed\n");
+	  pl_args_free(&result);
 	  goto exec_error;
 	}
 
-	filesys_obj_check(obj->root_dir);
-	new_fs_server = obj->fs_op_maker->vtable->make_fs_op(obj->fs_op_maker, new_root_dir);
-	filesys_obj_free(new_root_dir);
-	if(!new_fs_server) {
+	cap_call(obj->fs_op_maker, r,
+		 pl_pack(r, METHOD_MAKE_FS_OP, "c", new_root_dir),
+		 &result);
+	if(!pl_unpack(r, result, METHOD_OKAY, "c", &new_fs_server)) {
 	  err = EIO;
+	  fprintf(stderr, "make_fs_op failed\n");
+	  pl_args_free(&result);
 	  goto exec_error;
 	}
 
 	/* If we were passed a cwd (current working directory) argument,
 	   set the cwd.  If this fails, abort starting the new process. */
 	if(ea.got_cwd) {
-	  struct cap_args result;
 	  cap_call(new_fs_server, r,
 		   cap_args_d(cat2(r, mk_int(r, METHOD_FSOP_CHDIR),
 				   mk_leaf(r, ea.cwd))),
@@ -173,8 +181,7 @@ void exec_obj_invoke(struct filesys_obj *obj1, struct cap_args args)
 	    m_str(&ok, &msg, "RSuc");
 	    m_end(&ok, &msg);
 	    if(!(ok && result.caps.size == 0 && result.fds.count == 0)) {
-	      caps_free(result.caps);
-	      close_fds(result.fds);
+	      pl_args_free(&result);
 	      err = EIO;
 	      goto exec_error;
 	    }

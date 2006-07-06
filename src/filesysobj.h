@@ -151,18 +151,12 @@ struct filesys_obj_vtable {
   /* `export' contains non-owning references. */
   int (*make_conn)(struct filesys_obj *obj, region_t r, cap_seq_t export,
 		   int import_count, cap_t **import);
-  /* Returns 0 for success, -1 for failure */
+  /* Returns 0 for success, -1 for failure.
+     sock_fd is an owning reference; the method takes ownership regardless
+     of the return code. */
   int (*make_conn2)(struct filesys_obj *obj, region_t r,
 		    int sock_fd, cap_seq_t export,
 		    int import_count, cap_t **import);
-  /* These take non-owning references as arguments: */
-  cap_t (*make_fs_op)(struct filesys_obj *obj, cap_t root_dir);
-  cap_t (*make_union_dir)(struct filesys_obj *obj, cap_t dir1, cap_t dir2);
-  /*
-  cap_t (*make_fab_dir)(struct filesys_obj *obj, struct dir_entry *entries, int count);
-  cap_t (*make_s_fab_dir)(struct filesys_obj *obj, struct dir_entry *entries, int count);
-  cap_t (*make_fab_symlink)(struct filesys_obj *obj, seqf_t dest);
-  */
 
   /* This is for debugging. */
   char *vtable_name;
@@ -242,8 +236,6 @@ int dummy_make_conn(struct filesys_obj *obj, region_t r, cap_seq_t export,
 		    int import_count, cap_t **import);
 int dummy_make_conn2(struct filesys_obj *obj, region_t r, int sock_fd,
 		     cap_seq_t export, int import_count, cap_t **import);
-cap_t dummy_make_fs_op(struct filesys_obj *obj, cap_t root_dir);
-cap_t dummy_make_union_dir(struct filesys_obj *obj, cap_t dir1, cap_t dir2);
 
 int marshal_stat(struct filesys_obj *obj, struct stat *buf, int *err);
 int marshal_utimes(struct filesys_obj *obj, const struct timeval *atime,
@@ -270,8 +262,6 @@ int marshal_socket_bind(struct filesys_obj *obj, const char *leaf, int sock_fd, 
 int marshal_readlink(struct filesys_obj *obj, region_t r, seqf_t *result, int *err);
 int marshal_make_conn(struct filesys_obj *obj, region_t r, cap_seq_t export,
 		      int import_count, cap_t **import);
-cap_t marshal_make_fs_op(struct filesys_obj *obj, cap_t root_dir);
-cap_t marshal_make_union_dir(struct filesys_obj *obj, cap_t dir1, cap_t dir2);
 
 int refuse_chmod(struct filesys_obj *obj, int mode, int *err);
 int refuse_utimes(struct filesys_obj *obj, const struct timeval *atime,
@@ -377,8 +367,6 @@ struct const filesys_obj_vtable name = { \
   /* .slot_socket_bind = */ dummy_slot_socket_bind, \
   /* .make_conn = */ dummy_make_conn, \
   /* .make_conn2 = */ dummy_make_conn2, \
-  /* .make_fs_op = */ dummy_make_fs_op, \
-  /* .make_union_dir = */ dummy_make_union_dir, \
   /* .vtable_name = */ "unknown", \
   1 \
 }

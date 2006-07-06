@@ -54,8 +54,6 @@ my $methods =
       slot_socket_bind
       make_conn
       make_conn2
-      make_fs_op
-      make_union_dir
       vtable_name)];
 my $methods_hash = { map { $_ => 1 } @$methods };
 
@@ -92,8 +90,6 @@ my $defaults =
       'slot_socket_bind' => 'dummy_slot_socket_bind',
       'make_conn' => 'dummy_make_conn',
       'make_conn2' => 'dummy_make_conn2',
-      'make_fs_op' => 'dummy_make_fs_op',
-      'make_union_dir' => 'dummy_make_union_dir',
     };
 
 my $bytes = 0;
@@ -172,8 +168,6 @@ put('gensrc/out-vtable-filesysobj.h',
 	  ['slot_socket_bind', 'NULL'],
 	  ['make_conn', 'NULL'],
 	  ['make_conn2', 'NULL'],
-	  ['make_fs_op', 'NULL'],
-	  ['make_union_dir', 'NULL'],
 	 ]
      }]);
 
@@ -383,7 +377,7 @@ my $marshal_methods =
 	  ['rmdir', 'marshal_rmdir'],
 	  ['socket_bind', 'marshal_socket_bind'],
 	  ['readlink', 'marshal_readlink'],
-          map { [$_, "marshal_$_"] } qw(make_conn make_fs_op make_union_dir)
+          ['make_conn', 'marshal_make_conn'],
   ];
 
 put('gensrc/out-vtable-cap-protocol.h',

@@ -20,8 +20,8 @@
 #ifndef plash_libc_h
 #define plash_libc_h
 
-int plash_libc_duplicate_connection();
-void plash_libc_reset_connection();
+int plash_libc_duplicate_connection(void);
+void plash_libc_reset_connection(void);
 int plash_libc_kernel_execve(const char *cmd_filename, char *argv[], char *envp[]);
 
 #endif

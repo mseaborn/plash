@@ -286,6 +286,8 @@ add_format('r_eo_exec', 'i')
 
 add_format('make_conn', 'iC')
 add_format('r_make_conn', 'fC')
+add_format('make_conn2', 'fiC')
+add_format('r_make_conn2', 'C')
 
 
 
@@ -547,6 +549,12 @@ add_method('eo_exec', 'r_eo_exec')
 
 add_method('symlink_readlink', 'r_symlink_readlink')
 
+add_method('make_conn2', 'r_make_conn2')
+
+
+# make_conn is only defined explicitly:
+# 1. to provide an example
+# 2. to allow for a default argument (though this might be removed)
 
 def make_conn(self, caps, imports=None):
     if imports == None:

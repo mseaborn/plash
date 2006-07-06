@@ -151,7 +151,7 @@ void exec_obj_invoke(struct filesys_obj *obj1, struct cap_args args)
 		 pl_pack(r, METHOD_MAKE_UNION_DIR, "cc",
 			 inc_ref(obj->root_dir), inc_ref(ea.root_dir)),
 		 &result);
-	if(!pl_unpack(r, result, METHOD_OKAY, "c", &new_root_dir)) {
+	if(!pl_unpack(r, result, METHOD_R_CAP, "c", &new_root_dir)) {
 	  err = EIO;
 	  fprintf(stderr, "make_union_dir failed\n");
 	  pl_args_free(&result);
@@ -161,7 +161,7 @@ void exec_obj_invoke(struct filesys_obj *obj1, struct cap_args args)
 	cap_call(obj->fs_op_maker, r,
 		 pl_pack(r, METHOD_MAKE_FS_OP, "c", new_root_dir),
 		 &result);
-	if(!pl_unpack(r, result, METHOD_OKAY, "c", &new_fs_server)) {
+	if(!pl_unpack(r, result, METHOD_R_CAP, "c", &new_fs_server)) {
 	  err = EIO;
 	  fprintf(stderr, "make_fs_op failed\n");
 	  pl_args_free(&result);

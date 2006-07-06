@@ -42,6 +42,7 @@
 #include "filesysobj-fab.h"
 #include "filesysobj-union.h"
 #include "marshal.h"
+#include "marshal-pack.h"
 
 
 int process_chdir(struct process *p, seqf_t pathname, int *err)
@@ -1604,22 +1605,16 @@ void fs_op_maker_call(struct filesys_obj *obj1, region_t r,
 		      struct cap_args args, struct cap_args *result)
 {
   struct fs_op_maker *obj = (void *) obj1;
-  seqf_t data = flatten_reuse(r, args.data);
-  int ok = 1;
-  m_str(&ok, &data, "Mkfs");
-  m_end(&ok, &data);
-  if(ok && args.caps.size == 1 && args.fds.count == 0) {
-    result->data = mk_int(r, METHOD_OKAY);
+
+  cap_t root_dir;
+  if(pl_unpack(r, args, METHOD_MAKE_FS_OP, "c", &root_dir)) {
     obj->shared->refcount++;
-    result->caps = mk_caps1(r, make_fs_op_server(obj->shared, args.caps.caps[0], 0 /* cwd */));
-    result->fds = fds_empty;
+    *result = pl_pack(r, METHOD_R_CAP, "c",
+		      make_fs_op_server(obj->shared, root_dir, NULL /* cwd */));
   }
   else {
-    caps_free(args.caps);
-    close_fds(args.fds);
-    result->data = mk_string(r, "RMsg");
-    result->caps = caps_empty;
-    result->fds = fds_empty;
+    pl_args_free(&args);
+    *result = pl_pack(r, METHOD_FAIL_UNKNOWN_METHOD, "");
   }
 }
 
@@ -1730,25 +1725,16 @@ cap_t union_dir_maker_make()
   return filesys_obj_make(sizeof(struct union_dir_maker), &union_dir_maker_vtable);
 }
 
-void union_dir_maker_call(struct filesys_obj *obj1, region_t r,
+void union_dir_maker_call(struct filesys_obj *obj_unused, region_t r,
 			  struct cap_args args, struct cap_args *result)
 {
-  seqf_t data = flatten_reuse(r, args.data);
-  int ok = 1;
-  m_str(&ok, &data, "Mkud");
-  m_end(&ok, &data);
-  if(ok && args.fds.count == 0 && args.caps.size == 2) {
-    result->data = mk_int(r, METHOD_OKAY);
-    result->caps = mk_caps1(r, make_union_dir(args.caps.caps[0],
-					      args.caps.caps[1]));
-    result->fds = fds_empty;
+  cap_t obj1, obj2;
+  if(pl_unpack(r, args, METHOD_MAKE_UNION_DIR, "cc", &obj1, &obj2)) {
+    *result = pl_pack(r, METHOD_R_CAP, "c", make_union_dir(obj1, obj2));
   }
   else {
-    caps_free(args.caps);
-    close_fds(args.fds);
-    result->data = mk_string(r, "RMsg");
-    result->caps = caps_empty;
-    result->fds = fds_empty;
+    pl_args_free(&args);
+    *result = pl_pack(r, METHOD_FAIL_UNKNOWN_METHOD, "");
   }
 }
 

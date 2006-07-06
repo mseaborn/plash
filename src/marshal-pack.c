@@ -57,6 +57,12 @@ struct cap_args pl_pack(region_t r, int method, const char *fmt, ...)
 	args.caps.size++;
 	break;
 
+      case 'C': {
+	cap_seq_t arg = va_arg(list, cap_seq_t);
+	args.caps.size += arg.size;
+	break;
+      }
+
       case 'd':
 	data_size += sizeof(int);
 	if(va_arg(list, cap_t) != NULL) {
@@ -103,6 +109,13 @@ struct cap_args pl_pack(region_t r, int method, const char *fmt, ...)
       case 'c':
 	*caps++ = va_arg(list, cap_t);
 	break;
+
+      case 'C': {
+	cap_seq_t arg = va_arg(list, cap_seq_t);
+	memcpy(caps, arg.caps, arg.size * sizeof(cap_t));
+	caps += arg.size;
+	break;
+      }
 
       case 'd': {
 	cap_t arg = va_arg(list, cap_t);
@@ -167,6 +180,13 @@ int pl_unpack(region_t r, struct cap_args args, int method,
 	cap_t *ptr = va_arg(list, cap_t *);
 	if(caps_pos >= args.caps.size) { goto mismatch; }
 	*ptr = args.caps.caps[caps_pos++];
+	break;
+      }
+      case 'C': {
+	cap_seq_t *ptr = va_arg(list, cap_seq_t *);
+	ptr->caps = args.caps.caps + caps_pos;
+	ptr->size = args.caps.size - caps_pos;
+	caps_pos = args.caps.size;
 	break;
       }
       case 'd': {

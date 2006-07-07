@@ -86,6 +86,13 @@ static PyObject *plpy_run_server(PyObject *self, PyObject *args)
   return Py_None;
 }
 
+static PyObject *plpy_cap_close_all_connections(PyObject *self, PyObject *args)
+{
+  cap_close_all_connections();
+  Py_INCREF(Py_None);
+  return Py_None;
+}
+
 __asm__(".weak plash_libc_duplicate_connection");
 
 static PyObject *plpy_libc_duplicate_connection(PyObject *self, PyObject *args)
@@ -299,9 +306,18 @@ static PyMethodDef module_methods[] = {
     "Returns an object that creates connections." },
   { "run_server", plpy_run_server, METH_NOARGS,
     "Enter event loop, handling incoming object invocations as a server." },
+  
+  { "cap_close_all_connections", plpy_cap_close_all_connections, METH_NOARGS,
+    "Drop all the obj-cap-protocol connections that are currently open\n"
+    "by closing the file descriptors.  This is for calling in a\n"
+    "newly-forked process as soon as it is created.  If this is not done,\n"
+    "both processes will try to use the connection (if only to drop object\n"
+    "references), likely leading to a protocol violation." },
+  
   { "libc_duplicate_connection", plpy_libc_duplicate_connection, METH_NOARGS,
     "Duplicates the connection that libc has with the server.\n"
     "Returns a file descriptor for the connection." },
+  
   { NULL, NULL, 0, NULL }  /* Sentinel */
 };
 

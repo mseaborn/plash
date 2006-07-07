@@ -2,7 +2,10 @@
 import string
 import fcntl
 import os
+import plash
 import plash_namespace as ns
+import plash_env
+import sys
 
 
 # Attributes:
@@ -30,7 +33,10 @@ class Process_spec:
         fcntl.fcntl(fd.fileno(), fcntl.F_SETFD, 0) # Unset FD_CLOEXEC flag
 
         orig_cmd = self.cmd
-        self.cmd = "/usr/lib/plash/run-as-anonymous"
+        if plash_env.under_plash:
+            self.cmd = "/run-as-anonymous"
+        else:
+            self.cmd = "/usr/lib/plash/run-as-anonymous"
         self.args = ["-s", "LD_LIBRARY_PATH=/usr/lib/plash/lib",
                      "/special/ld-linux.so.2",
                      orig_cmd] + self.args
@@ -59,9 +65,24 @@ class Process_spec:
 
     def spawn(self):
         self.plash_setup()
+        # Doing this in Python is a little risky.  We must ensure that
+        # no freeing of Plash objects occurs before the call to
+        # cap_close_all_connections() in the newly-forked process,
+        # otherwise both processes could try to use the same connection
+        # to send the "Drop" message, leading to a protocol violation.
+        # We're probably OK with the refcounting C implementation of
+        # Python, but another implementation might do GC at any point.
         pid = os.fork()
         if pid == 0:
-            os.execve(self.cmd, [self.arg0] + self.args, self.env)
+            try:
+                plash.cap_close_all_connections()
+                try:
+                    os.execve(self.cmd, [self.arg0] + self.args, self.env)
+                except:
+                    pass
+                print "execve failed"
+            except:
+                pass
             sys.exit(1)
         else:
             os.close(self.fd.fileno()) # Hack; to be removed

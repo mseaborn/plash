@@ -34,6 +34,7 @@
 #include "plash-libc.h"
 #include "marshal.h"
 #include "marshal-exec.h"
+#include "marshal-pack.h"
 #include "build-fs.h"
 #include "parse-filename.h"
 
@@ -312,7 +313,7 @@ int main(int argc, const char *argv[])
 	     cap_args_make(mk_int(r, METHOD_FSOP_GET_ROOT_DIR),
 			   caps_empty, fds_empty),
 	     &result);
-    if(expect_cap1(result, &orig_root_dir) < 0) {
+    if(!pl_unpack(r, result, METHOD_R_CAP, "c", &orig_root_dir)) {
       fprintf(stderr, "run-emacs: get-root failed\n");
       return 1;
     }

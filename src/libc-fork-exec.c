@@ -39,6 +39,7 @@
 #include "cap-protocol.h"
 #include "cap-utils.h"
 #include "marshal.h"
+#include "marshal-pack.h"
 
 
 /* EXPORT: new_fork => WEAK:fork WEAK:__fork WEAK:vfork WEAK:__vfork __libc_fork __GI___fork __GI___vfork */
@@ -166,7 +167,7 @@ static int exec_object(cap_t obj, int argc, const char **argv,
     cap_call(fs_server, r,
 	     cap_args_d(mk_int(r, METHOD_FSOP_GET_ROOT_DIR)),
 	     &result);
-    if(expect_cap1(result, &root_dir) < 0) {
+    if(!pl_unpack(r, result, METHOD_R_CAP, "c", &root_dir)) {
       filesys_obj_free(obj);
       region_free(r);
       __set_errno(ENOSYS);

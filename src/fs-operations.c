@@ -785,7 +785,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
     if(ok) {
       *log_msg = mk_string(r, "get root dir");
       *r_caps = mk_caps1(r, inc_ref(proc->root));
-      *reply = mk_int(r, METHOD_OKAY);
+      *reply = mk_int(r, METHOD_R_CAP);
       *log_reply = mk_printf(r, "ok");
       return;
     }

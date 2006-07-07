@@ -43,8 +43,10 @@
 #include "cap-protocol.h"
 #include "cap-utils.h"
 #include "marshal.h"
+#include "marshal-pack.h"
 #include "plash-libc.h"
 #include "powerbox.h"
+#include "config-read.h"
 
 
 #define NAME "pola-run"
@@ -615,7 +617,7 @@ int main(int argc, char **argv)
 			   caps_empty, fds_empty),
 	     &result);
     filesys_obj_free(fs_op);
-    if(expect_cap1(result, &state.root_dir) < 0) {
+    if(!pl_unpack(r, result, METHOD_R_CAP, "c", &state.root_dir)) {
       fprintf(stderr, NAME_MSG _("get-root failed\n"));
       return 1;
     }

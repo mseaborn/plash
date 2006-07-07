@@ -38,8 +38,6 @@ def call(obj, result, method, *args):
 
 m.add_format('resolve_dir', 'cdiS')
 
-m.add_format('r_cap', 'c')
-
 m.add_format('fs_make_node', '')
 m.add_format('fs_attach_at_path', 'cSc')
 m.add_format('fs_resolve_populate', 'ccdiS')

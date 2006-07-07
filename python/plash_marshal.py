@@ -238,8 +238,10 @@ add_format('fsop_connect', 'fS')
 add_format('fsop_bind', 'fS')
 add_format('fsop_exec', M_fsop_exec())
 
+# Common response messages
 add_format('okay', '')
 add_format('fail', 'i')
+add_format('r_cap', 'c')
 
 add_format('r_fsop_open', 'f')
 add_format('r_fsop_open_dir', 'fc')
@@ -504,7 +506,7 @@ def add_method(name, result):
 
 #add_method('fsop_copy', 'r_fsop_copy')
 #add_method('fsop_get_dir', ...)
-#add_method('fsop_get_root_dir', ...)
+add_method('fsop_get_root_dir', 'r_cap')
 #add_method('fsop_get_obj', ...)
 add_method('fsop_log', 'okay')
 

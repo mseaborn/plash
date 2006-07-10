@@ -94,6 +94,7 @@ static PyObject *plpy_cap_close_all_connections(PyObject *self, PyObject *args)
 }
 
 __asm__(".weak plash_libc_duplicate_connection");
+__asm__(".weak plash_libc_kernel_execve");
 
 static PyObject *plpy_libc_duplicate_connection(PyObject *self, PyObject *args)
 {
@@ -113,6 +114,72 @@ static PyObject *plpy_libc_duplicate_connection(PyObject *self, PyObject *args)
 		    "The symbol plash_libc_duplicate_connection is not defined; the process is probably not running under the Plash environment");
     return NULL;
   }
+}
+
+/* This calls the execve() system call, without being intercepted by
+   Plash's changes to libc.  The fact that we have to duplicate
+   Python's wrapping of execve() is a bit of a pain.  Maybe Plash's
+   libc should provide a flag to disable its interception instead,
+   rather than providing an alternative entry point. */
+/* This is somewhat simpler than Python's execve() wrapper in
+   posixmodule.c because it doesn't perform any conversions, which
+   should arguably be done in Pythonland instead of C. */
+static PyObject *plpy_libc_kernel_execve(PyObject *self, PyObject *args)
+{
+  char *path;
+  PyObject *argv, *env;
+  char **argv_list, **env_list;
+  int argv_size;
+  int env_size;
+  int i;
+  if(!PyArg_ParseTuple(args, "sOO:kernel_execve",
+		       &path, &argv, &env) ||
+     !PyTuple_Check(argv) ||
+     !PyTuple_Check(env)) {
+    return NULL;
+  }
+
+  if(!plash_libc_kernel_execve) {
+    PyErr_SetString(PyExc_Exception,
+		    "The symbol plash_libc_kernel_execve is not defined; the process is probably not running under the Plash environment");
+    return NULL;
+  }
+  
+  argv_size = PyTuple_Size(argv);
+  argv_list = PyMem_NEW(char *, argv_size + 1);
+  if(!argv_list) {
+    PyErr_NoMemory();
+    goto fail_0;
+  }
+  for(i = 0; i < argv_size; i++) {
+    if(!PyArg_Parse(PyTuple_GetItem(argv, i), "s", &argv_list[i])) {
+      goto fail_1;
+    }
+  }
+  argv_list[argv_size] = NULL;
+  
+  env_size = PyTuple_Size(env);
+  env_list = PyMem_NEW(char *, env_size + 1);
+  if(!env_list) {
+    PyErr_NoMemory();
+    goto fail_1;
+  }
+  for(i = 0; i < env_size; i++) {
+    if(!PyArg_Parse(PyTuple_GetItem(env, i), "s", &env_list[i])) {
+      goto fail_2;
+    }
+  }
+  env_list[env_size] = NULL;
+
+  plash_libc_kernel_execve(path, argv_list, env_list);
+
+  PyErr_SetFromErrno(PyExc_OSError);
+ fail_2:
+  PyMem_Free(env_list);
+ fail_1:
+  PyMem_Free(argv_list);
+ fail_0:
+  return NULL;
 }
 
 
@@ -313,6 +380,10 @@ static PyMethodDef module_methods[] = {
     "newly-forked process as soon as it is created.  If this is not done,\n"
     "both processes will try to use the connection (if only to drop object\n"
     "references), likely leading to a protocol violation." },
+
+  { "kernel_execve", plpy_libc_kernel_execve, METH_VARARGS,
+    "Calls the kernel's execve() system call, avoiding interception by\n"
+    "Plash's libc." },
   
   { "libc_duplicate_connection", plpy_libc_duplicate_connection, METH_NOARGS,
     "Duplicates the connection that libc has with the server.\n"

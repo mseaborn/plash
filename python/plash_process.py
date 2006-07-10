@@ -8,6 +8,10 @@ import plash_env
 import sys
 
 
+def kernel_execve(cmd, argv, env):
+    return plash.kernel_execve(cmd, tuple(argv),
+                               tuple([x[0]+"="+x[1] for x in env.items()]))
+
 # Attributes:
 # env: dict listing environment variables
 # cmd: pathname of command to execve()
@@ -65,6 +69,10 @@ class Process_spec:
 
     def spawn(self):
         self.plash_setup()
+        if plash_env.under_plash:
+            my_execve = kernel_execve
+        else:
+            my_execve = os.execve
         # Doing this in Python is a little risky.  We must ensure that
         # no freeing of Plash objects occurs before the call to
         # cap_close_all_connections() in the newly-forked process,
@@ -77,7 +85,7 @@ class Process_spec:
             try:
                 plash.cap_close_all_connections()
                 try:
-                    os.execve(self.cmd, [self.arg0] + self.args, self.env)
+                    my_execve(self.cmd, [self.arg0] + self.args, self.env)
                 except:
                     pass
                 print "execve failed"

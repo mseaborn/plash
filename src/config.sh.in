@@ -47,6 +47,8 @@ GLIBC_SO_DIR=$GLIBC
 
 CC=@CC@
 USE_GTK=@with_gtk@
+USE_PYTHON=@with_python@
+PYTHON=@PYTHON@
 
 PLASH_EXECUTABLES="
 	pola-run

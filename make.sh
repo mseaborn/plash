@@ -565,6 +565,13 @@ build_gtk_powerbox () {
   fi
 }
 
+build_python_module () {
+  if [ "$USE_PYTHON" = yes ]; then
+    echo Building Python module
+    (cd python && $PYTHON setup.py build)
+  fi
+}
+
 
 if [ "$1" != "--include" ]; then
 
@@ -579,5 +586,6 @@ build_libc
 build_libpthread
 build_shell_etc
 build_gtk_powerbox
+build_python_module
 
 fi

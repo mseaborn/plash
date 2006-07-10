@@ -32,7 +32,7 @@ def method_id(name, code):
     methods_by_name[name] = x
     methods_by_code[code] = x
 
-import methods
+import plash_methods
 
 
 class Format_str:

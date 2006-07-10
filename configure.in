@@ -5,6 +5,18 @@ AC_PROG_CC(gcc-3.3 gcc)
 AC_CONFIG_FILES([src/config.sh])
 
 
+m4_include(m4/ac_python_devel.m4)
+
+AC_ARG_WITH([python],
+            AC_HELP_STRING([--without-python],
+                           [if Python should not be used]),
+            [with_python=$withval],
+            [with_python=yes])
+if test "$with_python" = yes; then
+  AC_PYTHON_DEVEL()
+fi
+
+
 AC_ARG_WITH([gtk],
             AC_HELP_STRING([--without-gtk],
                            [if Gtk should not be used]),
@@ -45,4 +57,5 @@ fi
 AC_SUBST(PACKAGE_VERSION)
 AC_SUBST(GLIBC_DIR)
 AC_SUBST(with_gtk)
+AC_SUBST(with_python)
 AC_OUTPUT

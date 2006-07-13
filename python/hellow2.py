@@ -15,10 +15,14 @@ root_node = ns.make_node()
 
 # Populate the namespace by binding selected directories taken
 # from our root directory.
-ns.attach_at_path(root_node, "/bin", ns.resolve_obj(caller_root, "/bin"))
-ns.attach_at_path(root_node, "/lib", ns.resolve_obj(caller_root, "/lib"))
-ns.attach_at_path(root_node, "/usr", ns.resolve_obj(caller_root, "/usr"))
-ns.attach_at_path(root_node, "/dev/null", ns.resolve_obj(caller_root, "/dev/null"))
+ns.attach_at_path(root_node, "/bin",
+                  ns.make_read_only_proxy(ns.resolve_obj(caller_root, "/bin")))
+ns.attach_at_path(root_node, "/lib",
+                  ns.make_read_only_proxy(ns.resolve_obj(caller_root, "/lib")))
+ns.attach_at_path(root_node, "/usr",
+                  ns.make_read_only_proxy(ns.resolve_obj(caller_root, "/usr")))
+ns.attach_at_path(root_node, "/dev/null",
+                  ns.resolve_obj(caller_root, "/dev/null"))
 
 # Get a directory object for this namespace.
 root = ns.dir_of_node(root_node)

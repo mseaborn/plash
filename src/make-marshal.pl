@@ -127,6 +127,7 @@ my $methods =
      ['RMc2', 'r_make_conn2'],
    ['Mkfs', 'make_fs_op'],
    ['Mkud', 'make_union_dir'],
+   ['Mkro', 'make_read_only_proxy'], # 'c'
 
    # Executable objects
    ['Exep', 'eo_is_executable'],

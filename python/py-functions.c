@@ -24,6 +24,7 @@
 
 #include "filesysobj.h"
 #include "filesysobj-real.h"
+#include "filesysobj-readonly.h"
 #include "cap-protocol.h"
 #include "fs-operations.h"
 #include "marshal.h"
@@ -372,6 +373,21 @@ static void plpy_fs_print_tree(cap_t obj1, region_t r, struct cap_args args,
   pl_args_free(&args);
 }
 
+static void
+plpy_make_read_only_proxy(cap_t obj1, region_t r, struct cap_args args,
+			  struct cap_args *result)
+{
+  cap_t obj;
+  if(pl_unpack(r, args, METHOD_MAKE_READ_ONLY_PROXY, "c", &obj)) {
+    *result = pl_pack(r, METHOD_R_CAP, "c",
+		      make_read_only_proxy(obj));
+  }
+  else {
+    *result = pl_pack(r, METHOD_FAIL_UNKNOWN_METHOD, "");
+    pl_args_free(&args);
+  }
+}
+
 
 DECLARE_VTABLE(defaults_vtable);
 #include "out-vtable-defaults.h"
@@ -453,5 +469,6 @@ void initplash(void)
   ADD_FUNCTION("fs_resolve_populate", plpy_fs_resolve_populate);
   ADD_FUNCTION("fs_dir_of_node", plpy_fs_dir_of_node);
   ADD_FUNCTION("fs_print_tree", plpy_fs_print_tree);
+  ADD_FUNCTION("make_read_only_proxy", plpy_make_read_only_proxy);
   ADD_FUNCTION("cap_make_connection", plpy_make_conn2);
 }

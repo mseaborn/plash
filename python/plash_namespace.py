@@ -37,6 +37,7 @@ def call(obj, result, method, *args):
 
 
 m.add_format('resolve_dir', 'cdiS')
+m.add_format('resolve_obj', 'cdiiS')
 
 m.add_format('fs_make_node', '')
 m.add_format('fs_attach_at_path', 'cSc')
@@ -49,8 +50,21 @@ conn_maker = plash.make_conn_maker()
 
 
 def resolve_dir(root, pathname, cwd=None, symlink_limit=100):
+    """Resolve pathname relative to root directory and optional cwd.
+    Follows symlinks.  Returns a dirstack object.  Fails if the
+    pathname does not resolve to a directory."""
     return call(plash.resolve_dir, 'r_cap',
                 'resolve_dir', root, cwd, symlink_limit, pathname)
+
+def resolve_obj(root, pathname, cwd=None, symlink_limit=100, nofollow=False):
+    """Resolve pathname relative to root directory and optional cwd.
+    Follows symlinks."""
+    if nofollow:
+        nofollow = 1
+    else:
+        nofollow = 0
+    return call(plash.resolve_obj, 'r_cap',
+                'resolve_obj', root, cwd, symlink_limit, nofollow, pathname)
 
 
 def make_node():

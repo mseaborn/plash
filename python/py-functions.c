@@ -223,6 +223,34 @@ static void plpy_make_conn2(cap_t obj, region_t r, struct cap_args args,
   }
 }
 
+static void plpy_resolve_obj(cap_t obj, region_t r, struct cap_args args,
+			     struct cap_args *result)
+{
+  cap_t root, cwd;
+  int symlink_limit, nofollow;
+  seqf_t pathname;
+  if(pl_unpack(r, args, METHOD_RESOLVE_OBJ, "cdiiS",
+	       &root, &cwd, &symlink_limit, &nofollow, &pathname) &&
+     (cwd == NULL || dir_stack_upcast(cwd) != NULL))
+  {
+    int err;
+    cap_t obj =
+      resolve_obj_simple(root, cwd ? dir_stack_upcast(cwd) : NULL, pathname,
+			 symlink_limit, nofollow, &err);
+    
+    if(obj) {
+      *result = pl_pack(r, METHOD_R_CAP, "c", obj);
+    }
+    else {
+      *result = pl_pack(r, METHOD_FAIL, "i", err);
+    }
+  }
+  else {
+    *result = pl_pack(r, METHOD_FAIL_UNKNOWN_METHOD, "");
+  }
+  pl_args_free(&args);
+}
+
 static void plpy_resolve_dir(cap_t obj, region_t r, struct cap_args args,
 			     struct cap_args *result)
 {
@@ -418,6 +446,7 @@ void initplash(void)
 #define ADD_FUNCTION(py_name, c_function) \
   PyModule_AddObject(mod, py_name, plpy_obj_to_py(wrap_function(c_function)))
 
+  ADD_FUNCTION("resolve_obj", plpy_resolve_obj);
   ADD_FUNCTION("resolve_dir", plpy_resolve_dir);
   ADD_FUNCTION("fs_make_node", plpy_fs_make_node);
   ADD_FUNCTION("fs_attach_at_path", plpy_fs_attach_at_path);

@@ -143,7 +143,7 @@ my $methods =
    ['Gopt', 'get_option'],
 
    ['Rsdr', 'resolve_dir'], # 'cdiS'
-   ['Rsob', 'resolve_obj_simple'],
+   ['Rsob', 'resolve_obj'], # 'cdiiS'
    ['Fsmn', 'fs_make_node'], # ''
    ['Fsap', 'fs_attach_at_path'], # 'cSc'
    ['Fsrp', 'fs_resolve_populate'],

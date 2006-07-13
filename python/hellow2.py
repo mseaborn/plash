@@ -9,15 +9,17 @@ from plash_process import Process_spec
 # Create a file namespace for the subprocess:
 # First, get the root directory of our own file namespace.
 caller_root = plash_env.get_root_dir()
+
 # Create an empty namespace.
 root_node = ns.make_node()
+
 # Populate the namespace by binding selected directories taken
 # from our root directory.
-# By default, read-only versions of the objects are bound.
-ns.resolve_populate(caller_root, root_node, "/bin")
-ns.resolve_populate(caller_root, root_node, "/lib")
-ns.resolve_populate(caller_root, root_node, "/usr")
-ns.resolve_populate(caller_root, root_node, "/dev/null", flags=ns.FS_OBJECT_RW)
+ns.attach_at_path(root_node, "/bin", ns.resolve_obj(caller_root, "/bin"))
+ns.attach_at_path(root_node, "/lib", ns.resolve_obj(caller_root, "/lib"))
+ns.attach_at_path(root_node, "/usr", ns.resolve_obj(caller_root, "/usr"))
+ns.attach_at_path(root_node, "/dev/null", ns.resolve_obj(caller_root, "/dev/null"))
+
 # Get a directory object for this namespace.
 root = ns.dir_of_node(root_node)
 # Create an fs_op object for that root directory.

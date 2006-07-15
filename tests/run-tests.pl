@@ -173,6 +173,27 @@ test('utimes',
      });
 
 
+test('clobber_comm_fd',
+     sub {
+       run_cmd('gcc', '-Wall', "$start_dir/clobber-comm-fd.c",
+	       '-o', "$start_dir/clobber-comm-fd");
+       my $x = cmd_capture(@pola_run, '-B',
+			   '-f', "$start_dir/clobber-comm-fd",
+			   '-e', "$start_dir/clobber-comm-fd");
+       die if $x ne "close refused as expected\n";
+     });
+
+# Same test but with executable linked to libpthread.so
+test('clobber_comm_fd_pthread',
+     sub {
+       run_cmd('gcc', '-Wall', "$start_dir/clobber-comm-fd.c",
+	       '-o', "$start_dir/clobber-comm-fd", '-lpthread');
+       my $x = cmd_capture(@pola_run, '-B',
+			   '-f', "$start_dir/clobber-comm-fd",
+			   '-e', "$start_dir/clobber-comm-fd");
+       die if $x ne "close refused as expected\n";
+     });
+
 
 sub test {
   my ($name, $f) = @_;

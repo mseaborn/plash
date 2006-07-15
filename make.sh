@@ -331,16 +331,6 @@ build_libc () {
 build_libpthread () {
   echo 'Making libpthread.so (linuxthreads version)'
 
-  # This is not used now:
-  PTHREAD_OBJS="attr.os cancel.os condvar.os join.os manager.os mutex.os ptfork.os ptlongjmp.os pthread.os pt-sigsuspend.os signals.os specific.os errno.os lockfile.os semaphore.os spinlock.os rwlock.os pt-machine.os oldsemaphore.os events.os getcpuclockid.os pspinlock.os barrier.os ptclock_gettime.os ptclock_settime.os sighandler.os pthandles.os libc-tls-loc.os pt-allocrtsig.os
-	ptw-write.os ptw-read.os ptw-close.os ptw-fcntl.os ptw-recv.os ptw-recvfrom.os ptw-recvmsg.os ptw-send.os ptw-sendmsg.os ptw-sendto.os ptw-fsync.os ptw-lseek.os ptw-lseek64.os ptw-llseek.os ptw-msync.os ptw-nanosleep.os ptw-pause.os ptw-pread.os ptw-pread64.os ptw-pwrite.os ptw-pwrite64.os ptw-tcdrain.os ptw-wait.os ptw-waitpid.os
-	pt-system.os old_pthread_atfork.os pthread_atfork.os"
-  # removed:
-  # ptw-accept.os ptw-connect.os ptw-open.os ptw-open64.os
-  for F in $PTHREAD_OBJS; do echo $F; done > $OUT/obj-file-list-libpthread
-
-  #(cd src/sysdeps; ./make.sh)
-
   # linuxthreads builds its own linuxthreads/libc.so and then links
   # against it.  This is a hack for changing which symbols
   # libpthread.so imports from libc.so.  The code in
@@ -383,10 +373,11 @@ build_libpthread () {
   echo "  Making $OUT/libpthread_rem.a"
   cp -av $GLIBC/linuxthreads/libpthread_pic.a $OUT/libpthread_rem.a
   ar -dv $OUT/libpthread_rem.a \
-	ptw-accept.os ptw-connect.os ptw-open.os ptw-open64.os
+	ptw-accept.os ptw-connect.os ptw-open.os ptw-open64.os \
+	ptw-close.os
   
   # linuxthreads-extras.os ensures that libpthread.so contains __open
-  # and other symbols, which is needs to export.
+  # and other symbols, which it needs to export.
   # Actually, I can't reproduce any problems when this isn't included
   # (eg. mp3blaster links fine with it gone, even with LD_BIND_NOW=1),
   # so I can't remember exactly why it's there.
@@ -394,8 +385,6 @@ build_libpthread () {
   # it is for the normal build (er, except for weak/non-weak differences).
   $CC -c src/linuxthreads-extras.c -o $OUT/linuxthreads-extras.os \
 	-O2 -Wall -fPIC -g
-  PTHREAD_OBJS2="src/sysdeps/linuxthreads-extras.os
-	`for F in $PTHREAD_OBJS; do echo $GLIBC/linuxthreads/$F; done`"
 
   echo "  Linking $OUT/libpthread.so"
   #  * Note that "-Blinuxthreads -Bcsu" are necessary: they cause

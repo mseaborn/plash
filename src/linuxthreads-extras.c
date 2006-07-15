@@ -55,3 +55,12 @@ int __accept(int sock_fd, struct sockaddr *addr, socklen_t addr_len)
   return __libc_accept(sock_fd, addr, addr_len);
 }
 weak_alias(__accept, accept)
+
+
+int __libc_close(int fd);
+
+int __close(int fd)
+{
+  return __libc_close(fd);
+}
+weak_alias(__close, close)

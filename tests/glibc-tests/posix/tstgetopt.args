@@ -1,0 +1,1 @@
+-a -b -cfoobar --required foobar --optional=bazbug --none random --col --color --colour

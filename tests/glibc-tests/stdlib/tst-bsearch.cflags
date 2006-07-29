@@ -1,0 +1,1 @@
+-msse -malign-double -mpreferred-stack-boundary=4

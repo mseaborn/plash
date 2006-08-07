@@ -378,6 +378,7 @@ int handle_arguments(region_t r, struct state *state,
 	    add_to_arg_list(r, state, argv[i]);
 	  }
 	}
+	goto arg_handled;
       }
 
       case 'B': {

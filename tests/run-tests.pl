@@ -187,10 +187,10 @@ test('clobber_comm_fd',
 test('clobber_comm_fd_pthread',
      sub {
        run_cmd('gcc', '-Wall', "$start_dir/clobber-comm-fd.c",
-	       '-o', "$start_dir/clobber-comm-fd", '-lpthread');
+	       '-o', "$start_dir/clobber-comm-fd-pthread", '-lpthread');
        my $x = cmd_capture(@pola_run, '-B',
-			   '-f', "$start_dir/clobber-comm-fd",
-			   '-e', "$start_dir/clobber-comm-fd");
+			   '-f', "$start_dir/clobber-comm-fd-pthread",
+			   '-e', "$start_dir/clobber-comm-fd-pthread");
        die if $x ne "close refused as expected\n";
      });
 

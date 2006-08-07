@@ -37,6 +37,7 @@
 #include "region.h"
 #include "filesysobj.h"
 #include "filesysobj-real.h"
+#include "filesysobj-readonly.h"
 #include "resolve-filename.h"
 #include "build-fs.h"
 #include "fs-operations.h"
@@ -331,6 +332,12 @@ int handle_arguments(region_t r, struct state *state,
 		  src_filename, strerror(err));
 	}
 	else {
+	  /* Unless the "w" or "objrw" flag is given, attach a
+	     read-only version of the object. */
+	  if(!((flags.build_fs & FS_SLOT_RWC) ||
+	       (flags.build_fs & FS_OBJECT_RW))) {
+	    obj = make_read_only_proxy(obj);
+	  }
 	  if(fs_attach_at_pathname(state->root_node, state->cwd,
 				   seqf_string(dest_filename), obj,
 				   &err) < 0) {

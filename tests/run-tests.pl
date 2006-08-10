@@ -185,6 +185,13 @@ test('utimes',
      });
 
 
+test('python_hellow',
+     sub {
+       my $data = cmd_capture('python', "$start_dir/hellow.py");
+       if($data ne "Hello world!\nexited with status: 0\n") { die "Got: \"$data\"" }
+     });
+
+
 test('clobber_comm_fd',
      sub {
        run_cmd('gcc', '-Wall', "$start_dir/clobber-comm-fd.c",

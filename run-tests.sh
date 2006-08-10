@@ -22,4 +22,3 @@ export PYTHONPATH=$DIR/python:$PYTHONPATH
 
 cd tests
 ./run-tests.pl
-python hellow.py

@@ -11,20 +11,11 @@ $start_dir =~ /^\// || die;
 
 run_cmd('rm -rf out/');
 
-$pola_run = "$start_dir/../bin/pola-run";
-$pola_shell = "$start_dir/../bin/pola-shell";
-$exec_object = "$start_dir/../bin/exec-object";
+$pola_run = "pola-run";
+$pola_shell = "pola-shell";
+$exec_object = "exec-object";
 
-if(0) {
-  @pola_run = ($pola_run);
-}
-else {
-  $ENV{'PLASH_DIR'} = "$start_dir/..";
-  @pola_run = ($pola_run, '--sandbox-prog', "$start_dir/strace-wrapper.sh",
-	       '--config', "ldso-path=$start_dir/../shobj/ld.so",
-	       '-fl', "$start_dir/../lib");
-}
-
+@pola_run = ($pola_run);
 
 
 test('shell_hello',
@@ -33,10 +24,31 @@ test('shell_hello',
        if($data ne "Hello world!\n") { die "Got: \"$data\"" }
      });
 
+test('shell_attach',
+     sub {
+       my $x = "test contents";
+       write_file('my_file', $x);
+       my $data = cmd_capture($pola_shell, '-c', "cat some_file_name=(F my_file)");
+       if($data ne $x) { die "Got: \"$data\"" }
+     });
+test('shell_attach_name',
+     sub {
+       my $data = cmd_capture($pola_shell, '-c', "echo some_file_name=(F .)");
+       if($data ne "some_file_name\n") { die "Got: \"$data\"" }
+     });
+
 test('shell_redirect',
      sub {
        my $data = cmd_capture($pola_shell, '-c', "echo 'Hello world!' 1>&2");
        if($data ne "Hello world!\n") { die "Got: \"$data\"" }
+     });
+
+test('shell_bash_exec',
+     sub {
+       # NB. Add "+ ." just to suppress bash's warning
+       my $data = cmd_capture($pola_shell, '-c',
+			      "sh -c '/bin/echo \"Successful call\"' + .");
+       if($data ne "Successful call\n") { die "Got: \"$data\"" }
      });
 
 test('shell_execobj_hello',
@@ -85,7 +97,7 @@ test('shell_cwd_set',
 test('shell_execobj_cwd_unset',
      sub {
        my $data = cmd_capture($pola_shell, '-c', <<END);
-def mycmd = capcmd $exec_object /bin/pwd /x=(mkfs /lib /bin /usr);
+def mycmd = capcmd $exec_object /bin/pwd /x=(mkfs /lib /bin /usr $ENV{'PLASH_LIBRARY_DIR'});
 mycmd
 END
        # Ensure that pwd printed an error.
@@ -98,7 +110,7 @@ test('shell_execobj_cwd_set',
      sub {
        my $caller_cwd = getcwd();
        my $data = cmd_capture($pola_shell, '-c', <<END);
-def mycmd = capcmd $exec_object /bin/pwd /x=(mkfs /lib /bin /usr);
+def mycmd = capcmd $exec_object /bin/pwd /x=(mkfs /lib /bin /usr $ENV{'PLASH_LIBRARY_DIR'});
 mycmd + .
 END
        # Check that output contains string.
@@ -180,7 +192,7 @@ test('clobber_comm_fd',
        my $x = cmd_capture(@pola_run, '-B',
 			   '-f', "$start_dir/clobber-comm-fd",
 			   '-e', "$start_dir/clobber-comm-fd");
-       die if $x ne "close refused as expected\n";
+       die "Got: \"$x\"" if $x ne "close refused as expected\n";
      });
 
 # Same test but with executable linked to libpthread.so
@@ -191,7 +203,7 @@ test('clobber_comm_fd_pthread',
        my $x = cmd_capture(@pola_run, '-B',
 			   '-f', "$start_dir/clobber-comm-fd-pthread",
 			   '-e', "$start_dir/clobber-comm-fd-pthread");
-       die if $x ne "close refused as expected\n";
+       die "Got: \"$x\"" if $x ne "close refused as expected\n";
      });
 
 
@@ -237,4 +249,12 @@ sub cmd_capture {
     die "Return code $rc"
   }
   $data
+}
+
+sub write_file {
+  my ($file, $data) = @_;
+  my $f = IO::File->new($file, 'w');
+  if(!defined $f) { die "Can't open `$file' for writing" }
+  print $f $data;
+  $f->close();
 }

@@ -9,5 +9,5 @@
 #  /var/lib/plash-chroot-jail/special/ld-linux.so.2 "$@"
 
 strace -fc -o /dev/null \
-  env LD_LIBRARY_PATH=$PLASH_DIR/lib \
-  $PLASH_DIR/shobj/ld.so "$@"
+  env LD_LIBRARY_PATH=$PLASH_LIBRARY_DIR \
+  $PLASH_LDSO_PATH "$@"

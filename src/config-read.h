@@ -21,9 +21,7 @@
 #define PLASH_INC_CONFIG_READ_H
 
 
-extern const char *pl_ldso_path;
-
-void read_config_string(const char *str);
+const char *pl_get_ldso_path(void);
 
 
 #endif

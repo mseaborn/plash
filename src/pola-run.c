@@ -149,7 +149,6 @@ struct state {
   int debug;
   const char *pet_name;
   int powerbox;
-  const char *sandbox_prog;
 };
 
 void init_state(struct state *state)
@@ -164,7 +163,6 @@ void init_state(struct state *state)
   state->debug = FALSE;
   state->pet_name = NULL;
   state->powerbox = FALSE;
-  state->sandbox_prog = NULL;
 }
 
 void usage(FILE *fp)
@@ -501,24 +499,6 @@ int handle_arguments(region_t r, struct state *state,
       goto arg_handled;
     }
 
-    if(!strcmp(arg, "--sandbox-prog")) {
-      if(i + 1 > argc) {
-	fprintf(stderr, NAME_MSG _("--sandbox-prog expects 1 parameter\n"));
-	return 1;
-      }
-      state->sandbox_prog = argv[i++];
-      goto arg_handled;
-    }
-
-    if(!strcmp(arg, "--config")) {
-      if(i + 1 > argc) {
-	fprintf(stderr, NAME_MSG _("--config expects 1 parameter\n"));
-	return 1;
-      }
-      read_config_string(argv[i++]);
-      goto arg_handled;
-    }
-
     if(!strcmp(arg, "--help")) { usage(stdout); return 1; }
 
   unknown:
@@ -540,6 +520,7 @@ static void args_to_exec_elf_program
    const char **cmd_out, int *argc_out, const char ***argv_out,
    int debug)
 {
+  const char *sandbox_prog = getenv("PLASH_SANDBOX_PROG");
   int extra_args = 2 + (debug ? 1:0) + 2 + 2;
   const char **argv2;
   int i, j;
@@ -548,7 +529,7 @@ static void args_to_exec_elf_program
   argv2 = region_alloc(r, (argc + extra_args + 1) * sizeof(char *));
   argv2[0] = argv[0];
   i = 1;
-  if(!state->sandbox_prog) {
+  if(!sandbox_prog) {
     if(under_plash) {
       *cmd_out = "/run-as-anonymous";
     }
@@ -585,7 +566,7 @@ static void args_to_exec_elf_program
     }
   }
   else {
-    *cmd_out = state->sandbox_prog;
+    *cmd_out = sandbox_prog;
   }
   
   argv2[i++] = executable_filename;

@@ -12,6 +12,15 @@ def kernel_execve(cmd, argv, env):
     return plash.kernel_execve(cmd, tuple(argv),
                                tuple([x[0]+"="+x[1] for x in env.items()]))
 
+def add_to_path(dir, path):
+    """Insert string <dir> into colon-separated list <path> if it is not
+    already present.  Used for LD_LIBRARY_PATH."""
+    elts = string.split(path, ":")
+    if dir not in elts:
+        elts.insert(0, dir)
+        return string.join(elts, ":")
+    return path
+
 # Attributes:
 # env: dict listing environment variables
 # cmd: pathname of command to execve()
@@ -36,14 +45,34 @@ class Process_spec:
         self.env['PLASH_COMM_FD'] = str(fd.fileno())
         fcntl.fcntl(fd.fileno(), fcntl.F_SETFD, 0) # Unset FD_CLOEXEC flag
 
-        orig_cmd = self.cmd
-        if plash_env.under_plash:
-            self.cmd = "/run-as-anonymous"
+        # Ensure that certain environment variables get preserved
+        # across the invocation of a setuid program.
+        def preserve_env(args):
+            for var in ['LD_LIBRARY_PATH', 'LD_PRELOAD']:
+                if var in self.env:
+                    args.extend(["-s", var + '=' + self.env[var]])
+
+        if not plash_env.under_plash:
+            if 'PLASH_SANDBOX_PROG' in os.environ:
+                prefix_cmd = [os.environ['PLASH_SANDBOX_PROG']]
+                # prefix_cmd = string.split(os.environ['PLASH_SANDBOX_PROGV'], ":")
+            else:
+                self.env['LD_LIBRARY_PATH'] = \
+                    add_to_path("/usr/lib/plash/lib",
+                                self.env.get('LD_LIBRARY_PATH', ''))
+                prefix_cmd = ["/usr/lib/plash/run-as-anonymous"]
+                preserve_env(prefix_cmd)
+                prefix_cmd.append("/special/ld-linux.so.2")
         else:
-            self.cmd = "/usr/lib/plash/run-as-anonymous"
-        self.args = ["-s", "LD_LIBRARY_PATH=/usr/lib/plash/lib",
-                     "/special/ld-linux.so.2",
-                     orig_cmd] + self.args
+            if 'PLASH_P_SANDBOX_PROG' in os.environ:
+                prefix_cmd = [os.environ['PLASH_P_SANDBOX_PROG']]
+            else:
+                prefix_cmd = ["/run-as-anonymous"]
+                preserve_env(prefix_cmd)
+
+        orig_cmd = self.cmd
+        self.cmd = prefix_cmd[0]
+        self.args = prefix_cmd[1:] + [orig_cmd] + self.args
 
         # This is a hack to ensure that the FD doesn't get GC'd and closed
         self.fd = fd

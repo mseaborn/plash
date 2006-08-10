@@ -523,28 +523,32 @@ void args_to_exec_elf_program
    int argc, const char **argv,
    const char **cmd_out, int *argc_out, const char ***argv_out)
 {
+  const char *sandbox_prog = getenv("PLASH_SANDBOX_PROG");
   int debug = 0;
   int extra_args = 4 + (debug ? 1:0);
   const char **argv2;
-  int i;
+  int i, j;
   assert(argc >= 1);
 
   argv2 = region_alloc(r, (argc + extra_args + 1) * sizeof(char *));
   argv2[0] = argv[0];
-  *cmd_out = PLASH_SETUID_BIN_INSTALL "/run-as-anonymous";
   i = 1;
-  if(debug) argv2[i++] = "--debug";
-  argv2[i++] = "-s";
-  argv2[i++] = "LD_LIBRARY_PATH=" LIB_INSTALL;
-  argv2[i++] = "/special/ld-linux.so.2";
-  if(0) {
-    argv2[i++] = "--library-path";
-    argv2[i++] = PLASH_LD_LIBRARY_PATH;
+  if(!sandbox_prog) {
+    *cmd_out = PLASH_SETUID_BIN_INSTALL "/run-as-anonymous";
+    if(debug) argv2[i++] = "--debug";
+    argv2[i++] = "-s";
+    argv2[i++] = "LD_LIBRARY_PATH=" LIB_INSTALL;
+    argv2[i++] = "/special/ld-linux.so.2";
   }
+  else {
+    *cmd_out = sandbox_prog;
+  }
+  
   argv2[i++] = executable_filename;
-  for(i = 1; i < argc; i++) { argv2[extra_args + i] = argv[i]; }
-  argv2[extra_args + argc] = NULL;
-  *argc_out = extra_args + argc;
+  assert(i <= extra_args + 1);
+  for(j = 1; j < argc; j++) { argv2[i++] = argv[j]; }
+  argv2[i] = NULL;
+  *argc_out = i;
   *argv_out = argv2;
 }
 
@@ -1532,6 +1536,7 @@ int command_invocation_sec
   struct filesys_obj *root = 0;
   struct dir_stack *cwd;
   int err;
+  const char *libc_path;
 
   /* Process the arguments. */
   p.state = state;
@@ -1560,6 +1565,11 @@ int command_invocation_sec
     sh_resolve_populate(state, &p, filename, FS_READ_ONLY | FS_FOLLOW_SYMLINKS);
     /* FIXME: should restrict this to "X0" or whatever is named in DISPLAY. */
     sh_resolve_populate(state, &p, seqf_string("/tmp/.X11-unix/"), FS_OBJECT_RW | FS_FOLLOW_SYMLINKS);
+  }
+  libc_path = getenv("PLASH_LIBRARY_DIR");
+  if(libc_path) {
+    sh_resolve_populate(state, &p, seqf_string(libc_path),
+			FS_READ_ONLY | FS_FOLLOW_SYMLINKS);
   }
 
   /* Add the executable:  This is necessary for scripts (using the

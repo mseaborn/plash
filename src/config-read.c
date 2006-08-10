@@ -21,23 +21,8 @@
 #include "config-read.h"
 
 
-/* Pathname that sandboxed processes should be told to use to invoke
-   the dynamic linker, in order to handle execve(). */
-const char *pl_ldso_path = "/special/ld-linux.so.2";
-
-int string_has_prefix(const char *str1, const char *str2)
+const char *pl_get_ldso_path()
 {
-  while(1) {
-    if(*str2 == 0) { return TRUE; }
-    if(*str1 != *str2) { return FALSE; }
-    str1++;
-    str2++;
-  }
-}
-
-void read_config_string(const char *str)
-{
-  if(string_has_prefix(str, "ldso-path=")) {
-    pl_ldso_path = str + 10;
-  }
+  const char *p = getenv("PLASH_LDSO_PATH");
+  return p ? p : "/special/ld-linux.so.2";
 }

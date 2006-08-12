@@ -239,11 +239,14 @@ sub cmd_capture {
   pipe(PIPE_READ, PIPE_WRITE);
   my $pid = fork();
   if($pid == 0) {
-    close(PIPE_READ);
-    open(STDOUT, ">&PIPE_WRITE") || die;
-    open(STDERR, ">&PIPE_WRITE") || die;
-    exec(@cmd);
-    die;
+    eval {
+      close(PIPE_READ);
+      open(STDOUT, ">&PIPE_WRITE") || die;
+      open(STDERR, ">&PIPE_WRITE") || die;
+      exec(@cmd);
+      die;
+    };
+    exit 1;
   }
   close(PIPE_WRITE);
   my @lines = <PIPE_READ>;

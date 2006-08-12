@@ -39,8 +39,10 @@ test('shell_attach_name',
 
 test('shell_redirect',
      sub {
-       my $data = cmd_capture($pola_shell, '-c', "echo 'Hello world!' 1>&2");
-       if($data ne "Hello world!\n") { die "Got: \"$data\"" }
+       my $data = cmd_capture($pola_shell, '-c', "echo 'Hello world!' 1>temp_file");
+       my $data2 = read_file('temp_file');
+       if($data ne '' ||
+	  $data2 ne "Hello world!\n") { die "Got: \"$data2\"" }
      });
 
 test('shell_bash_exec',
@@ -62,8 +64,17 @@ END
 
 test('shell_execobj_2',
      sub {
-       my $data = cmd_capture($pola_shell, '-c', <<END);
-def mycmd = capcmd $exec_object /bin/ls /x=(mkfs /lib /bin /usr);
+       my $extra =
+	 defined $ENV{'PLASH_LIBRARY_DIR'}
+	   ? "/usr/plash-testlib=(F $ENV{'PLASH_LIBRARY_DIR'})"
+	   : '';
+       my $data = cmd_capture({ After_fork => sub {
+				  $ENV{'LD_LIBRARY_PATH'} =
+				    "/usr/plash-testlib:$ENV{'LD_LIBRARY_PATH'}"
+				}
+			      },
+			      $pola_shell, '-c', <<END);
+def mycmd = capcmd $exec_object /bin/ls /x=(mkfs /lib /bin /usr $extra);
 mycmd '/'
 END
        if($data !~ /^bin\nlib\nusr$/m) { die "Got: \"$data\"" }
@@ -98,7 +109,7 @@ test('shell_execobj_cwd_unset',
      sub {
        my $data = cmd_capture($pola_shell, '-c', <<END);
 def mycmd = capcmd $exec_object /bin/pwd /x=(mkfs /lib /bin /usr $ENV{'PLASH_LIBRARY_DIR'});
-mycmd
+mycmd 2>&1
 END
        # Ensure that pwd printed an error.
        # Would be better to invoke perl via exec-object, but exec-object
@@ -196,7 +207,8 @@ test('clobber_comm_fd',
      sub {
        run_cmd('gcc', '-Wall', "$start_dir/clobber-comm-fd.c",
 	       '-o', "$start_dir/clobber-comm-fd");
-       my $x = cmd_capture(@pola_run, '-B',
+       my $x = cmd_capture({ Get_stderr => 1 },
+			   @pola_run, '-B',
 			   '-f', "$start_dir/clobber-comm-fd",
 			   '-e', "$start_dir/clobber-comm-fd");
        die "Got: \"$x\"" if $x ne "close refused as expected\n";
@@ -207,7 +219,8 @@ test('clobber_comm_fd_pthread',
      sub {
        run_cmd('gcc', '-Wall', "$start_dir/clobber-comm-fd.c",
 	       '-o', "$start_dir/clobber-comm-fd-pthread", '-lpthread');
-       my $x = cmd_capture(@pola_run, '-B',
+       my $x = cmd_capture({ Get_stderr => 1 },
+			   @pola_run, '-B',
 			   '-f', "$start_dir/clobber-comm-fd-pthread",
 			   '-e', "$start_dir/clobber-comm-fd-pthread");
        die "Got: \"$x\"" if $x ne "close refused as expected\n";
@@ -235,14 +248,20 @@ sub run_cmd {
 # Run command, capture output.
 # Like backtick operator, but takes a list and doesn't use shell.
 sub cmd_capture {
+  my $opts = {};
+  if(ref($_[0]) eq HASH) { $opts = shift; }
   my @cmd = @_;
+
   pipe(PIPE_READ, PIPE_WRITE);
   my $pid = fork();
   if($pid == 0) {
     eval {
       close(PIPE_READ);
+      if(defined $opts->{After_fork}) { &{$opts->{After_fork}}() }
       open(STDOUT, ">&PIPE_WRITE") || die;
-      open(STDERR, ">&PIPE_WRITE") || die;
+      if($opts->{Get_stderr}) {
+	open(STDERR, ">&PIPE_WRITE") || die;
+      }
       exec(@cmd);
       die;
     };
@@ -259,6 +278,15 @@ sub cmd_capture {
     die "Return code $rc"
   }
   $data
+}
+
+sub read_file {
+  my ($file) = @_;
+  my $f = IO::File->new($file, 'r');
+  if(!defined $f) { die "Can't open `$file' for reading" }
+  my $data = join('', <$f>);
+  $f->close();
+  $data;
 }
 
 sub write_file {

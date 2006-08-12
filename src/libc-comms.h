@@ -48,7 +48,8 @@ int req_and_reply(region_t r, seqt_t msg, seqf_t *reply);
 void libc_log(const char *msg);
 
 
-#define weak_extern(symbol) asm (".weak " #symbol);
+#define weak_extern(symbol) \
+  extern typeof(symbol) symbol __attribute((weak));
 #define weak_alias(name, aliasname) \
   extern int aliasname() __attribute ((weak, alias (#name)));
 
@@ -65,9 +66,6 @@ weak_extern(pthread_mutex_lock)
 weak_extern(pthread_mutex_unlock)
 weak_extern(pthread_mutex_trylock)
 
-/* NB. gcc 4.0 breaks this code.  It wrongly infers that
-   pthread_mutex_lock is always non-null, and optimises away the
-   conditional.  This causes ld.so to segfault. */
 inline static void plash_libc_lock()
 {
 #if 0

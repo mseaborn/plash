@@ -39,9 +39,6 @@
 #include "marshal-pack.h"
 
 
-__asm__(".weak plash_libc_reset_connection");
-
-
 DECLARE_VTABLE(exec_obj_vtable);
 struct exec_obj {
   struct filesys_obj hdr;

@@ -56,8 +56,6 @@
 
 int under_plash = FALSE;
 
-__asm__(".weak plash_libc_kernel_execve");
-
 
 void print_args(int argc, const char **argv)
 {

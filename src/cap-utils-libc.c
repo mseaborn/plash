@@ -43,8 +43,6 @@ int plash_libc_duplicate_connection2()
 }
 #endif
 
-__asm__(".weak plash_libc_duplicate_connection");
-
 
 /* This takes a list of pairs:
    const char *name, cap_t *dest

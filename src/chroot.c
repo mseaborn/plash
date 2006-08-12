@@ -32,8 +32,6 @@
 #include "marshal-pack.h"
 
 
-__asm__(".weak plash_libc_reset_connection");
-
 int main(int argc, const char *argv[])
 {
   region_t r = region_make();

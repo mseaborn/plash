@@ -39,9 +39,6 @@
 #include "parse-filename.h"
 
 
-__asm__(".weak plash_libc_reset_connection");
-
-
 /* If `path' is a cwd-relative pathname, expands it relative to `dir'.
    Otherwise, `path', unmodified, is the result. */
 /* Returns 0 for success, -1 for an invalid (empty) pathname. */

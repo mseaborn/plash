@@ -376,6 +376,14 @@ int new_creat64(const char *filename, int mode)
 /* EXPORT: new_getcwd => WEAK:getcwd __getcwd */
 /* glibc implements getwd in terms of __getcwd. */
 /* What about get_current_dir_name()? */
+/* Cases:
+   getcwd(NULL, 0): returns a dynamically-allocated buffer, as large
+     as necessary.
+   getcwd(NULL, s): returns a dynamically-allocated buffer of size s,
+     or returns an error if s is not large enough.
+   getcwd(buf, s): fills out given buffer if it is large enough,
+     otherwise returns an error.
+*/
 char *new_getcwd(char *buf, size_t size)
 {
   region_t r = region_make();
@@ -388,7 +396,13 @@ char *new_getcwd(char *buf, size_t size)
     m_str(&ok, &msg, "RCwd");
     if(ok) {
       if(!buf) {
-	if(size < msg.size+1) size = msg.size+1;
+	if(size == 0) {
+	  size = msg.size + 1;
+	}
+	else if(size < msg.size + 1) {
+	  __set_errno(ERANGE);
+	  goto error;
+	}
 	buf = malloc(size);
 	if(!buf) { __set_errno(ENOMEM); goto error; }
       }

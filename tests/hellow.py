@@ -12,6 +12,11 @@ ns.resolve_populate(caller_root, root_node, "/bin")
 ns.resolve_populate(caller_root, root_node, "/lib")
 ns.resolve_populate(caller_root, root_node, "/usr")
 ns.resolve_populate(caller_root, root_node, "/dev/null", flags=ns.FS_OBJECT_RW)
+# This is for when running under tests:
+if 'PLASH_LIBRARY_DIR' in os.environ:
+    ns.resolve_populate(caller_root, root_node,
+                        os.environ['PLASH_LIBRARY_DIR'],
+                        flags=ns.FS_FOLLOW_SYMLINKS)
 root = ns.dir_of_node(root_node)
 fs_op = plash.make_fs_op(root)
 

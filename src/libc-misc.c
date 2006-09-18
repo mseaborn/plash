@@ -56,9 +56,6 @@ static void log_msg(const char *msg)
 #endif
 
 
-int my_atoi(const char *str);
-
-
 struct libc_fd *g_fds = NULL; /* Array allocated with malloc() */
 int g_fds_size = 0;
 

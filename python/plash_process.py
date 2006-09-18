@@ -25,7 +25,7 @@ def add_to_path(dir, path):
 # env: dict listing environment variables
 # cmd: pathname of command to execve()
 # arg0
-# argv: list of arguments to pass to execve() (not including usual 0th arg)
+# args: list of arguments to pass to execve() (not including usual 0th arg)
 # fds: dict mapping FD numbers to FDs
 # caps: dict mapping cap names (e.g. "fs_op") to objects
 # conn_maker: object to use for creating new connection
@@ -73,25 +73,6 @@ class Process_spec:
         orig_cmd = self.cmd
         self.cmd = prefix_cmd[0]
         self.args = prefix_cmd[1:] + [orig_cmd] + self.args
-
-        # This is a hack to ensure that the FD doesn't get GC'd and closed
-        self.fd = fd
-
-    def plash_setup2(self):
-        cap_names = self.caps.keys()
-        fd = self.conn_maker.make_conn([self.caps[x] for x in cap_names])
-        self.env['PLASH_CAPS'] = string.join(cap_names, ':')
-        self.env['PLASH_COMM_FD'] = str(fd.fileno())
-        fcntl.fcntl(fd.fileno(), fcntl.F_SETFD, 0) # Unset FD_CLOEXEC flag
-
-        orig_cmd = self.cmd
-        self.cmd = "/usr/bin/strace"
-        plash_dir = "/home/mrs/projects/plash"
-        self.args = ["-f",
-                     "-c", "-o", "/dev/null",
-                     "-E", "LD_LIBRARY_PATH="+plash_dir+"/lib",
-                     plash_dir+"/shobj/ld.so",
-                     orig_cmd] + self.args
 
         # This is a hack to ensure that the FD doesn't get GC'd and closed
         self.fd = fd

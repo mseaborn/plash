@@ -2,11 +2,13 @@ Source: plash
 Section: misc
 Priority: optional
 Maintainer: Mark Seaborn <mrs@mythic-beasts.com>
-Build-Depends: perl, gcc-3.3, libc6-pic, dietlibc, libgtk2.0-dev, libreadline4-dev
+Standards-Version: 3.7.2
+Build-Depends: make (>= 3.80-1), tar, linux-kernel-headers (>= 2.5.999-test7-bk-9), binutils (>= 2.14.90.0.7-5), sed (>= 4.0.5-4), gawk, debhelper, perl, gcc-3.3, dietlibc, libgtk2.0-dev, libreadline5-dev, python-all-dev, bzip2, docbook2x, docbook-xml
 
 Package: plash
 Architecture: any
-Depends: libc6 (>= 2.3.5-6), libncurses5 (>= 5.4-1), libreadline4 (>= 4.3-1)
+Depends: ${shlibs:Depends}, ${python:Depends}
+Provides: ${python:Provides}
 Description: Sandbox programs to run them with minimum authority
  Plash is a sandbox for running GNU/Linux programs with the minimum
  necessary privileges.  It is similar to chroot jails, but is more

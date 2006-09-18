@@ -21,14 +21,19 @@
 
 
 PACKAGE=plash
-LIBDIR=debian/tmp/usr/lib/plash/lib
-CHROOT_JAIL=debian/tmp/var/lib/plash-chroot-jail
+LIBDIR=debian/plash/usr/lib/plash/lib
+CHROOT_JAIL=debian/plash/var/lib/plash-chroot-jail
 
-DEST=debian/tmp
+DEST=debian/plash
 
 set -e
 
-rm -rf debian/tmp
+rm -rf debian/plash
+rm -f debian/substvars
+# Need to delete these otherwise they accumulate auto-generated
+# code from python-support each time this is run.
+rm -f debian/plash.postinst.debhelper
+rm -f debian/plash.prerm.debhelper
 
 install -d $DEST/DEBIAN
 
@@ -40,38 +45,47 @@ install -d $DEST/usr/share/man/man1
 
 cp -pv debian/copyright $DEST/usr/share/doc/$PACKAGE/
 cp -pv debian/changelog $DEST/usr/share/doc/$PACKAGE/changelog
-gzip -9 $DEST/usr/share/doc/$PACKAGE/changelog
-cp -prv web-site/out/* $DEST/usr/share/doc/$PACKAGE/html/
+
+# Behave nicely if the documentation has not been built.
+for FILE in web-site/out/*; do if [ -e $FILE ]; then
+  cp -prv $FILE $DEST/usr/share/doc/$PACKAGE/html/
+fi; done
 
 # Install man pages
-cp -pv docs/man/* $DEST/usr/share/man/man1/
-gzip -9 $DEST/usr/share/man/man1/*.1
+for FILE in docs/man/*; do if [ -e $FILE ]; then
+  cp -pv $FILE $DEST/usr/share/man/man1/
+fi; done
 ( cd $DEST/usr/share/man/man1 &&
-  ln -s plash-opts.1.gz plash-opts-gtk.1.gz ) || false
+  ln -s plash-opts.1 plash-opts-gtk.1 ) || false
 
 
-./install.sh debian/tmp/
+./install.sh debian/plash/
 
-# Normally we'd put this in debian/control:
-#   Depends: ${shlibs:Depends}
-# and do:
-#   dpkg-shlibdeps debian/tmp/usr/bin/*
-# but this generates an unnecessary dep on libc6 2.3.5.
-# Perhaps generate a "Recommends" field instead?
+DEST_FULL=`pwd`/$DEST
+(cd python;
+ for PYVERSION in `pyversions -vs`; do
+   # "--no-compile" stops it from byte-compiling code.
+   python$PYVERSION setup.py install --no-compile --root=$DEST_FULL
+ done
+)
+dh_pysupport
+
+dpkg-shlibdeps $DEST/usr/bin/*
 
 mkdir -p $DEST/usr/share/lintian/overrides
 cp -av debian/lintian-overrides $DEST/usr/share/lintian/overrides/plash
 
-dpkg-gencontrol -isp
+dh_compress
+dh_gencontrol
 
-chown -R root.root debian/tmp
-chmod -R g-ws debian/tmp
+chown -R root.root debian/plash
+chmod -R g-ws debian/plash
 chmod go-rwx $CHROOT_JAIL/plash-uid-locks
 chmod +x $CHROOT_JAIL/special/ld-linux.so.2
-# chmod +s debian/tmp/usr/lib/plash/run-as-nobody
-# chmod +s debian/tmp/usr/lib/plash/run-as-nobody+chroot
-chmod +s debian/tmp/usr/lib/plash/run-as-anonymous
-chmod +s debian/tmp/usr/lib/plash/gc-uid-locks
+chmod +s debian/plash/usr/lib/plash/run-as-anonymous
+chmod +s debian/plash/usr/lib/plash/gc-uid-locks
 chmod +s $CHROOT_JAIL/run-as-anonymous
 
-dpkg --build debian/tmp ..
+dh_installdeb
+dh_md5sums
+dh_builddeb

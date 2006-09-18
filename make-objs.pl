@@ -126,6 +126,7 @@ gcc('src/libc-comms.c', 'obj/libc-comms.os', @opts_c, '-DIN_LIBC');
 gcc('src/libc-comms.c', 'obj/rtld-libc-comms.os', @opts_c, '-DIN_RTLD');
 gcc('src/libc-fork-exec.c', 'obj/libc-fork-exec.os', @opts_c);
 gcc('src/libc-connect.c', 'obj/libc-connect.os', @opts_c);
+gcc('src/libc-getsockopt.c', 'obj/libc-getsockopt.os', @opts_c);
 gcc('src/libc-getuid.c', 'obj/libc-getuid.os', @opts_c);
 gcc('src/libc-utime.c', 'obj/libc-utime.os', @opts_c);
 gcc('src/libc-truncate.c', 'obj/libc-truncate.os', @opts_c);

@@ -48,6 +48,7 @@ OBJS_FOR_LIBC="
 	socket/connect.os
 	socket/bind.os
 	socket/getsockname.os
+	socket/getsockopt.os
 	io/close.os
 	io/dup2.os
 	io/fstat.oS io/fxstat.os
@@ -102,6 +103,7 @@ EXCLUDE="io/open.os io/open64.os io/creat.os io/creat64.os
 	misc/truncate.os
 	socket/connect.os socket/bind.os
 	socket/getsockname.os
+	socket/getsockopt.os
 	posix/fork.os posix/vfork.os posix/execve.os
 	dirent/opendir.os dirent/closedir.os
 	dirent/readdir.os dirent/readdir64.os
@@ -192,6 +194,7 @@ build_libc_ldso_extras () {
 	obj/libc-fork-exec.os \
 	obj/libc-connect.os \
 	obj/libc-getuid.os \
+	obj/libc-getsockopt.os \
 	obj/libc-utime.os \
 	obj/libc-truncate.os \
 	obj/libc-comms.os \

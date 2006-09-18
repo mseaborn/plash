@@ -74,8 +74,8 @@ Download these files:
      glibc-2.3.5.tar.bz2} (13Mb)
   }
   \li{
-    {\a href={ftp://ftp.gnu.org/gnu/glibc/glibc-linuxthreads-2.3.5.tar.gz}:
-     glibc-linuxthreads-2.3.5.tar.gz} (~300k)
+    {\a href={ftp://ftp.gnu.org/gnu/glibc/glibc-linuxthreads-2.3.5.tar.bz2}:
+     glibc-linuxthreads-2.3.5.tar.bz2} (~300k)
   }
 }
 
@@ -167,6 +167,8 @@ gna.org}.
    {\li: Source:
      \a href={http://plash.beasts.org/releases/plash-1.16.tar.gz}:
        plash-1.16.tar.gz}
+   {\li\a href={http://svn.gna.org/viewcvs/plash/trunk/?rev=107}:
+     Browse SVN}
  }
  {\td:
 

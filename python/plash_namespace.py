@@ -45,6 +45,8 @@ m.add_format('fs_resolve_populate', 'ccdiS')
 m.add_format('fs_dir_of_node', 'c')
 m.add_format('fs_print_tree', 'c')
 m.add_format('make_read_only_proxy', 'c')
+m.add_format('dirstack_get_path', 'c')
+m.add_format('r_dirstack_get_path', 'S')
 
 
 conn_maker = plash.make_conn_maker()
@@ -95,3 +97,7 @@ def resolve_populate(root_dir, root_node, pathname, cwd=None, flags=0):
 def make_read_only_proxy(obj):
     return call(plash.make_read_only_proxy, 'r_cap',
                 'make_read_only_proxy', obj)
+
+def dirstack_get_path(obj):
+    return call(plash.dirstack_get_path, 'r_dirstack_get_path',
+                'dirstack_get_path', obj)

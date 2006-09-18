@@ -388,6 +388,23 @@ plpy_make_read_only_proxy(cap_t obj1, region_t r, struct cap_args args,
   }
 }
 
+static void
+plpy_dirstack_get_path(cap_t obj1, region_t r, struct cap_args args,
+		       struct cap_args *result)
+{
+  cap_t obj;
+  if(pl_unpack(r, args, METHOD_DIRSTACK_GET_PATH, "c", &obj) &&
+     dir_stack_upcast(obj)) {
+    seqf_t path = flatten(r, string_of_cwd(r, dir_stack_upcast(obj)));
+    filesys_obj_free(obj);
+    *result = pl_pack(r, METHOD_R_DIRSTACK_GET_PATH, "S", path);
+  }
+  else {
+    *result = pl_pack(r, METHOD_FAIL_UNKNOWN_METHOD, "");
+    pl_args_free(&args);
+  }
+}
+
 
 DECLARE_VTABLE(defaults_vtable);
 #include "out-vtable-defaults.h"
@@ -471,4 +488,5 @@ void initplash(void)
   ADD_FUNCTION("fs_print_tree", plpy_fs_print_tree);
   ADD_FUNCTION("make_read_only_proxy", plpy_make_read_only_proxy);
   ADD_FUNCTION("cap_make_connection", plpy_make_conn2);
+  ADD_FUNCTION("dirstack_get_path", plpy_dirstack_get_path);
 }

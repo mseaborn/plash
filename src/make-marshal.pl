@@ -154,7 +154,8 @@ my $methods =
    ['Dscs', 'dirstack_cons'],
    ['Dsdi', 'dirstack_get_dir'],
    ['Dspa', 'dirstack_get_parent'],
-   ['Dspt', 'dirstack_get_path'],
+   ['Dspt', 'dirstack_get_path'], # 'c'
+   ['RDsp', 'r_dirstack_get_path'], # 'S'
    ['RCap', 'r_cap'], # 'c'
    ['RMsg', 'fail_unknown_method'],
   ];

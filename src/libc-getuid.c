@@ -22,25 +22,11 @@
 #include "libc-comms.h"
 
 
-static int my_atoi(const char *s)
-{
-  int x = 0;
-  while(*s) {
-    if(!('0' <= *s && *s <= '9')) return -1;
-    x = x * 10 + *s - '0';
-    s++;
-  }
-  return x;
-}
-
 /* EXPORT: new_getuid => WEAK:getuid __getuid */
 int new_getuid()
 {
-  int uid;
-  const char *str = getenv("PLASH_FAKE_UID");
+  int uid = my_atoi(getenv("PLASH_FAKE_UID"));
   libc_log("getuid");
-  if(!str) return getuid();
-  uid = my_atoi(str);
   if(uid < 0) return getuid();
   return uid;
 }
@@ -48,11 +34,8 @@ int new_getuid()
 /* EXPORT: new_getgid => WEAK:getgid __getgid */
 int new_getgid()
 {
-  int gid;
-  const char *str = getenv("PLASH_FAKE_GID");
+  int gid = my_atoi(getenv("PLASH_FAKE_GID"));
   libc_log("getgid");
-  if(!str) return getgid();
-  gid = my_atoi(str);
   if(gid < 0) return getgid();
   return gid;
 }
@@ -60,11 +43,8 @@ int new_getgid()
 /* EXPORT: new_geteuid => WEAK:geteuid __geteuid */
 int new_geteuid()
 {
-  int euid;
-  const char *str = getenv("PLASH_FAKE_EUID");
+  int euid = my_atoi(getenv("PLASH_FAKE_EUID"));
   libc_log("geteuid");
-  if(!str) return geteuid();
-  euid = my_atoi(str);
   if(euid < 0) return geteuid();
   return euid;
 }
@@ -72,11 +52,8 @@ int new_geteuid()
 /* EXPORT: new_getegid => WEAK:getegid __getegid */
 int new_getegid()
 {
-  int egid;
-  const char *str = getenv("PLASH_FAKE_EGID");
+  int egid = my_atoi(getenv("PLASH_FAKE_EGID"));
   libc_log("getegid");
-  if(!str) return getegid();
-  egid = my_atoi(str);
   if(egid < 0) return getegid();
   return egid;
 }

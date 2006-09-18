@@ -35,9 +35,15 @@
 char *glibc_getenv(const char *name);
 
 
+/* Read a non-negative integer from a string.
+   If str is NULL, returns -1.
+   If str does not contain a non-negative integer, returns -1. */
 int my_atoi(const char *str)
 {
   int x = 0;
+  if(str == NULL) {
+    return -1;
+  }
   for(; *str; str++) {
     if('0' <= *str && *str <= '9') x = x*10 + (*str - '0');
     else return -1;

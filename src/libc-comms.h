@@ -28,6 +28,9 @@
 int new_open(const char *filename, int flags, ...);
 
 
+int my_atoi(const char *str);
+
+
 #define __set_errno(x) (errno = (x))
 
 extern int comm_sock;

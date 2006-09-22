@@ -214,7 +214,6 @@ static void
 file_powerbox_class_init (FilePowerboxClass *class)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (class);
-  GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (class);
 
   // gobject_class->constructor = file_powerbox_constructor;
   gobject_class->set_property = file_powerbox_set_property;

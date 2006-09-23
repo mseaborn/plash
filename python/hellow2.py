@@ -1,4 +1,12 @@
 
+# This script is equivalent to:
+# pola-run \
+#   -f /bin \
+#   -f /lib \
+#   -f /usr \
+#   -f,objrw /dev/null \
+#   --prog /bin/echo -a 'Hello world!'
+
 import os
 import plash
 import plash_env
@@ -15,6 +23,9 @@ root_node = ns.make_node()
 
 # Populate the namespace by binding selected directories taken
 # from our root directory.
+# Bind read-only versions of the directories "/bin", "/lib" and
+# "/usr"; this is important if the caller has write access to these,
+# such as when the caller is root.
 ns.attach_at_path(root_node, "/bin",
                   ns.make_read_only_proxy(ns.resolve_obj(caller_root, "/bin")))
 ns.attach_at_path(root_node, "/lib",

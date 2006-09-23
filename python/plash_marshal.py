@@ -291,6 +291,9 @@ add_format('r_make_conn', 'fC')
 add_format('make_conn2', 'fiC')
 add_format('r_make_conn2', 'C')
 
+add_format('powerbox_req_filename', M_misc())
+add_format('powerbox_result_filename', 'S')
+
 
 
 int_size = struct.calcsize('i')
@@ -466,11 +469,15 @@ class Pyobj_demarshal(plash.Pyobj):
         method = get_message_code(args)
         if method in self.methods:
             return self.methods[method](self, args)
+        elif method in methods_by_code:
+            print "cap_call received message with no handler; name:", \
+                  methods_by_code[method]['name']
+            raise "No match"
         else:
             # NB. The exception will not actually get reported.
             # Need to add a logging/warning mechanism.
             # Need to convert (selected?) exceptions to error return values.
-            print "cap_call unknown:", method
+            print "cap_call received message with no handler; code:", method
             raise "No match"
 
 def add_marshaller(name, f):
@@ -489,7 +496,7 @@ def add_method(name, result):
             else:
                 return r
         else:
-            raise "No match"
+            raise "No match, got '%s' wanted '%s'" % (m, result)
 
     add_marshaller(name, outgoing)
 

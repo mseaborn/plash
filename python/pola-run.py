@@ -193,10 +193,10 @@ def handle_arg(proc, args):
         raise BadArgException, "not implemented"
 
     elif arg == '--pet-name':
-        raise BadArgException, "not implemented"
+        state.pet_name = get_arg(args, "--pet-name")
 
     elif arg == '--powerbox':
-        raise BadArgException, "not implemented"
+        state.powerbox = True
 
     elif arg == '--help':
         usage()
@@ -215,6 +215,8 @@ state = State()
 state.namespace_empty = True
 state.caller_root = plash_env.get_root_dir()
 state.cwd = ns.resolve_dir(state.caller_root, os.getcwd())
+state.pet_name = None
+state.powerbox = False
 
 try:
     handle_args(proc, sys.argv[1:])
@@ -245,8 +247,23 @@ if state.cwd != None:
     except:
         pass
 
+if state.powerbox:
+    import plash_powerbox
+    # The pet name defaults to the executable name
+    if state.pet_name == None:
+        state.pet_name = proc.cmd
+    proc.caps['powerbox_req_filename'] = \
+        plash_powerbox.Powerbox(user_namespace = state.caller_root,
+                                app_namespace = proc.root_node,
+                                pet_name = state.pet_name)
+
 pid = proc.spawn()
-plash.run_server()
+# FIXME: don't want to have this special case
+if state.powerbox:
+    import gtk
+    gtk.main()
+else:
+    plash.run_server()
 
 # Wait for the subprocess to exit and check the exit code.
 (pid2, status) = os.waitpid(pid, 0)

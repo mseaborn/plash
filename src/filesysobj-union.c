@@ -70,23 +70,31 @@ int union_dir_stat(struct filesys_obj *obj, struct stat *buf, int *err)
 struct filesys_obj *union_dir_traverse(struct filesys_obj *obj, const char *leaf)
 {
   struct union_dir *dir = (void *) obj;
+  struct filesys_obj *child1, *child2;
   int type1, type2;
-  struct filesys_obj *child2;
-  struct filesys_obj *child1 = dir->dir1->vtable->traverse(dir->dir1, leaf);
+
+  /* If the entry is not present in dir1, return entry from dir2. */
+  child1 = dir->dir1->vtable->traverse(dir->dir1, leaf);
   if(!child1) return dir->dir2->vtable->traverse(dir->dir2, leaf);
 
+  /* If dir1's entry is not a directory, it overrides any entry from dir2. */
   type1 = child1->vtable->type(child1);
   if(type1 != OBJT_DIR) return child1;
 
+  /* If the entry is not present in dir2, return entry from dir1. */
   child2 = dir->dir2->vtable->traverse(dir->dir2, leaf);
   if(!child2) return child1;
 
+  /* If dir2's entry is not a directory, dir1's entry overrides it. */
   type2 = child2->vtable->type(child2);
   if(type2 != OBJT_DIR) {
     filesys_obj_free(child2);
     return child1;
   }
 
+  /* Otherwise, dir1 and dir2's entries are both directories, so we
+     union them together.  Create a new union directory proxy
+     object. */
   return make_union_dir(child1, child2);
 }
 

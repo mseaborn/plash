@@ -44,6 +44,7 @@ m.add_format('fs_attach_at_path', 'cSc')
 m.add_format('fs_resolve_populate', 'ccdiS')
 m.add_format('fs_dir_of_node', 'c')
 m.add_format('fs_print_tree', 'c')
+m.add_format('make_union_dir', 'cc')
 m.add_format('make_read_only_proxy', 'c')
 m.add_format('dirstack_get_path', 'c')
 m.add_format('r_dirstack_get_path', 'S')
@@ -93,6 +94,10 @@ def resolve_populate(root_dir, root_node, pathname, cwd=None, flags=0):
     return call(plash.fs_resolve_populate, 'okay',
                 'fs_resolve_populate', root_dir, root_node, cwd,
                 flags, pathname)
+
+def make_union_dir(obj1, obj2):
+    return call(plash.make_union_dir, 'r_cap',
+                'make_union_dir', obj1, obj2)
 
 def make_read_only_proxy(obj):
     return call(plash.make_read_only_proxy, 'r_cap',

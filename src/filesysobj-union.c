@@ -29,15 +29,16 @@ DECLARE_VTABLE(union_dir_vtable);
 
 struct union_dir {
   struct filesys_obj hdr;
-  struct filesys_obj *x, *y;
+  struct filesys_obj *dir1, *dir2;
 };
 
-struct filesys_obj *make_union_dir(struct filesys_obj *x, struct filesys_obj *y)
+struct filesys_obj *make_union_dir(struct filesys_obj *dir1,
+				   struct filesys_obj *dir2)
 {
   struct union_dir *dir =
     filesys_obj_make(sizeof(struct union_dir), &union_dir_vtable);
-  dir->x = x;
-  dir->y = y;
+  dir->dir1 = dir1;
+  dir->dir2 = dir2;
   return (struct filesys_obj *) dir;
 }
 
@@ -45,23 +46,23 @@ struct filesys_obj *make_union_dir(struct filesys_obj *x, struct filesys_obj *y)
 void union_dir_free(struct filesys_obj *obj)
 {
   struct union_dir *dir = (void *) obj;
-  filesys_obj_free(dir->x);
-  filesys_obj_free(dir->y);
+  filesys_obj_free(dir->dir1);
+  filesys_obj_free(dir->dir2);
 }
 
 #ifdef GC_DEBUG
 void union_dir_mark(struct filesys_obj *obj)
 {
   struct union_dir *dir = (void *) obj;
-  filesys_obj_mark(dir->x);
-  filesys_obj_mark(dir->y);
+  filesys_obj_mark(dir->dir1);
+  filesys_obj_mark(dir->dir2);
 }
 #endif
 
 int union_dir_stat(struct filesys_obj *obj, struct stat *buf, int *err)
 {
   struct union_dir *dir = (void *) obj;
-  if(dir->x->vtable->stat(dir->x, buf, err) < 0) return -1;
+  if(dir->dir1->vtable->stat(dir->dir1, buf, err) < 0) return -1;
   buf->st_nlink = 0; /* FIXME: this can be used to count the number of child directories */
   return 0;
 }
@@ -71,13 +72,13 @@ struct filesys_obj *union_dir_traverse(struct filesys_obj *obj, const char *leaf
   struct union_dir *dir = (void *) obj;
   int type1, type2;
   struct filesys_obj *child2;
-  struct filesys_obj *child1 = dir->x->vtable->traverse(dir->x, leaf);
-  if(!child1) return dir->y->vtable->traverse(dir->y, leaf);
+  struct filesys_obj *child1 = dir->dir1->vtable->traverse(dir->dir1, leaf);
+  if(!child1) return dir->dir2->vtable->traverse(dir->dir2, leaf);
 
   type1 = child1->vtable->type(child1);
   if(type1 != OBJT_DIR) return child1;
 
-  child2 = dir->y->vtable->traverse(dir->y, leaf);
+  child2 = dir->dir2->vtable->traverse(dir->dir2, leaf);
   if(!child2) return child1;
 
   type2 = child2->vtable->type(child2);
@@ -105,7 +106,7 @@ int union_dir_list(struct filesys_obj *obj, region_t r, seqt_t *result, int *err
 
   region_t r2 = region_make();
 
-  count1 = dir->x->vtable->list(dir->x, r2, &got, err);
+  count1 = dir->dir1->vtable->list(dir->dir1, r2, &got, err);
   if(count1 < 0) { region_free(r2); return -1; }
   array1 = region_alloc(r2, count1 * sizeof(seqf_t));
   buf = flatten(r, got);
@@ -122,7 +123,7 @@ int union_dir_list(struct filesys_obj *obj, region_t r, seqt_t *result, int *err
     else { region_free(r2); *err = EIO; return -1; }
   }
 
-  count2 = dir->y->vtable->list(dir->y, r2, &got, err);
+  count2 = dir->dir2->vtable->list(dir->dir2, r2, &got, err);
   if(count2 < 0) { region_free(r2); return -1; }
   array2 = region_alloc(r2, count2 * sizeof(seqf_t));
   buf = flatten(r, got);

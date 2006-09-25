@@ -17,6 +17,8 @@ $exec_object = "exec-object";
 
 @pola_run = ($pola_run);
 
+my @failed;
+
 
 test('shell_hello',
      sub {
@@ -236,6 +238,15 @@ test('install_chown',
      });
 
 
+print "\n";
+if(scalar(@failed)) {
+  printf "%i tests failed: %s\n", scalar(@failed), join(', ', @failed);
+}
+else {
+  print "Success!\n";
+}
+
+
 sub test {
   my ($name, $f) = @_;
   eval {
@@ -245,8 +256,13 @@ sub test {
     print "\n--- running $name\n" if $verbose;
     &$f();
   };
-  if($@) { print "** $name failed: $@\n" }
-  else { print "** $name ok\n" }
+  if($@) {
+    print "** $name failed: $@\n";
+    push(@failed, $name);
+  }
+  else {
+    print "** $name ok\n";
+  }
 }
 
 sub run_cmd {

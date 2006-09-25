@@ -1310,7 +1310,7 @@ int new_access(const char *pathname, unsigned int mode)
   return -1;
 }
 
-/* EXPORT: new_chmod => WEAK:chmod __chmod __GI_chmod __GI___chmod */
+/* nofollow=0 for chmod, nofollow=1 for lchmod. */
 /* Rather than adding a new message to the protocol, and adding new
    methods to the objects in the server, I wanted to just use open and
    fchmod to implement chmod.
@@ -1318,7 +1318,7 @@ int new_access(const char *pathname, unsigned int mode)
    running under a user ID that doesn't own the file, and fchmod will
    not work in this case -- FDs don't behave like capabilities in this
    case. */
-int new_chmod(const char *pathname, unsigned int mode)
+int my_chmod(int nofollow, const char *pathname, unsigned int mode)
 {
   /* Usually, this code would work:
   int fd, rc;
@@ -1331,12 +1331,12 @@ int new_chmod(const char *pathname, unsigned int mode)
 
   region_t r = region_make();
   seqf_t reply;
-  log_msg(MOD_MSG "chmod\n");
   if(!pathname) {
     __set_errno(EINVAL);
     goto error;
   }
-  if(req_and_reply(r, cat3(r, mk_int(r, METHOD_FSOP_CHMOD),
+  if(req_and_reply(r, cat4(r, mk_int(r, METHOD_FSOP_CHMOD),
+			   mk_int(r, nofollow),
 			   mk_int(r, mode),
 			   mk_string(r, pathname)), &reply) < 0) goto error;
   {
@@ -1355,12 +1355,18 @@ int new_chmod(const char *pathname, unsigned int mode)
   return -1;
 }
 
+/* EXPORT: new_chmod => WEAK:chmod __chmod __GI_chmod __GI___chmod */
+int new_chmod(const char *pathname, unsigned int mode)
+{
+  log_msg(MOD_MSG "chmod\n");
+  return my_chmod(0 /* nofollow */, pathname, mode);
+}
+
 /* EXPORT: new_lchmod => lchmod */
 int new_lchmod(const char *pathname, unsigned int mode)
 {
   log_msg(MOD_MSG "lchmod\n");
-  __set_errno(ENOSYS);
-  return -1;
+  return my_chmod(1 /* nofollow */, pathname, mode);
 }
 
 /* nofollow=0 for chown, nofollow=1 for lchown. */

@@ -245,14 +245,15 @@ int process_rmdir(struct process *p, seqf_t pathname, int *err)
   return rc;
 }
 
-int process_chmod(struct process *p, seqf_t pathname, int mode, int *err)
+int process_chmod(struct process *p, seqf_t pathname,
+		  int mode, int nofollow, int *err)
 {
   int rc;
   /* chmod does follow symlinks.  Symlinks do not have permissions of
      their own. */
   struct filesys_obj *obj =
     resolve_obj_simple(p->root, p->cwd, pathname, SYMLINK_LIMIT,
-		       0 /* nofollow */, err);
+		       nofollow, err);
   if(!obj) return -1;
   rc = obj->vtable->chmod(obj, mode, err);
   filesys_obj_free(obj);
@@ -268,7 +269,7 @@ int process_chown(struct process *p, seqf_t pathname,
 {
   struct filesys_obj *obj =
     resolve_obj_simple(p->root, p->cwd, pathname, SYMLINK_LIMIT,
-		       nofollow, &err);
+		       nofollow, err);
   if(!obj) return -1;
   filesys_obj_free(obj);
   
@@ -666,7 +667,9 @@ static void fs_op_log_file_accesses(region_t r, struct fs_op_object *obj,
   }
   case METHOD_FSOP_CHMOD:
   {
+    int nofollow;
     int mode;
+    m_int(&ok, &msg, &nofollow);
     m_int(&ok, &msg, &mode);
     if(ok) {
       seqf_t pathname = msg;
@@ -1273,13 +1276,15 @@ void handle_fs_op_message(region_t r, struct process *proc,
        would allow the client process to chmod any file, even those it's
        not supposed to have write access to!  I have now added a chmod
        method to file and directory objects. */
+    int nofollow;
     int mode;
+    m_int(&ok, &msg, &nofollow);
     m_int(&ok, &msg, &mode);
     if(ok) {
       seqf_t pathname = msg;
       int err;
       *log_msg = cat2(r, mk_string(r, "chmod: "), mk_leaf(r, pathname));
-      if(process_chmod(proc, pathname, mode, &err) < 0) {
+      if(process_chmod(proc, pathname, mode, nofollow, &err) < 0) {
 	*reply = cat2(r, mk_int(r, METHOD_FAIL),
 		      mk_int(r, err));
 	*log_reply = mk_string(r, "fail");

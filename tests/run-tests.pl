@@ -226,6 +226,15 @@ test('clobber_comm_fd_pthread',
        die "Got: \"$x\"" if $x ne "close refused as expected\n";
      });
 
+# "install" uses chown(filename, -1, -1): ensure that that works
+test('install_chown',
+     sub {
+       my $f = IO::File->new('file', O_CREAT | O_EXCL | O_WRONLY) || die;
+       $f->close();
+       run_cmd(@pola_run, '-B', '-fw', '.',
+	       '-e', '/usr/bin/install', '-T', 'file', 'dest');
+     });
+
 
 sub test {
   my ($name, $f) = @_;

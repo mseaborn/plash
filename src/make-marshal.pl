@@ -51,6 +51,7 @@ my $methods =
    ['Accs', 'fsop_access'],
    ['Mkdr', 'fsop_mkdir'],
    ['Chmd', 'fsop_chmod'],
+   ['Chow', 'fsop_chown'],
    ['Utim', 'fsop_utime'],
    ['Renm', 'fsop_rename'],
    ['Link', 'fsop_link'],

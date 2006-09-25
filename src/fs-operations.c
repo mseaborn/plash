@@ -259,6 +259,29 @@ int process_chmod(struct process *p, seqf_t pathname, int mode, int *err)
   return rc;
 }
 
+/* This is currently a no-op.  It checks whether the file exists.  If
+   not, it returns an error.  If the file exists and no owner or group
+   change was requested, it returns success.  Otherwise, it returns
+   EPERM. */
+int process_chown(struct process *p, seqf_t pathname,
+		  int owner_uid, int group_gid, int nofollow, int *err)
+{
+  struct filesys_obj *obj =
+    resolve_obj_simple(p->root, p->cwd, pathname, SYMLINK_LIMIT,
+		       nofollow, &err);
+  if(!obj) return -1;
+  filesys_obj_free(obj);
+  
+  if(owner_uid == -1 &&
+     group_gid == -1) {
+    return 0;
+  }
+  else {
+    *err = EPERM;
+    return -1;
+  }
+}
+
 int process_utimes(struct process *p, seqf_t pathname, int nofollow,
 		   const struct timeval *atime, const struct timeval *mtime,
 		   int *err)
@@ -1263,6 +1286,33 @@ void handle_fs_op_message(region_t r, struct process *proc,
       }
       else {
 	*reply = mk_string(r, "RChm");
+	*log_reply = mk_string(r, "ok");
+      }
+      return;
+    }
+    break;
+  }
+  case METHOD_FSOP_CHOWN:
+  {
+    /* chown()/lchown() calls.   */
+    int nofollow;
+    int owner_uid, group_gid;
+    m_int(&ok, &msg, &nofollow);
+    m_int(&ok, &msg, &owner_uid);
+    m_int(&ok, &msg, &group_gid);
+    if(ok) {
+      seqf_t pathname = msg;
+      int err;
+      *log_msg = cat2(r, mk_string(r, nofollow ? "lchown: " : "chown: "),
+		      mk_leaf(r, pathname));
+      if(process_chown(proc, pathname, owner_uid, group_gid,
+		       nofollow, &err) < 0) {
+	*reply = cat2(r, mk_int(r, METHOD_FAIL),
+		      mk_int(r, err));
+	*log_reply = mk_string(r, "fail");
+      }
+      else {
+	*reply = mk_int(r, METHOD_OKAY);
 	*log_reply = mk_string(r, "ok");
       }
       return;

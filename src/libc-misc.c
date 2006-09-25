@@ -1363,20 +1363,50 @@ int new_lchmod(const char *pathname, unsigned int mode)
   return -1;
 }
 
+/* nofollow=0 for chown, nofollow=1 for lchown. */
+static int my_chown(int nofollow, const char *pathname,
+		    unsigned int owner_uid,
+		    unsigned int group_gid)
+{
+  region_t r = region_make();
+  seqf_t reply;
+  if(!pathname) {
+    __set_errno(EINVAL);
+    goto error;
+  }
+  if(req_and_reply(r, cat5(r, mk_int(r, METHOD_FSOP_CHOWN),
+			   mk_int(r, nofollow),
+			   mk_int(r, owner_uid),
+			   mk_int(r, group_gid),
+			   mk_string(r, pathname)), &reply) < 0) goto error;
+  {
+    seqf_t msg = reply;
+    int ok = 1;
+    m_int_const(&ok, &msg, METHOD_OKAY);
+    m_end(&ok, &msg);
+    if(ok) {
+      region_free(r);
+      return 0;
+    }
+  }
+  set_errno_from_reply(reply);
+ error:
+  region_free(r);
+  return -1;
+}
+
 /* EXPORT: new_chown => DEFVER:chown,GLIBC_2.1 VER:chown,GLIBC_2.0 __chown __GI___chown */
 int new_chown(const char *pathname, unsigned int owner, unsigned int group)
 {
   log_msg(MOD_MSG "chown\n");
-  __set_errno(ENOSYS);
-  return -1;
+  return my_chown(0 /* nofollow */, pathname, owner, group);
 }
 
 /* EXPORT: new_lchown => lchown __lchown */
 int new_lchown(const char *pathname, unsigned int owner, unsigned int group)
 {
   log_msg(MOD_MSG "lchown\n");
-  __set_errno(ENOSYS);
-  return -1;
+  return my_chown(1 /* nofollow */, pathname, owner, group);
 }
 
 /* EXPORT: new_rename => rename __GI_rename */

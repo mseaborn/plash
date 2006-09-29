@@ -89,6 +89,9 @@ foreach my $base (qw(screenshot-gnumeric
   if(!-e $file) {
     warn "$file not present (but not in source package)"
   }
+  elsif(system('which convert >/dev/null') != 0) {
+    warn "ImageMagick 'convert' tool not available: skipping images";
+  }
   else {
     run_cmd('convert', '-scale', '30%x30%', $file, "out/${base}-small.png");
   }

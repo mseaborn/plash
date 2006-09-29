@@ -2,7 +2,7 @@
 
 # Copyright (C) 2004, 2005 Mark Seaborn
 #
-# This file is part of Plash, the Principle of Least Authority Shell.
+# This file is part of Plash.
 #
 # Plash is free software; you can redistribute it and/or modify it
 # under the terms of the GNU Lesser General Public License as

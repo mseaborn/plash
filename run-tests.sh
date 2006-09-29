@@ -12,7 +12,7 @@ set -e
 DIR=`pwd`
 (
  echo "#!/bin/sh"
- echo "$DIR/bin/pola-run -fl \$PLASH_LIBRARY_DIR \"\$@\""
+ echo "exec $DIR/bin/pola-run -fl \$PLASH_LIBRARY_DIR \"\$@\""
 ) > lib/pola-run
 chmod +x lib/pola-run
 

@@ -1,8 +1,35 @@
 plash (1.16.1) unstable; urgency=low
 
+  * Add Python bindings.  Add Python implementation of pola-run.
+  * Implement lchmod() in libc and fs_op.
+  * Add partial implementation of chown()/lchown():
+    Succeeds when no owner/group change is requested.
+  * Improve Debian build scripts for building with pbuilder under etch.
+  * Intercept getsockopt() so that uid/gids can be faked for SO_PEERCRED
+    case.
+  * Fix getcwd() to pass glibc's io/tst-getcwd test case.
+    getcwd(NULL, size) when size>0 now returns an error if size is not
+    large enough.
+  * libpthread.so's close() function is now intercepted correctly.
+  * pola-run, pola-shell:  Add environment variables for changing the
+    jail program from run-as-anonymous.  This is used for running the
+    test suite without installing Plash.
+  * pola-run:  Bug fix:  Ensure that -t grants read-only access when "w"
+    flag is not given
+  * pola-run:  Add -e option.
+  * In source, use integer #define'd methods IDs instead of
+    4 character strings.
+  * Change return message ID for some methods.  Only use METHOD_OKAY
+    for results containing no arguments.
+  * fs_op:  Remove now-unused FD slot argument from "exec" method.
+    (ld-linux.so.2 takes the filename of the executable not a FD.)
+  * Fix building Plash with gcc 4.0.  Fixed use of weak symbols.  Fixed
+    some warnings.  Now default to building Plash with gcc 4.0.
   * exec-object.c:  Sets cwd instead of leaving it undefined.
   * shell.c:  For executable objects, use debug message "sending cwd
     argument" instead of "cwd set successfully".
+
+ -- Mark Seaborn <mrs@mythic-beasts.com>  Sat, 30 Sep 2006 12:57:55 +0100
 
 plash (1.16) unstable; urgency=low
 

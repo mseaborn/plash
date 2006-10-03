@@ -28,6 +28,8 @@ DEST=debian/plash
 
 set -e
 
+. ./src/config.sh
+
 rm -rf debian/plash
 rm -f debian/substvars
 # Need to delete these otherwise they accumulate auto-generated
@@ -61,20 +63,21 @@ fi; done
 
 ./install.sh debian/plash/
 
-DEST_FULL=`pwd`/$DEST
-(cd python;
- for PYVERSION in `pyversions -vs`; do
-   # "--no-compile" stops it from byte-compiling code.
-   python$PYVERSION setup.py install --no-compile --root=$DEST_FULL
- done
-)
-dh_pysupport
-
-dpkg-shlibdeps $DEST/usr/bin/*
+if "$USE_PYTHON" = yes; then
+  DEST_FULL=`pwd`/$DEST
+  (cd python;
+   for PYVERSION in `pyversions -vs`; do
+     # "--no-compile" stops it from byte-compiling code.
+     python$PYVERSION setup.py install --no-compile --root=$DEST_FULL
+   done
+  )
+  dh_pysupport
+fi
 
 mkdir -p $DEST/usr/share/lintian/overrides
 cp -av debian/lintian-overrides $DEST/usr/share/lintian/overrides/plash
 
+dh_shlibdeps
 dh_compress
 dh_gencontrol
 

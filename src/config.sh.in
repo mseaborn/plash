@@ -50,18 +50,6 @@ USE_GTK=@with_gtk@
 USE_PYTHON=@with_python@
 PYTHON=@PYTHON@
 
-PLASH_EXECUTABLES="
-	pola-run
-	pola-shell
-	plash-chroot
-	plash-opts
-	plash-opts-gtk
-	exec-object
-	plash-socket-connect
-	plash-socket-publish
-	plash-run-emacs
-	powerbox-req"
-
 # Where to install to.
 # These paths are also compiled into the executables.
 JAIL_DIR=/var/lib/plash-chroot-jail

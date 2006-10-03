@@ -46,6 +46,20 @@ set -e
 
 . src/config.sh
 
+PLASH_EXECUTABLES="
+	pola-run
+	pola-shell
+	plash-chroot
+	plash-opts
+	exec-object
+	plash-socket-connect
+	plash-socket-publish
+	plash-run-emacs
+	powerbox-req"
+if "$USE_GTK" = yes; then
+  PLASH_EXECUTABLES="$PLASH_EXECUTABLES plash-opts-gtk"
+fi
+
 
 # Rename the file into place so that it uses a new inode
 # and doesn't interfere with running programs.
@@ -100,7 +114,9 @@ chmod +x $DEST/$JAIL_INSTALL/ld-linux.so.2
 install -d $DEST/$LIB_INSTALL
 ./src/install-libs.pl --dest-dir $DEST/$LIB_INSTALL
 
-strip_install shobj/powerbox-for-gtk.so $DEST/$LIB_INSTALL/powerbox-for-gtk.so
+if [ "$USE_GTK" = yes ]; then
+  strip_install shobj/powerbox-for-gtk.so $DEST/$LIB_INSTALL/powerbox-for-gtk.so
+fi
 
 # Install Emacs lisp file
 install -d $DEST/$PLASH_EMACS_INSTALL

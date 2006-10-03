@@ -473,21 +473,12 @@ build_shell_etc() {
   # FIXME: remove glib-2.0 from this
   LIBC_LINK="-Wl,-z,defs
 	$OUT/libc.so $OUT/ld.so
-	`pkg-config --libs glib-2.0`
 	`search $GLIBC_SO_DIR/{math/,}libm.so{,.6}`
 	`search $GLIBC_SO_DIR/{dlfcn/,}libdl.so{,.2}`"
-
-  # This hack needs to be disabled.  It subtly breaks the "environ" variable.
-  if false; then
-    ./src/make-dummy-libc.pl
-    $CC -shared -nostdlib -nostartfiles \
-	-Wl,--soname=libc.so.6 -Wl,--version-script=src/libc.map-2.3.5 \
-	gensrc/dummy-libc.c -o obj/dummy-libc.so
-    LIBC_LINK_HACK=obj/dummy-libc.so
-  else
-    LIBC_LINK_HACK="`pkg-config --libs glib-2.0`"
+  if [ "$USE_GTK" = yes ]; then
+    LIBC_LINK="$LIBC_LINK `pkg-config --libs glib-2.0`"
   fi
-  
+
   # `pkg-config gtk+-2.0 --libs`
   # If I want this to work on my old RedHat system (using 2.2.5), it's
   # now necessary to omit $LIBC_LINK, which makes the executable depend
@@ -502,7 +493,7 @@ build_shell_etc() {
   #    ncurses replaces termcap.
   echo Linking bin/pola-shell
   $CC $OPTS_S obj/shell.o obj/libplash.a \
-	$LIBC_LINK_HACK -lreadline -ltermcap \
+	$LIBC_LINK -lreadline -ltermcap \
 	-o bin/pola-shell
 
   echo Linking bin/run-emacs

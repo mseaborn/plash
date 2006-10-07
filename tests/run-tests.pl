@@ -23,7 +23,7 @@ my @failed;
 test('shell_hello',
      sub {
        my $data = cmd_capture($pola_shell, '-c', "echo 'Hello world!'");
-       if($data ne "Hello world!\n") { die "Got: \"$data\"" }
+       assert_equal($data, "Hello world!\n", 'output');
      });
 
 test('shell_attach',
@@ -31,20 +31,19 @@ test('shell_attach',
        my $x = "test contents";
        write_file('my_file', $x);
        my $data = cmd_capture($pola_shell, '-c', "cat some_file_name=(F my_file)");
-       if($data ne $x) { die "Got: \"$data\"" }
+       assert_equal($data, $x, 'output');
      });
 test('shell_attach_name',
      sub {
        my $data = cmd_capture($pola_shell, '-c', "echo some_file_name=(F .)");
-       if($data ne "some_file_name\n") { die "Got: \"$data\"" }
+       assert_equal($data, "some_file_name\n", 'output');
      });
 
 test('shell_redirect',
      sub {
        my $data = cmd_capture($pola_shell, '-c', "echo 'Hello world!' 1>temp_file");
-       my $data2 = read_file('temp_file');
-       if($data ne '' ||
-	  $data2 ne "Hello world!\n") { die "Got: \"$data2\"" }
+       assert_equal($data, '', 'output');
+       assert_equal(read_file('temp_file'), "Hello world!\n", 'temp_file');
      });
 
 test('shell_bash_exec',
@@ -52,7 +51,7 @@ test('shell_bash_exec',
        # NB. Add "+ ." just to suppress bash's warning
        my $data = cmd_capture($pola_shell, '-c',
 			      "sh -c '/bin/echo \"Successful call\"' + .");
-       if($data ne "Successful call\n") { die "Got: \"$data\"" }
+       assert_equal($data, "Successful call\n", 'output');
      });
 
 test('shell_execobj_hello',
@@ -92,7 +91,7 @@ test('shell_cwd_unset',
 	 ($pola_shell, '-c',
 	  q(perl -e 'use Cwd; my $cwd = getcwd();
                      print (defined $cwd ? $cwd : "unset")'));
-       if($data ne 'unset') { die "Got: \"$data\"" }
+       assert_equal($data, 'unset', 'output');
      });
 
 # Check that cwd is defined when we explicitly add the argument "+ .".
@@ -104,7 +103,7 @@ test('shell_cwd_set',
 	  q(perl -e 'use Cwd; my $cwd = getcwd();
                      print (defined $cwd ? $cwd : "unset")'
 	    + .));
-       if($data ne $caller_cwd) { die "Got: \"$data\"" }
+       assert_equal($data, $caller_cwd, 'output');
      });
 
 test('shell_execobj_cwd_unset',
@@ -137,7 +136,7 @@ test('hello',
      sub {
        my $data = cmd_capture(@pola_run, qw(-B --prog /bin/echo),
 			      '-a', 'Hello world');
-       if($data ne "Hello world\n") { die "Got: \"$data\"" }
+       assert_equal($data, "Hello world\n", 'output');
      });
 
 # Tests execve but not fork, because bash does a tail call
@@ -146,7 +145,7 @@ test('bash_exec',
        # do "--cwd /" to stop bash complaining about unset cwd
        my $data = cmd_capture(@pola_run, qw(-B --cwd /),
 			      '-e', '/bin/bash', '-c', '/bin/echo yeah');
-       if($data ne "yeah\n") { die "Got: \"$data\"" }
+       assert_equal($data, "yeah\n", 'output');
      });
 
 test('bash_fork',
@@ -154,7 +153,7 @@ test('bash_fork',
        my $data = cmd_capture(@pola_run, qw(-B --cwd /),
 			      '-e', '/bin/bash', '-c',
 			      '/bin/echo yeah; /bin/true');
-       if($data ne "yeah\n") { die "Got: \"$data\"" }
+       assert_equal($data, "yeah\n", 'output');
      });
 
 test('strace',
@@ -201,7 +200,7 @@ test('utimes',
 test('python_hellow',
      sub {
        my $data = cmd_capture('python', "$start_dir/hellow.py");
-       if($data ne "Hello world!\nexited with status: 0\n") { die "Got: \"$data\"" }
+       assert_equal($data, "Hello world!\nexited with status: 0\n", 'output');
      });
 
 
@@ -213,7 +212,7 @@ test('clobber_comm_fd',
 			   @pola_run, '-B',
 			   '-f', "$start_dir/clobber-comm-fd",
 			   '-e', "$start_dir/clobber-comm-fd");
-       die "Got: \"$x\"" if $x ne "close refused as expected\n";
+       assert_equal($x, "close refused as expected\n", 'output');
      });
 
 # Same test but with executable linked to libpthread.so
@@ -225,7 +224,7 @@ test('clobber_comm_fd_pthread',
 			   @pola_run, '-B',
 			   '-f', "$start_dir/clobber-comm-fd-pthread",
 			   '-e', "$start_dir/clobber-comm-fd-pthread");
-       die "Got: \"$x\"" if $x ne "close refused as expected\n";
+       assert_equal($x, "close refused as expected\n", 'output');
      });
 
 # "install" uses chown(filename, -1, -1): ensure that that works
@@ -262,6 +261,20 @@ sub test {
   }
   else {
     print "** $name ok\n";
+  }
+}
+
+# Assert that $got is equal to $expect.
+sub assert_equal {
+  my ($got, $expect, $desc) = @_;
+  if($got ne $expect) {
+    print "MISMATCH for \"$desc\":\n";
+    print "GOT:\n$got\n";
+    print "EXPECTED:\n$expect\n";
+    die "Failed";
+  }
+  else {
+    print "- assert ok for \"$desc\"\n";
   }
 }
 

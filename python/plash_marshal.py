@@ -311,7 +311,7 @@ def format_pack(method, pattern, *args):
         if p == 'i':
             data.append(struct.pack('i', arg))
         elif p == 's':
-            data.append(struct.pack('i', len(arg)))
+            data.append(struct.pack('i', len(s)))
             data.append(arg)
         elif p == 'S':
             assert isinstance(arg, str)

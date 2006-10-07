@@ -58,10 +58,6 @@ class Powerbox(plash_marshal.Pyobj_demarshal):
             main_action_text = gtk.STOCK_OPEN
         dialog.add_button(gtk.STOCK_CLOSE, gtk.RESPONSE_CANCEL)
         dialog.add_button(main_action_text, gtk.RESPONSE_ACCEPT)
-        
-        tips = gtk.Tooltips()
-        tips.set_tip(dialog.action_area.get_children()[0],
-                     "Grant <%s> the ability to access the file" % self.pet_name)
 
         if want_dir:
             if save_mode:

@@ -1,6 +1,5 @@
 
 import plash_marshal
-import traceback
 
 indent = ['>']
 

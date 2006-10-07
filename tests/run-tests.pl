@@ -227,6 +227,21 @@ test('clobber_comm_fd_pthread',
        assert_equal($x, "close refused as expected\n", 'output');
      });
 
+# Does a socket created in the sandbox return expected SO_PEERCRED
+# information?
+test('getsockopt-uid',
+     sub {
+       run_cmd('gcc', '-Wall', "$start_dir/test-getsockopt.c",
+	       '-o', "$start_dir/test-getsockopt");
+       # Try running the test program outside of Plash first.
+       my $data1 = cmd_capture("$start_dir/test-getsockopt");
+       assert_equal($data1, "IDs are the same, as expected\n", 'output1');
+       my $data2 = cmd_capture(@pola_run, '-B',
+			       '-f', "$start_dir/test-getsockopt",
+			       '-e', "$start_dir/test-getsockopt");
+       assert_equal($data2, "IDs are the same, as expected\n", 'output2');
+     });
+
 # "install" uses chown(filename, -1, -1): ensure that that works
 test('install_chown',
      sub {

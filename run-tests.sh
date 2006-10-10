@@ -16,7 +16,7 @@ DIR=`pwd`
 ) > lib/pola-run
 chmod +x lib/pola-run
 
-export PLASH_SANDBOX_PROG=$DIR/tests/strace-wrapper.sh
+export PLASH_SANDBOX_PROG=$DIR/tests/wrapper.sh
 export PLASH_P_SANDBOX_PROG=$DIR/shobj/ld.so
 export PLASH_LDSO_PATH=$DIR/shobj/ld.so
 export PLASH_LIBRARY_DIR=$DIR/lib

@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# This script is for use with pola-run's --sandbox-prog option
+# This script is for use with the PLASH_SANDBOX_PROG environment variable
 
 # -f: follow forks
 # -c: count syscalls

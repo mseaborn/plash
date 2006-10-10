@@ -25,6 +25,7 @@
 #include "filesysobj.h"
 #include "filesysobj-real.h"
 #include "filesysobj-union.h"
+#include "filesysobj-cow.h"
 #include "filesysobj-readonly.h"
 #include "cap-protocol.h"
 #include "fs-operations.h"
@@ -390,6 +391,21 @@ plpy_make_union_dir(cap_t obj_unused, region_t r, struct cap_args args,
 }
 
 static void
+plpy_make_cow_dir(cap_t obj_unused, region_t r, struct cap_args args,
+		  struct cap_args *result)
+{
+  cap_t obj1, obj2;
+  if(pl_unpack(r, args, METHOD_MAKE_COW_DIR, "cc", &obj1, &obj2)) {
+    *result = pl_pack(r, METHOD_R_CAP, "c",
+		      make_cow_dir(obj1, obj2));
+  }
+  else {
+    *result = pl_pack(r, METHOD_FAIL_UNKNOWN_METHOD, "");
+    pl_args_free(&args);
+  }
+}
+
+static void
 plpy_make_read_only_proxy(cap_t obj1, region_t r, struct cap_args args,
 			  struct cap_args *result)
 {
@@ -503,6 +519,7 @@ void initplash(void)
   ADD_FUNCTION("fs_dir_of_node", plpy_fs_dir_of_node);
   ADD_FUNCTION("fs_print_tree", plpy_fs_print_tree);
   ADD_FUNCTION("make_union_dir", plpy_make_union_dir);
+  ADD_FUNCTION("make_cow_dir", plpy_make_cow_dir);
   ADD_FUNCTION("make_read_only_proxy", plpy_make_read_only_proxy);
   ADD_FUNCTION("cap_make_connection", plpy_make_conn2);
   ADD_FUNCTION("dirstack_get_path", plpy_dirstack_get_path);

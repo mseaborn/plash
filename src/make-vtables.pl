@@ -358,6 +358,30 @@ put('gensrc/out-vtable-filesysobj-union.h',
      }
     ]);
 
+put('gensrc/out-vtable-filesysobj-cow.h',
+    [{ Name => 'cow_dir_vtable',
+       Interfaces => [@i_dir],
+       Contents =>
+         [['free', 'cow_dir_free'],
+	  ['mark', 'cow_dir_mark'],
+	  ['type', 'objt_dir'],
+	  ['stat', 'cow_dir_stat'],
+	  ['utimes', 'cow_dir_utimes'],
+	  ['chmod', 'cow_dir_chmod'],
+	  ['traverse', 'cow_dir_traverse'],
+	  ['list', 'cow_dir_list'],
+	  ['create_file', 'cow_dir_create_file'],
+	  ['mkdir', 'cow_dir_mkdir'],
+	  ['symlink', 'cow_dir_symlink'],
+	  ['rename', 'cow_dir_rename'],
+	  ['link', 'cow_dir_link'],
+	  ['unlink', 'cow_dir_unlink'],
+	  ['rmdir', 'cow_dir_rmdir'],
+	  ['socket_bind', 'cow_dir_socket_bind'],
+	 ]
+     }
+    ]);
+
 my $marshal_methods =
   [
 	  ['type', 'marshal_type'],

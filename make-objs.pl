@@ -58,6 +58,7 @@ gcc('src/filesysobj-real.c', 'obj/filesysobj-real.o', @opts_s);
 gcc('src/filesysobj-fab.c', 'obj/filesysobj-fab.o', @opts_s);
 gcc('src/filesysobj-readonly.c', 'obj/filesysobj-readonly.o', @opts_s);
 gcc('src/filesysobj-union.c', 'obj/filesysobj-union.o', @opts_s);
+gcc('src/filesysobj-cow.c', 'obj/filesysobj-cow.o', @opts_s);
 gcc('src/filesysslot.c', 'obj/filesysslot.o', @opts_s);
 gcc('src/log-proxy.c', 'obj/log-proxy.o', @opts_s);
 gcc('src/reconnectable-obj.c', 'obj/reconnectable-obj.o', @opts_s);

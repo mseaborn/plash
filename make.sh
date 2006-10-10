@@ -438,6 +438,7 @@ build_shell_etc() {
 	obj/cap-call-return.o obj/cap-protocol.o \
 	obj/filesysslot.o \
 	obj/filesysobj-fab.o \
+	obj/filesysobj-cow.o \
 	obj/filesysobj-union.o \
 	obj/filesysobj-readonly.o \
 	obj/filesysobj-real.o \

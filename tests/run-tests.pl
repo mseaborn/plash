@@ -203,6 +203,11 @@ test('python_hellow',
        assert_equal($data, "Hello world!\nexited with status: 0\n", 'output');
      });
 
+test('python_tests',
+     sub {
+       run_cmd('python', "$start_dir/test-dirs.py");
+     });
+
 
 test('clobber_comm_fd',
      sub {

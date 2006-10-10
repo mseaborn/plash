@@ -1,6 +1,6 @@
-/* Copyright (C) 2004 Mark Seaborn
+/* Copyright (C) 2006 Mark Seaborn
 
-   This file is part of Plash.
+   This file is part of Plash, the Principle of Least Authority Shell.
 
    Plash is free software; you can redistribute it and/or modify it
    under the terms of the GNU Lesser General Public License as
@@ -14,18 +14,18 @@
 
    You should have received a copy of the GNU Lesser General Public
    License along with Plash; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
    USA.  */
 
-#ifndef filesysobj_union_h
-#define filesysobj_union_h
+#ifndef INC_FILESYSOBJ_COW_H
+#define INC_FILESYSOBJ_COW_H
 
-struct filesys_obj *make_union_dir(struct filesys_obj *x, struct filesys_obj *y);
 
-int merge_dir_lists(region_t r,
-		    struct filesys_obj *dir1,
-		    struct filesys_obj *dir2,
-		    seqt_t *result,
-		    int *err);
+#include "filesysobj.h"
+
+struct filesys_obj *
+make_cow_dir(struct filesys_obj *dir_write,
+	     struct filesys_obj *dir_read);
+
 
 #endif

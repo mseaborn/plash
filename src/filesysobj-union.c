@@ -22,6 +22,7 @@
 #include "region.h"
 #include "serialise.h"
 #include "filesysobj-fab.h"
+#include "filesysobj-union.h"
 #include "cap-protocol.h"
 
 
@@ -103,9 +104,13 @@ static int sort_seqf_compare(const void *p1, const void *p2)
   return seqf_compare(*(seqf_t *) p1, *(seqf_t *) p2);
 }
 
-int union_dir_list(struct filesys_obj *obj, region_t r, seqt_t *result, int *err)
+/* This is used by cow_dir too. */
+int merge_dir_lists(region_t r,
+		    struct filesys_obj *dir1,
+		    struct filesys_obj *dir2,
+		    seqt_t *result,
+		    int *err)
 {
-  struct union_dir *dir = (void *) obj;
   int count1, count2;
   seqt_t got;
   seqf_t buf;
@@ -114,7 +119,7 @@ int union_dir_list(struct filesys_obj *obj, region_t r, seqt_t *result, int *err
 
   region_t r2 = region_make();
 
-  count1 = dir->dir1->vtable->list(dir->dir1, r2, &got, err);
+  count1 = dir1->vtable->list(dir1, r2, &got, err);
   if(count1 < 0) { region_free(r2); return -1; }
   array1 = region_alloc(r2, count1 * sizeof(seqf_t));
   buf = flatten(r, got);
@@ -131,7 +136,7 @@ int union_dir_list(struct filesys_obj *obj, region_t r, seqt_t *result, int *err
     else { region_free(r2); *err = EIO; return -1; }
   }
 
-  count2 = dir->dir2->vtable->list(dir->dir2, r2, &got, err);
+  count2 = dir2->vtable->list(dir2, r2, &got, err);
   if(count2 < 0) { region_free(r2); return -1; }
   array2 = region_alloc(r2, count2 * sizeof(seqf_t));
   buf = flatten(r, got);
@@ -190,6 +195,13 @@ int union_dir_list(struct filesys_obj *obj, region_t r, seqt_t *result, int *err
     region_free(r2);
     return count;
   }
+}
+
+int union_dir_list(struct filesys_obj *obj, region_t r, seqt_t *result, int *err)
+{
+  struct union_dir *dir = (void *) obj;
+  
+  return merge_dir_lists(r, dir->dir1, dir->dir2, result, err);
 }
 
 

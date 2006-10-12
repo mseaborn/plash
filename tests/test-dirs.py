@@ -4,21 +4,19 @@ import plash
 import plash_marshal as pm
 
 
-def assert_equal(got, expect, desc):
+def assert_equal(got, expect):
     if got != expect:
-        print "MISMATCH in \"%s\"" % desc
+        print "MISMATCH:"
         print "GOT:\n%s" % got
         print "EXPECTED:\n%s" % expect
-        assert False
-    else:
-        print "- assert ok for \"%s\"" % desc
+        raise AssertionError
 
 
 def check_dir_listing(dir, list_expect):
     list_got = [item['name'] for item in dir.dir_list()]
     list_got.sort()
     list_expect.sort()
-    assert list_got == list_expect
+    assert_equal(list_got, list_expect)
 
 
 def test_empty_writable_dir(dir, recurse=True):
@@ -35,7 +33,7 @@ def test_empty_writable_dir(dir, recurse=True):
     check_dir_listing(dir, list)
 
     file = dir.dir_traverse("test-file")
-    assert file.fsobj_type() == pm.OBJT_FILE
+    assert(file.fsobj_type(), pm.OBJT_FILE)
 
     # Create a subdirectory
 
@@ -45,7 +43,7 @@ def test_empty_writable_dir(dir, recurse=True):
     check_dir_listing(dir, list)
 
     subdir = dir.dir_traverse("test-dir")
-    assert subdir.fsobj_type() == pm.OBJT_DIR
+    assert_equal(subdir.fsobj_type(), pm.OBJT_DIR)
 
     # Does the subdirectory also pass this test?
     if recurse:
@@ -58,8 +56,8 @@ def test_empty_writable_dir(dir, recurse=True):
     check_dir_listing(dir, list)
 
     symlink = dir.dir_traverse("test-symlink")
-    assert symlink.fsobj_type() == pm.OBJT_SYMLINK
-    assert symlink.symlink_readlink() == "destination-path"
+    assert_equal(symlink.fsobj_type(), pm.OBJT_SYMLINK)
+    assert_equal(symlink.symlink_readlink(), "destination-path")
 
     # Remove the symlink
     dir.dir_unlink("test-symlink")
@@ -76,7 +74,7 @@ def test_empty_writable_dir(dir, recurse=True):
     list.remove("test-dir")
     check_dir_listing(dir, list)
     
-    assert list == []
+    assert_equal(list, [])
 
 
 def test_cow_dir(write, read):
@@ -87,13 +85,13 @@ def test_cow_dir(write, read):
     write.dir_mkdir(0777, "only-in-write")
 
     cow_dir = ns.make_cow_dir(write, read)
-    assert cow_dir.fsobj_type() == pm.OBJT_DIR
+    assert_equal(cow_dir.fsobj_type(), pm.OBJT_DIR)
 
     # Traverse this but never create anything in it
     cow_dir.dir_traverse("only-going-to-be-in-read")
 
     subdir = cow_dir.dir_traverse("mydir")
-    assert subdir.fsobj_type() == pm.OBJT_DIR
+    assert_equal(subdir.fsobj_type(), pm.OBJT_DIR)
     # This will realize mydir
     subdir.dir_mkdir(0777, "dir2")
     # This uses already-realized mydir
@@ -102,7 +100,7 @@ def test_cow_dir(write, read):
     check_dir_listing(subdir, ["dir1", "dir2", "dir3"])
 
     subdir = cow_dir.dir_traverse("only-in-write")
-    assert subdir.fsobj_type() == pm.OBJT_DIR
+    assert_equal(subdir.fsobj_type(), pm.OBJT_DIR)
     subdir.dir_mkdir(0777, "dir4")
 
 

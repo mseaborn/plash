@@ -87,7 +87,7 @@ def dir_of_node(node):
                 'fs_dir_of_node', node)
 
 FS_READ_ONLY        = 0x0
-FS_SLOW_RWC         = 0x1
+FS_SLOT_RWC         = 0x1
 FS_OBJECT_RW        = 0x2
 FS_FOLLOW_SYMLINKS  = 0x4
 

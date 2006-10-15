@@ -19,6 +19,16 @@ def check_dir_listing(dir, list_expect):
     assert_equal(list_got, list_expect)
 
 
+def test_utimes(fun):
+    "Set the object's atime/mtime and read them back"
+    # NB. Currently stat information is cached.
+    # We work around this by re-getting the object.
+    fun().fsobj_utimes(123456789, 0, 234567890, 0)
+    stat = fun().fsobj_stat()
+    assert_equal(stat['st_atime'], 123456789)
+    assert_equal(stat['st_mtime'], 234567890)
+
+
 def test_empty_writable_dir(dir, recurse=True):
     
     # Check directory listing - should be empty to start
@@ -44,6 +54,7 @@ def test_empty_writable_dir(dir, recurse=True):
 
     subdir = dir.dir_traverse("test-dir")
     assert_equal(subdir.fsobj_type(), pm.OBJT_DIR)
+    test_utimes(lambda: dir.dir_traverse("test-dir"))
 
     # Does the subdirectory also pass this test?
     if recurse:
@@ -79,16 +90,20 @@ def test_empty_writable_dir(dir, recurse=True):
 
 def test_cow_dir(write, read):
 
+    # Set up the initial state of the read-only and read/write layers
     read.dir_mkdir(0777, "mydir")
     read.dir_traverse("mydir").dir_mkdir(0777, "dir1")
     read.dir_mkdir(0777, "only-going-to-be-in-read")
     write.dir_mkdir(0777, "only-in-write")
 
+    # Now create the COW directory...
     cow_dir = ns.make_cow_dir(write, read)
     assert_equal(cow_dir.fsobj_type(), pm.OBJT_DIR)
 
     # Traverse this but never create anything in it
     cow_dir.dir_traverse("only-going-to-be-in-read")
+    
+    test_utimes(lambda: cow_dir.dir_traverse("mydir"))
 
     subdir = cow_dir.dir_traverse("mydir")
     assert_equal(subdir.fsobj_type(), pm.OBJT_DIR)

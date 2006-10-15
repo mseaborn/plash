@@ -62,6 +62,9 @@ struct cow_dir {
 };
 
 
+static int realize(struct cow_dir *dir, int *err);
+
+
 struct filesys_obj *
 make_cow_dir(struct filesys_obj *dir_write,
 	     struct filesys_obj *dir_read)
@@ -136,15 +139,21 @@ int cow_dir_utimes(struct filesys_obj *obj, const struct timeval *atime,
 		   const struct timeval *mtime, int *err)
 {
   struct cow_dir *dir = (void *) obj;
-  *err = ENOSYS;
-  return -1;
+
+  if(realize(dir, err) < 0) {
+    return -1;
+  }
+  return dir->dir_write->vtable->utimes(dir->dir_write, atime, mtime, err);
 }
 
 int cow_dir_chmod(struct filesys_obj *obj, int mode, int *err)
 {
   struct cow_dir *dir = (void *) obj;
-  *err = ENOSYS;
-  return -1;
+
+  if(realize(dir, err) < 0) {
+    return -1;
+  }
+  return dir->dir_write->vtable->chmod(dir->dir_write, mode, err);
 }
 
 static struct filesys_obj *

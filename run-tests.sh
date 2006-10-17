@@ -2,6 +2,7 @@
 
 set -e
 
+mkdir -p lib
 ./src/install-libs.pl --dest-dir lib/
 
 (cd python &&

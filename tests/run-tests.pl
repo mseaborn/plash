@@ -2,6 +2,7 @@
 
 use IO::File;
 use Cwd;
+use File::stat;
 
 my $verbose = 1;
 
@@ -182,6 +183,24 @@ test('chmod_unreadable',
 	       'chmod a-r file && chmod a+r file');
      });
 
+# We should not be able to set the setuid or setgid bits on files.
+test('chmod_setuid',
+     sub {
+       write_file('file', '');
+       my $rc = system(@pola_run, qw(-B -fw .),
+		       '-e', '/bin/chmod', '+s', 'file');
+       if($rc == 0) {
+	 die "chmod succeeded but shouldn't have done so";
+       }
+       else {
+	 print "chmod failed as expected\n";
+       }
+       if((stat('file')->mode() & 01000) != 0) {
+	 printf("mode: %o\n", stat('file')->mode());
+	 die "setuid/setgid/sticky bit set";
+       }
+     });
+
 test('utimes',
      sub {
        my $atime = 42000000;
@@ -191,9 +210,9 @@ test('utimes',
        run_cmd(@pola_run, qw(-B -fw file),
 	       '-e', '/usr/bin/perl', '-e',
 	       qq{ utime($atime, $mtime, 'file') || die "utime: \$!" });
-       my @st = stat('file');
-       if($st[8] != $atime) { die "atime mismatch" }
-       if($st[9] != $mtime) { die "atime mismatch" }
+       my $st = stat('file');
+       if($st->atime() != $atime) { die "atime mismatch" }
+       if($st->mtime() != $mtime) { die "atime mismatch" }
      });
 
 

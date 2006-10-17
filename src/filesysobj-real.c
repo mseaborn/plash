@@ -111,6 +111,13 @@ int real_symlink_stat(struct filesys_obj *obj1, struct stat *buf, int *err)
 int real_file_chmod(struct filesys_obj *obj, int mode, int *err)
 {
   struct real_file *file = (void *) obj;
+
+  /* Do not allow the setuid or setgid bits to be set. */
+  if((mode & S_ISUID) ||
+     (mode & S_ISGID)) {
+    *err = EPERM;
+    return -1;
+  }
   
   /* Couldn't open the directory; we don't have an FD for it. */
   if(!file->dir_fd) { *err = EIO; return -1; }
@@ -487,6 +494,13 @@ int real_dir_create_file(struct filesys_obj *obj, const char *leaf,
   struct stat st;
 
   if(!leafname_ok(leaf)) { *err = ENOENT; return -1; }
+  
+  /* Do not allow the setuid or setgid bits to be set. */
+  if((mode & S_ISUID) ||
+     (mode & S_ISGID)) {
+    *err = EPERM;
+    return -1;
+  }
 
   if(flags &
      ~(O_ACCMODE | O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC | O_APPEND |

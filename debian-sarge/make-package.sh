@@ -63,7 +63,7 @@ fi; done
 
 ./install.sh debian/plash/
 
-if "$USE_PYTHON" = yes; then
+if [ "$USE_PYTHON" = yes ]; then
   DEST_FULL=`pwd`/$DEST
   (cd python;
    for PYVERSION in `pyversions -vs`; do

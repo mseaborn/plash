@@ -56,7 +56,7 @@ PLASH_EXECUTABLES="
 	plash-socket-publish
 	plash-run-emacs
 	powerbox-req"
-if "$USE_GTK" = yes; then
+if [ "$USE_GTK" = yes ]; then
   PLASH_EXECUTABLES="$PLASH_EXECUTABLES plash-opts-gtk"
 fi
 

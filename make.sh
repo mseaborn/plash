@@ -200,7 +200,7 @@ build_libc_ldso_extras () {
 	obj/libc-comms.os \
 	obj/cap-utils.os \
 	obj/cap-call-return.os \
-	obj/cap-protocol.os \
+	obj/libc-cap-protocol.os \
 	obj/marshal-pack.os \
 	obj/filesysobj.os \
 	obj/comms.os \
@@ -217,7 +217,7 @@ build_libc_ldso_extras () {
 	obj/rtld-cap-protocol.os \
 	obj/marshal-pack.os \
 	obj/filesysobj.os \
-	obj/rtld-comms.os \
+	obj/comms.os \
 	obj/region.os \
 	obj/dont-free.os \
 	`for F in $OBJS_FOR_RTLD; do echo $GLIBC/$F; done` \
@@ -423,36 +423,6 @@ build_small_bits () {
 
 
 build_shell_etc() {
-  rm -f obj/libplash.a
-  LIBPLASH_OBJS="
-	obj/shell-parse.o \
-	obj/shell-variants.o \
-	obj/shell-globbing.o \
-	obj/shell-fds.o \
-	obj/shell-wait.o \
-	obj/build-fs.o obj/build-fs-static.o obj/build-fs-dynamic.o \
-	obj/fs-operations.o obj/resolve-filename.o \
-	obj/cap-utils.o obj/cap-utils-libc.o \
-	obj/marshal-pack.o \
-	obj/marshal-exec.o \
-	obj/cap-call-return.o obj/cap-protocol.o \
-	obj/filesysslot.o \
-	obj/filesysobj-fab.o \
-	obj/filesysobj-cow.o \
-	obj/filesysobj-union.o \
-	obj/filesysobj-readonly.o \
-	obj/filesysobj-real.o \
-	obj/filesysobj.o \
-	obj/log-proxy.o \
-	obj/reconnectable-obj.o \
-	obj/parse-filename.o obj/comms.o \
-	obj/serialise.o obj/serialise-utils.o obj/region.o obj/utils.o
-	obj/config-read.o"
-  if [ "$USE_GTK" = yes ]; then
-    LIBPLASH_OBJS="$LIBPLASH_OBJS obj/powerbox.o"
-  fi
-  ar -cr obj/libplash.a $LIBPLASH_OBJS
-
   # "search A B..." tries files A B etc. in turn, and prints the
   # name of the first one that exists.
   search () {
@@ -494,6 +464,9 @@ build_shell_etc() {
   #    ncurses replaces termcap.
   echo Linking bin/pola-shell
   $CC $OPTS_S obj/shell.o obj/libplash.a \
+	obj/shell-parse.o \
+	obj/shell-variants.o \
+	obj/shell-globbing.o \
 	$LIBC_LINK -lreadline -ltermcap \
 	-o bin/pola-shell
 
@@ -543,7 +516,7 @@ build_gtk_powerbox () {
     echo Linking shobj/gtk-powerbox.so
     $CC -shared -Wl,-z,defs \
 	obj/gtk-powerbox.os \
-	obj/libplash.a \
+	obj/libplash_pic.a \
 	`pkg-config --libs gtk+-2.0` -ldl \
 	-o shobj/powerbox-for-gtk.so
   fi

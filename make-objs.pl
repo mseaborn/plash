@@ -29,56 +29,70 @@ if($check ne 'check') { die }
 $use_gtk = $use_gtk eq 'yes';
 
 
-@opts_s = ('-O1', '-Wall',
-	   '-Igensrc', '-Isrc',
-	   # '-g',
-	   # '-DGC_DEBUG',
-	   );
+my @c_flags = ('-O1', '-Wall',
+	       '-Igensrc', '-Isrc');
+my @opts_s = @c_flags;
 if($use_gtk) {
   push(@opts_s,
        split(/\s+/, `pkg-config gtk+-2.0 --cflags`),
        '-DPLASH_GLIB');
 }
+my @opts_c = (@c_flags,
+	      '-D_REENTRANT', '-fPIC');
 
-gcc('src/region.c', 'obj/region.o', @opts_s);
-gcc('src/serialise.c', 'obj/serialise.o', @opts_s);
-gcc('src/serialise-utils.c', 'obj/serialise-utils.o', @opts_s);
-gcc('src/comms.c', 'obj/comms.o', @opts_s,
-    '-DHALF_NAME="server"');
-gcc('src/cap-protocol.c', 'obj/cap-protocol.o', @opts_s);
-gcc('src/cap-call-return.c', 'obj/cap-call-return.o', @opts_s);
-gcc('src/cap-utils.c', 'obj/cap-utils.o', @opts_s);
-gcc('src/cap-utils-libc.c', 'obj/cap-utils-libc.o', @opts_s);
-gcc('src/marshal-pack.c', 'obj/marshal-pack.o', @opts_s);
-gcc('src/marshal-exec.c', 'obj/marshal-exec.o', @opts_s);
-gcc('src/utils.c', 'obj/utils.o', @opts_s);
-gcc('src/parse-filename.c', 'obj/parse-filename.o', @opts_s);
-gcc('src/filesysobj.c', 'obj/filesysobj.o', @opts_s);
-gcc('src/filesysobj-real.c', 'obj/filesysobj-real.o', @opts_s);
-gcc('src/filesysobj-fab.c', 'obj/filesysobj-fab.o', @opts_s);
-gcc('src/filesysobj-readonly.c', 'obj/filesysobj-readonly.o', @opts_s);
-gcc('src/filesysobj-union.c', 'obj/filesysobj-union.o', @opts_s);
-gcc('src/filesysobj-cow.c', 'obj/filesysobj-cow.o', @opts_s);
-gcc('src/filesysslot.c', 'obj/filesysslot.o', @opts_s);
-gcc('src/log-proxy.c', 'obj/log-proxy.o', @opts_s);
-gcc('src/reconnectable-obj.c', 'obj/reconnectable-obj.o', @opts_s);
-gcc('src/build-fs.c', 'obj/build-fs.o', @opts_s);
-gcc('src/build-fs-static.c', 'obj/build-fs-static.o', @opts_s);
-gcc('src/build-fs-dynamic.c', 'obj/build-fs-dynamic.o', @opts_s);
+
+my @library_files;
+sub build_lib {
+  my ($name, @args) = @_;
+  gcc("src/$name.c", "obj/$name.o", @opts_s);
+  gcc("src/$name.c", "obj/$name.os", @opts_s, '-D_REENTRANT', '-fPIC');
+  push(@library_files, $name);
+}
+
+build_lib('region');
+build_lib('serialise');
+build_lib('serialise-utils');
+build_lib('comms');
+build_lib('cap-protocol');
+build_lib('cap-call-return');
+build_lib('cap-utils');
+build_lib('cap-utils-libc');
+build_lib('marshal-pack');
+build_lib('marshal-exec');
+build_lib('utils');
+build_lib('parse-filename');
+build_lib('filesysobj');
+build_lib('filesysobj-real');
+build_lib('filesysobj-fab');
+build_lib('filesysobj-readonly');
+build_lib('filesysobj-union');
+build_lib('filesysobj-cow');
+build_lib('filesysslot');
+build_lib('log-proxy');
+build_lib('reconnectable-obj');
+build_lib('build-fs');
+build_lib('build-fs-static');
+build_lib('build-fs-dynamic');
+build_lib('resolve-filename');
+build_lib('fs-operations');
+build_lib('config-read');
+build_lib('shell-fds');
+build_lib('shell-wait');
+
 gcc('src/shell.c', 'obj/shell.o', @opts_s);
 gcc('src/shell-parse.c', 'obj/shell-parse.o', @opts_s,
     '-Wno-unused');
 gcc('src/shell-variants.c', 'obj/shell-variants.o', @opts_s);
 gcc('src/shell-globbing.c', 'obj/shell-globbing.o', @opts_s);
-gcc('src/shell-fds.c', 'obj/shell-fds.o', @opts_s);
-gcc('src/shell-wait.c', 'obj/shell-wait.o', @opts_s);
 gcc('src/shell-options.c', 'obj/shell-options.o', @opts_s);
-gcc('src/resolve-filename.c', 'obj/resolve-filename.o', @opts_s);
-gcc('src/fs-operations.c', 'obj/fs-operations.o', @opts_s);
-gcc('src/config-read.c', 'obj/config-read.o', @opts_s);
 if($use_gtk) {
-  gcc('src/powerbox.c', 'obj/powerbox.o', @opts_s);
+  build_lib('powerbox');
 }
+
+do_cmd('rm', '-f', 'obj/libplash.a');
+do_cmd('rm', '-f', 'obj/libplash_pic.a');
+do_cmd('ar', '-cr', 'obj/libplash.a', map { "obj/$_.o" } @library_files);
+do_cmd('ar', '-cr', 'obj/libplash_pic.a', map { "obj/$_.os" } @library_files);
 
 # Non-library code
 gcc('src/test-caps.c', 'obj/test-caps.o', @opts_s);
@@ -99,18 +113,10 @@ gcc('src/powerbox-req.c', 'obj/powerbox-req.o', @opts_s);
 
 # Build object files to be linked into libc.so and ld.so (ld-linux.so)
 
-my @opts_c = ('-Wall', '-nostdlib',
-	      '-Igensrc', '-Isrc',
-	      # '-g',
-	      '-D_REENTRANT', '-fPIC');
-
-gcc('src/comms.c', 'obj/comms.os', @opts_c,
-    '-DHALF_NAME="client"');
-gcc('src/comms.c', 'obj/rtld-comms.os', @opts_c,
-    '-DHALF_NAME="client"', '-DIN_RTLD');
+gcc('src/comms.c', 'obj/comms.os', @opts_c);
 gcc('src/region.c', 'obj/region.os', @opts_c);
 gcc('src/serialise.c', 'obj/serialise.os', @opts_c);
-gcc('src/cap-protocol.c', 'obj/cap-protocol.os', @opts_c,
+gcc('src/cap-protocol.c', 'obj/libc-cap-protocol.os', @opts_c,
     '-DIN_LIBC');
 gcc('src/cap-protocol.c', 'obj/rtld-cap-protocol.os', @opts_c,
     '-DIN_RTLD');

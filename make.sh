@@ -525,7 +525,7 @@ build_gtk_powerbox () {
 build_python_module () {
   if [ "$USE_PYTHON" = yes ]; then
     echo Building Python module
-    (cd python && $PYTHON setup.py build)
+    (cd python && $PYTHON setup.py build --force)
   fi
 }
 

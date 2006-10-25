@@ -217,7 +217,7 @@ build_libc_ldso_extras () {
 	obj/rtld-cap-protocol.os \
 	obj/marshal-pack.os \
 	obj/filesysobj.os \
-	obj/comms.os \
+	obj/rtld-comms.os \
 	obj/region.os \
 	obj/dont-free.os \
 	`for F in $OBJS_FOR_RTLD; do echo $GLIBC/$F; done` \

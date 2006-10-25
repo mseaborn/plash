@@ -113,7 +113,7 @@ gcc('src/powerbox-req.c', 'obj/powerbox-req.o', @opts_s);
 
 # Build object files to be linked into libc.so and ld.so (ld-linux.so)
 
-gcc('src/comms.c', 'obj/comms.os', @opts_c);
+gcc('src/comms.c', 'obj/rtld-comms.os', @opts_c, '-DIN_RTLD');
 gcc('src/region.c', 'obj/region.os', @opts_c);
 gcc('src/serialise.c', 'obj/serialise.os', @opts_c);
 gcc('src/cap-protocol.c', 'obj/libc-cap-protocol.os', @opts_c,

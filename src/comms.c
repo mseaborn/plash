@@ -29,7 +29,7 @@
 
 
 #define MOD_DEBUG 0
-#define MOD_MSG HALF_NAME ":comm: "
+#define MOD_MSG "comm: "
 
 #ifdef IN_RTLD
 

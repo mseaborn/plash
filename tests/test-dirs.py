@@ -39,6 +39,11 @@ def test_empty_writable_dir(dir, recurse=True):
 
     # FIXME: arg ordering
     fd = dir.dir_create_file(os.O_WRONLY, 0777, "test-file")
+    # Close the file descriptor.  On NFS, if a file is deleted without
+    # being closed, NFS shows a temporary file in the directory listing,
+    # with a name like ".nfs021d13370001a79f", which stops the listing
+    # checks from succeeding.
+    del fd
     list.append("test-file")
     check_dir_listing(dir, list)
 

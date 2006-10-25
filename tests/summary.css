@@ -1,0 +1,42 @@
+
+.result-ok
+{
+  background-color: #B4E6B6;
+}
+.result-failed
+{
+  background-color: #FF8B7D;
+}
+.result-none
+{
+  background-color: #ddd;
+}
+
+.result-ok,
+.result-failed,
+.result-none
+{
+  font-size: 10pt;
+}
+
+th.col-heading
+{
+  font-size: 10pt;
+  vertical-align: bottom;
+}
+
+th.row-heading
+{
+  font-size: 11pt;
+  text-align: left;
+}
+
+table
+{
+  border-collapse: collapse;
+}
+
+.time
+{
+  font-size: 8pt;
+}

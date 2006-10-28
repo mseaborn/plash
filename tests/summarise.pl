@@ -21,6 +21,8 @@ my @tests = sort(keys(%$tests));
 
 @runs = remove_dups(@runs);
 
+@tests = sort { compare_tests($a, $b, \@runs) } @tests;
+
 # Create table
 sub result_cell {
   my ($run, $test) = @_;
@@ -111,6 +113,25 @@ sub results_equal {
     }
   }
   return 1;
+}
+
+sub compare_tests {
+  my ($test1, $test2, $runs) = @_;
+  for(my $i = 0; $i <= $#$runs; $i++) {
+    my $r = maybe_undef($runs->[$i]{R}{$test1});
+    my $r2 = maybe_undef($runs->[$i]{R}{$test2});
+    if($r ne $r2) {
+      return $r cmp $r2;
+      if($r eq 'failed') {
+	return -1;
+      }
+      if($r2 eq 'failed') {
+	return 1;
+      }
+      return -1; # fallback
+    }
+  }
+  return 0;
 }
 
 # Takes a list of result sets.

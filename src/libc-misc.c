@@ -435,7 +435,7 @@ int new_chdir(const char *pathname)
   {
     seqf_t msg = reply;
     int ok = 1;
-    m_str(&ok, &msg, "RSuc");
+    m_int_const(&ok, &msg, METHOD_OKAY);
     m_end(&ok, &msg);
     if(ok) {
       region_free(r);
@@ -1297,7 +1297,7 @@ int new_access(const char *pathname, unsigned int mode)
   {
     seqf_t msg = reply;
     int ok = 1;
-    m_str(&ok, &msg, "RAcc");
+    m_int_const(&ok, &msg, METHOD_OKAY);
     m_end(&ok, &msg);
     if(ok) {
       region_free(r);
@@ -1342,7 +1342,7 @@ int my_chmod(int nofollow, const char *pathname, unsigned int mode)
   {
     seqf_t msg = reply;
     int ok = 1;
-    m_str(&ok, &msg, "RChm");
+    m_int_const(&ok, &msg, METHOD_OKAY);
     m_end(&ok, &msg);
     if(ok) {
       region_free(r);
@@ -1432,7 +1432,7 @@ int new_rename(const char *oldpath, const char *newpath)
   {
     seqf_t msg = reply;
     int ok = 1;
-    m_str(&ok, &msg, "RRnm");
+    m_int_const(&ok, &msg, METHOD_OKAY);
     m_end(&ok, &msg);
     if(ok) {
       region_free(r);
@@ -1462,7 +1462,7 @@ int new_link(const char *oldpath, const char *newpath)
   {
     seqf_t msg = reply;
     int ok = 1;
-    m_str(&ok, &msg, "RLnk");
+    m_int_const(&ok, &msg, METHOD_OKAY);
     m_end(&ok, &msg);
     if(ok) {
       region_free(r);
@@ -1492,7 +1492,7 @@ int new_symlink(const char *oldpath, const char *newpath)
   {
     seqf_t msg = reply;
     int ok = 1;
-    m_str(&ok, &msg, "RSym");
+    m_int_const(&ok, &msg, METHOD_OKAY);
     m_end(&ok, &msg);
     if(ok) {
       region_free(r);
@@ -1521,7 +1521,7 @@ int new_mkdir(const char *pathname, unsigned int mode)
   {
     seqf_t msg = reply;
     int ok = 1;
-    m_str(&ok, &msg, "RMkd");
+    m_int_const(&ok, &msg, METHOD_OKAY);
     m_end(&ok, &msg);
     if(ok) {
       region_free(r);
@@ -1557,7 +1557,7 @@ int new_unlink(const char *pathname)
   {
     seqf_t msg = reply;
     int ok = 1;
-    m_str(&ok, &msg, "RUnl");
+    m_int_const(&ok, &msg, METHOD_OKAY);
     m_end(&ok, &msg);
     if(ok) {
       region_free(r);
@@ -1585,7 +1585,7 @@ int new_rmdir(const char *pathname)
   {
     seqf_t msg = reply;
     int ok = 1;
-    m_str(&ok, &msg, "RRmd");
+    m_int_const(&ok, &msg, METHOD_OKAY);
     m_end(&ok, &msg);
     if(ok) {
       region_free(r);

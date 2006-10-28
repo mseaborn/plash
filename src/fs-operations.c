@@ -1166,7 +1166,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
 			       0 /*nofollow*/, &err);
       if(obj) {
 	filesys_obj_free(obj);
-	*reply = mk_string(r, "RAcc");
+	*reply = mk_int(r, METHOD_OKAY);
 	*log_reply = mk_string(r, "ok");
       }
       else {
@@ -1193,7 +1193,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
 	*log_reply = mk_string(r, "fail");
       }
       else {
-	*reply = mk_string(r, "RMkd");
+	*reply = mk_int(r, METHOD_OKAY);
 	*log_reply = mk_string(r, "ok");
       }
       return;
@@ -1215,7 +1215,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
 		      mk_int(r, err));
       }
       else {
-	*reply = mk_string(r, "RSym");
+	*reply = mk_int(r, METHOD_OKAY);
       }
       return;
     }
@@ -1238,7 +1238,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
 	return;
       }
       else {
-	*reply = mk_string(r, "RRnm");
+	*reply = mk_int(r, METHOD_OKAY);
 	*log_reply = mk_string(r, "ok");
 	return;
       }
@@ -1262,7 +1262,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
 	return;
       }
       else {
-	*reply = mk_string(r, "RLnk");
+	*reply = mk_int(r, METHOD_OKAY);
 	*log_reply = mk_string(r, "ok");
 	return;
       }
@@ -1290,7 +1290,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
 	*log_reply = mk_string(r, "fail");
       }
       else {
-	*reply = mk_string(r, "RChm");
+	*reply = mk_int(r, METHOD_OKAY);
 	*log_reply = mk_string(r, "ok");
       }
       return;
@@ -1350,7 +1350,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
 	*log_reply = mk_string(r, "fail");
       }
       else {
-	*reply = mk_string(r, "RUtm");
+	*reply = mk_int(r, METHOD_OKAY);
 	*log_reply = mk_string(r, "ok");
       }
       return;
@@ -1370,7 +1370,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
 	*log_reply = mk_string(r, "fail");
       }
       else {
-	*reply = mk_string(r, "RUnl");
+	*reply = mk_int(r, METHOD_OKAY);
 	*log_reply = mk_string(r, "ok");
       }
       return;
@@ -1390,7 +1390,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
 	*log_reply = mk_string(r, "fail");
       }
       else {
-	*reply = mk_string(r, "RRmd");
+	*reply = mk_int(r, METHOD_OKAY);
 	*log_reply = mk_string(r, "ok");
       }
       return;
@@ -1414,7 +1414,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
 	if(obj->vtable->socket_connect(obj, sock_fd, &err) >= 0) {
 	  filesys_obj_free(obj);
 	  *log_reply = mk_string(r, "ok");
-	  *reply = mk_string(r, "RFco");
+	  *reply = mk_int(r, METHOD_OKAY);
 	  return;
 	}
 	filesys_obj_free(obj);
@@ -1444,7 +1444,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
 					  &err) >= 0) {
 	  free_resolved_slot(slot);
 	  *log_reply = mk_string(r, "ok");
-	  *reply = mk_string(r, "RFbd");
+	  *reply = mk_int(r, METHOD_OKAY);
 	  return;
 	}
 	free_resolved_slot(slot);
@@ -1467,7 +1467,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
       e = process_chdir(proc, pathname, &err);
       if(e == 0) {
 	*log_reply = mk_string(r, "ok");
-	*reply = mk_string(r, "RSuc");
+	*reply = mk_int(r, METHOD_OKAY);
       }
       else {
 	*log_reply = mk_string(r, "fail");

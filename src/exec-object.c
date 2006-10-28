@@ -175,7 +175,7 @@ void exec_obj_invoke(struct filesys_obj *obj1, struct cap_args args)
 	  {
 	    seqf_t msg = flatten_reuse(r, result.data);
 	    int ok = 1;
-	    m_str(&ok, &msg, "RSuc");
+	    m_int_const(&ok, &msg, METHOD_OKAY);
 	    m_end(&ok, &msg);
 	    if(!(ok && result.caps.size == 0 && result.fds.count == 0)) {
 	      pl_args_free(&result);

@@ -24,6 +24,7 @@
 #include "region.h"
 #include "comms.h"
 #include "libc-comms.h"
+#include "marshal.h"
 
 
 int my_utimes(int nofollow, const char *pathname,
@@ -36,7 +37,7 @@ int my_utimes(int nofollow, const char *pathname,
     goto error;
   }
   if(req_and_reply(r,
-		   cat4(r, mk_string(r, "Utim"),
+		   cat4(r, mk_int(r, METHOD_FSOP_UTIME),
 			mk_int(r, nofollow),
 			cat4(r,
 			  mk_int(r, atime->tv_sec), mk_int(r, atime->tv_usec),
@@ -45,7 +46,7 @@ int my_utimes(int nofollow, const char *pathname,
   {
     seqf_t msg = reply;
     int ok = 1;
-    m_str(&ok, &msg, "RUtm");
+    m_int_const(&ok, &msg, METHOD_OKAY);
     m_end(&ok, &msg);
     if(ok) {
       region_free(r);
@@ -56,8 +57,9 @@ int my_utimes(int nofollow, const char *pathname,
     seqf_t msg = reply;
     int err;
     int ok = 1;
-    m_str(&ok, &msg, "Fail");
+    m_int_const(&ok, &msg, METHOD_FAIL);
     m_int(&ok, &msg, &err);
+    m_end(&ok, &msg);
     if(ok) {
       __set_errno(err);
       goto error;

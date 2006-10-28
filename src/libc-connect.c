@@ -34,6 +34,7 @@
 #include "comms.h"
 #include "libc-comms.h"
 #include "libc-fds.h"
+#include "marshal.h"
 
 
 /* EXPORT: new_connect => WEAK:connect WEAK:__connect __libc_connect __connect_internal */
@@ -48,7 +49,7 @@ int new_connect(int sock_fd, const struct sockaddr *addr, socklen_t addr_len)
     int sock_fd_copy = dup(sock_fd);
     if(sock_fd_copy < 0) return -1;
     r = region_make();
-    if(req_and_reply_with_fds2(r, cat2(r, mk_string(r, "Fcon"),
+    if(req_and_reply_with_fds2(r, cat2(r, mk_int(r, METHOD_FSOP_CONNECT),
 				       mk_string(r, addr2->sun_path)),
 			       mk_fds1(r, sock_fd_copy),
 			       &reply, &reply_fds) < 0) goto error;
@@ -56,7 +57,7 @@ int new_connect(int sock_fd, const struct sockaddr *addr, socklen_t addr_len)
     {
       seqf_t msg = reply;
       int ok = 1;
-      m_str(&ok, &msg, "RFco");
+      m_int_const(&ok, &msg, METHOD_OKAY);
       m_end(&ok, &msg);
       if(ok) {
 	/* Store the pathname for later, so that getsockname() can
@@ -77,7 +78,7 @@ int new_connect(int sock_fd, const struct sockaddr *addr, socklen_t addr_len)
       seqf_t msg = reply;
       int err;
       int ok = 1;
-      m_str(&ok, &msg, "Fail");
+      m_int_const(&ok, &msg, METHOD_FAIL);
       m_int(&ok, &msg, &err);
       m_end(&ok, &msg);
       if(ok) {
@@ -122,7 +123,7 @@ int new_bind(int sock_fd, struct sockaddr *addr, socklen_t addr_len)
     int sock_fd_copy = dup(sock_fd);
     if(sock_fd_copy < 0) return -1;
     r = region_make();
-    if(req_and_reply_with_fds2(r, cat2(r, mk_string(r, "Fbnd"),
+    if(req_and_reply_with_fds2(r, cat2(r, mk_int(r, METHOD_FSOP_BIND),
 				       mk_string(r, addr2->sun_path)),
 			       mk_fds1(r, sock_fd_copy),
 			       &reply, &reply_fds) < 0) goto error;
@@ -130,7 +131,7 @@ int new_bind(int sock_fd, struct sockaddr *addr, socklen_t addr_len)
     {
       seqf_t msg = reply;
       int ok = 1;
-      m_str(&ok, &msg, "RFbd");
+      m_int_const(&ok, &msg, METHOD_OKAY);
       m_end(&ok, &msg);
       if(ok) {
 	/* Store the pathname for later, so that getsockname() can
@@ -151,7 +152,7 @@ int new_bind(int sock_fd, struct sockaddr *addr, socklen_t addr_len)
       seqf_t msg = reply;
       int err;
       int ok = 1;
-      m_str(&ok, &msg, "Fail");
+      m_int_const(&ok, &msg, METHOD_FAIL);
       m_int(&ok, &msg, &err);
       m_end(&ok, &msg);
       if(ok) {

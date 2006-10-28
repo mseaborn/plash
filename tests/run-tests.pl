@@ -251,6 +251,15 @@ test('clobber_comm_fd_pthread',
        assert_equal($x, "close refused as expected\n", 'output');
      });
 
+# Does getuid() return the same inside the sandbox as outside?
+test('getuid',
+     sub {
+       my $data1 = cmd_capture('id -u');
+       my $data2 = cmd_capture(@pola_run, '--cwd', '/', '-B', '-fl', '/etc',
+			       '-e', '/bin/sh', '-c', 'id -u');
+       assert_equal($data2, $data1, 'id output');
+     });
+
 # Does a socket created in the sandbox return expected SO_PEERCRED
 # information?
 test('getsockopt-uid',

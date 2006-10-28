@@ -42,8 +42,8 @@ int new_getsockopt(int sock_fd, int level, int opt_name,
     if(creds->uid == getuid() &&
        creds->gid == getgid())
     {
-      int fake_uid = my_atoi(getenv("PLASH_FAKEUID"));
-      int fake_gid = my_atoi(getenv("PLASH_FAKEGID"));
+      int fake_uid = my_atoi(getenv("PLASH_FAKE_UID"));
+      int fake_gid = my_atoi(getenv("PLASH_FAKE_GID"));
       if(fake_uid >= 0) { creds->uid = fake_uid; }
       if(fake_gid >= 0) { creds->gid = fake_gid; }
     }

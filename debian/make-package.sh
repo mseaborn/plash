@@ -67,6 +67,8 @@ if [ "$USE_PYTHON" = yes ]; then
   DEST_FULL=`pwd`/$DEST
   (cd python;
    for PYVERSION in `pyversions -vs`; do
+     # Force it to rebuild C module.
+     python$PYVERSION setup.py build --force
      # "--no-compile" stops it from byte-compiling code.
      python$PYVERSION setup.py install --no-compile --root=$DEST_FULL
    done

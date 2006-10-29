@@ -22,7 +22,7 @@ foreach my $test (sort(keys(%$tests))) {
   my $input = "$test.input";
   if(!-e $input) { $input = '/dev/null' }
   
-  if(!-e $test) {
+  if(!-e "bin/$test") {
     $result = 'missing';
   }
   else {
@@ -37,7 +37,8 @@ foreach my $test (sort(keys(%$tests))) {
     
     # LOCPATH=../../glibc/localedata
     # NB. LC_ALL=C is used in glibc's Rules file
-    my $cmd = "env LC_ALL=C `cat tmp-env` $test `cat tmp-args` <$input >$test.out 2>&1";
+    if(system("mkdir -p `dirname out/$test`") != 0) { die }
+    my $cmd = "env LC_ALL=C `cat tmp-env` bin/$test `cat tmp-args` <$input >out/$test.out 2>&1";
     
     print "$cmd\n";
     my $time0 = gettimeofday();

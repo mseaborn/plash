@@ -22,10 +22,10 @@
 
 package=plash
 
-GLIBC_DIR		= glibc-2.3.5
-GLIBC_BUILD		= glibc-objs
-GLIBC_ARCHIVE		= glibc-2.3.5.tar.bz2
-LINUXTHREADS_ARCHIVE	= glibc-linuxthreads-2.3.5.tar.bz2
+GLIBC_DIR		= glibc-2.3.6
+GLIBC_BUILD		= glibc-2.3.6-objs
+GLIBC_ARCHIVE		= glibc-2.3.6.tar.bz2
+LINUXTHREADS_ARCHIVE	= glibc-linuxthreads-2.3.6.tar.bz2
 
 binary:	binary-arch
 

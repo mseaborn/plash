@@ -4,7 +4,7 @@ tests := $(shell cat test-list)
 all: $(tests)
 
 %: %.c
-	gcc -D_GNU_SOURCE -Wall $(shell cat $@.cflags) $< -ldl -o $@
+	gcc -D_GNU_SOURCE -Wall $(shell cat $@.cflags) $< -ldl -lpthread -o $@
 
 clean:
 	rm -v $(tests)

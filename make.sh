@@ -289,6 +289,9 @@ build_libc () {
 	 *(__libc_freeres_ptrs) \
 	 PROVIDE(__stop___libc_freeres_ptrs = .);/'
 
+  echo "  Generating libc symbol version map: $OUT/libc.map"
+  ./src/make-libc-map.pl <$GLIBC/libc.map >$OUT/libc.map
+
   if false; then
     # Without using libc_pic.a:
     OBJ_FILES=`cat $OUT/obj-file-list-libc`

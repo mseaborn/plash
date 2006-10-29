@@ -17,6 +17,9 @@
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
    USA.  */
 
+/* For asprintf() */
+#define _GNU_SOURCE
+
 #include <unistd.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -59,13 +62,18 @@ void fprint_d(FILE *fp, seqf_t b)
 
 seqt_t mk_printf(region_t r, const char *fmt, ...)
 {
-  char buf[256], *x;
   va_list args;
+  char *buf, *str;
   int got;
 
   va_start(args, fmt);
-  got = vsnprintf(buf, sizeof(buf), fmt, args);
-  x = region_alloc(r, got);
-  memcpy(x, buf, got);
-  return mk_leaf2(r, x, got);
+  got = vasprintf(&buf, fmt, args);
+  assert(got >= 0);
+  va_end(args);
+
+  str = region_alloc(r, got);
+  memcpy(str, buf, got);
+  free(buf);
+
+  return mk_leaf2(r, str, got);
 }

@@ -44,6 +44,10 @@ if($test_per_row) {
   # Output with a row per test
   push(@rows,
        [tag('th', ''),
+	map { tagp('th', [['class', 'col-heading']], "$_->{Run_count} runs") }
+	@runs]);
+  push(@rows,
+       [tag('th', ''),
 	map { tagp('th', [['class', 'col-heading']], run_heading($_)) }
 	@runs]);
   push(@rows,
@@ -150,6 +154,7 @@ sub remove_dups {
     }
     # Add to list of revisions
     $last->{Revisions}{$x->{Revision}} = 1;
+    $last->{Run_count}++;
   }
   @got
 }

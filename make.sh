@@ -319,7 +319,7 @@ build_libc () {
 	-shared -static-libgcc \
 	-Wl,-z,defs \
 	-Wl,-dynamic-linker=/lib/ld-linux.so.2 \
-	-Wl,--version-script=src/libc.map-2.3.5 \
+	-Wl,--version-script=$OUT/libc.map \
 	-Wl,-soname=libc.so.6 \
 	-Wl,-z,combreloc \
 	-nostdlib -nostartfiles -e __libc_main -u __register_frame \
@@ -361,7 +361,7 @@ build_libpthread () {
   $CC -Wl,--stats,--no-keep-memory  \
 	-shared -static-libgcc \
 	-Wl,-dynamic-linker=/lib/ld-linux.so.2 \
-	-Wl,--version-script=src/libc.map-2.3.5 \
+	-Wl,--version-script=$OUT/libc.map \
 	-Wl,-soname=libc.so.6 \
 	-Wl,-z,combreloc \
 	-Wl,-z,relro \

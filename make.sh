@@ -130,34 +130,6 @@ fi
 # ./src/files-to-link.pl $GLIBC $EXCLUDE > $OUT/obj-file-list-libc
 ./src/files-to-link.pl $GLIBC --rtld $EXCLUDE > $OUT/obj-file-list-rtld
 
-# List of files from the glibc build tree that we need.
-ALSO_IMPORT="
-	elf/dl-allobjs.os
-	elf/soinit.os
-	elf/sofini.os
-	elf/interp.os
-	csu/abi-note.o
-	linuxthreads/libpthread_pic.a
-	linuxthreads/libc-tsd.os
-	linuxthreads/crti.o
-	linuxthreads/crtn.o"
-ALSO_IMPORT_NONOBJ="
-	ld.map
-	libpthread.map
-	shlib.lds"
-# Build a list of all the files we need to import from glibc.
-# This will be copied across to Debian's glibc package.
-# Do we need to import the stamp.os files?  Not if we're using libc_pic.a.
-mkdir -p $OUT/debian
-for F in $OBJS_FOR_LIBC \
-         $OBJS_FOR_RTLD \
-         $ALSO_IMPORT \
-         `cat $OUT/obj-file-list-rtld`; \
-do echo $F; done \
-  | sort | uniq > $OUT/debian/plash-export-list
-for F in $ALSO_IMPORT_NONOBJ; do echo $F; done \
-  > $OUT/debian/plash-export-list-nonobj
-
 
 
 # This links the plash-libc code that is to be linked into libc.so and

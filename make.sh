@@ -125,10 +125,6 @@ EXCLUDE="io/open.os io/open64.os io/creat.os io/creat64.os
 if [ ! -d "$GLIBC" ]; then
   echo "Warning: glibc object files directory \"$GLIBC\" does not exist"
 fi
-  
-# Doesn't work if the stamp.os files are not available
-# ./src/files-to-link.pl $GLIBC $EXCLUDE > $OUT/obj-file-list-libc
-./src/files-to-link.pl $GLIBC --rtld $EXCLUDE > $OUT/obj-file-list-rtld
 
 
 

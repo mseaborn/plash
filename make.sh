@@ -245,14 +245,19 @@ build_libc_ldso_extras () {
 build_ldso () {
   # Normally glibc creates elf/rtld-libc.a
   echo 'Making ld.so (the dynamic linker)'
-  OBJ_FILES_RTLD=`cat $OUT/obj-file-list-rtld`
-  OBJ_FILES_RTLD=`for F in $OBJ_FILES_RTLD; do echo $GLIBC/$F; done`
-  for F in $OBJ_FILES_RTLD; do
-    if [ ! -e $F ]; then echo missing: $F; fi
-  done
-  echo "  Creating $OUT/rtld-libc.a"
-  rm -f $OUT/rtld-libc.a
-  ar -cr $OUT/rtld-libc.a $OBJ_FILES_RTLD
+
+  RTLD_EXTRA_OBJS="
+       stdlib/rtld-getenv.os
+       string/rtld-strncmp.os
+       posix/rtld-uname.os
+       io/rtld-dup.os"
+
+  cp -av $GLIBC/elf/rtld-libc.a $OUT/rtld-libc.a
+  # Remove some object files
+  # Add the "rtld-" prefix to object filenames
+  ar -d $OUT/rtld-libc.a `for F in $EXCLUDE; do echo rtld-$(basename $F); done`
+  # Add these extra object files
+  ar -r $OUT/rtld-libc.a `for F in $RTLD_EXTRA_OBJS; do echo $GLIBC/$F; done`
 
   echo "  Generating linker script: $OUT/ld.so.lds"
   $CC -nostdlib -nostartfiles -shared \

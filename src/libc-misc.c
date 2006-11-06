@@ -129,7 +129,7 @@ void set_errno_from_reply(seqf_t msg)
   __set_errno(ok ? err : ENOSYS);
 }
 
-/* EXPORT: new_open => WEAK:open WEAK:__open __libc_open __GI_open __GI___open __GI___libc_open open_not_cancel open_not_cancel_2 */
+/* EXPORT: new_open => WEAK:open WEAK:__open __libc_open __GI_open __GI___open __GI___libc_open open_not_cancel open_not_cancel_2 __open_nocancel */
 int new_open(const char *filename, int flags, ...)
 {
   region_t r = region_make();
@@ -233,7 +233,7 @@ static void relocate_comm_fd()
 }
 #endif
 
-/* EXPORT: new_close => WEAK:close WEAK:__close __libc_close __GI_close __GI___close __GI___libc_close close_not_cancel close_not_cancel_no_status */
+/* EXPORT: new_close => WEAK:close WEAK:__close __libc_close __GI_close __GI___close __GI___libc_close close_not_cancel close_not_cancel_no_status __close_nocancel */
 int new_close(int fd)
 {
   log_msg(MOD_MSG "close\n");
@@ -539,6 +539,15 @@ DIR *new_opendir(const char *pathname)
  error:
   region_free(r);
   return 0;
+}
+
+/* Added in glibc 2.4 */
+/* EXPORT: new_fdopendir => fdopendir __fdopendir */
+DIR *new_fdopendir(int fd)
+{
+  log_msg(MOD_MSG "fdopendir\n");
+  __set_errno(ENOSYS);
+  return -1;
 }
 
 /* EXPORT: new_readdir => WEAK:readdir __readdir */
@@ -1249,6 +1258,22 @@ int new_fxstat64(int vers, int fd, void *buf)
     __set_errno(ENOSYS); return -1;
   }
   return my_fstat(type, fd, buf);
+}
+
+/* Added in glibc 2.4 */
+/* EXPORT: new_fxstatat => __fxstatat __GI___fxstatat */
+int new_fxstatat(int vers, int fd, const char *filename, void *buf, int flag)
+{
+  __set_errno(ENOSYS);
+  return -1;
+}
+
+/* Added in glibc 2.4 */
+/* EXPORT: new_fxstatat64 => __fxstatat64 __GI___fxstatat64 */
+int new_fxstatat64(int vers, int fd, const char *filename, void *buf, int flag)
+{
+  __set_errno(ENOSYS);
+  return -1;
 }
 
 /* EXPORT: new_readlink => WEAK:readlink __readlink __GI_readlink __GI___readlink */

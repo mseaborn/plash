@@ -399,17 +399,20 @@ build_small_bits () {
 
 
 build_shell_etc() {
-  # "search A B..." tries files A B etc. in turn, and prints the
-  # name of the first one that exists.
-  search () {
-    NAME="$1"
-    while [ "$#" -ge 0 ]; do
-      if [ -e "$1" ]; then echo $1; return; fi
-      shift
-    done
-    echo "Can't find '$NAME'" 1>&2
-    return 1
-  }
+  # Populate $OUT/lib with shared objects to link against
+  mkdir -p $OUT/lib
+  GLIBC_DIR=`cd $GLIBC && pwd`
+  (cd $OUT/lib
+  ln -sf ../libc.so libc.so.6
+  ln -sf $GLIBC_DIR/libc_nonshared.a libc_nonshared.a
+  rm -f libc.so
+  echo "GROUP ( libc.so.6 libc_nonshared.a )" >libc.so
+  ln -sf ../ld.so ld-linux.so.2
+  ln -sf ../libpthread.so libpthread.so.0
+  ln -sf $GLIBC_DIR/math/libm.so libm.so.6
+  ln -sf $GLIBC_DIR/dlfcn/libdl.so libdl.so.2
+  )
+
   # Even though we use weak references, we need to link with our libc.so,
   # otherwise the weak references are omitted entirely from the dynamic
   # linking tables.  They need to be associated with a particular shared
@@ -419,9 +422,7 @@ build_shell_etc() {
   # $GLIBC/math/libm.so $GLIBC/dlfcn/libdl.so shobj/libc.so shobj/ld.so
   # FIXME: remove glib-2.0 from this
   LIBC_LINK="-Wl,-z,defs
-	$OUT/libc.so $OUT/ld.so
-	`search $GLIBC_SO_DIR/{math/,}libm.so{,.6}`
-	`search $GLIBC_SO_DIR/{dlfcn/,}libdl.so{,.2}`"
+	-L$OUT/lib -Wl,-rpath-link=$OUT/lib"
   if [ "$USE_GTK" = yes ]; then
     LIBC_LINK="$LIBC_LINK `pkg-config --libs glib-2.0`"
   fi
@@ -471,9 +472,6 @@ build_shell_etc() {
 	obj/shell-options-cmd.o obj/shell-options.o $LIBC_LINK \
 	obj/libplash.a -o bin/plash-opts
 
-  # libc.so contains a reference to __libc_stack_end, which ld.so defines.
-  # With a newer `ld', I have to link ld.so here too.  With an older one,
-  # I could leave ld.so out.
   echo Linking bin/chroot
   $CC $OPTS_S obj/chroot.o $LIBC_LINK obj/libplash.a -o bin/plash-chroot
   echo Linking bin/exec-object

@@ -20,10 +20,10 @@ int main()
   win = XCreateWindow(dpy, XDefaultRootWindow(dpy),
 		      100, 100, /* pos */
 		      200, 200, /* size */
-		      1, XDefaultDepthOfScreen(scn),
+		      1 /* border_width */, XDefaultDepthOfScreen(scn),
 		      InputOutput,
 		      XDefaultVisualOfScreen(scn),
-		      0,
+		      0 /* valuemask */,
 		      NULL);
   XMapWindow(dpy, win);
   XFlush(dpy);

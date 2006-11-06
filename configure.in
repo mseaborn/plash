@@ -68,8 +68,23 @@ else
 fi
 
 
+# We don't need to distinguish between many glibc versions.
+# Also, not all versions are distinguishable based on abi-versions.h.
+AC_MSG_CHECKING([glibc version for \"$GLIBC_DIR\"])
+if grep 'GLIBC_2_4' $GLIBC_DIR/abi-versions.h >/dev/null; then
+  AC_MSG_RESULT([>= 2.4])
+  GLIBC_VERSION=240
+elif grep 'GLIBC_2_3_4' $GLIBC_DIR/abi-versions.h >/dev/null; then
+  AC_MSG_RESULT([>= 2.3.4 but < 2.4])
+  GLIBC_VERSION=234
+else
+  AC_MSG_ERROR([unknown])
+fi
+
+
 AC_SUBST(PACKAGE_VERSION)
 AC_SUBST(GLIBC_DIR)
+AC_SUBST(GLIBC_VERSION)
 AC_SUBST(with_gtk)
 AC_SUBST(with_python)
 AC_OUTPUT

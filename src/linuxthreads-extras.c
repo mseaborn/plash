@@ -29,6 +29,11 @@ int __open(const char *filename, int flags, int mode)
   return __libc_open(filename, flags, mode);
 }
 
+int __open_nocancel(const char *filename, int flags, int mode)
+{
+  return __libc_open_nocancel(filename, flags, mode);
+}
+
 int __open64(const char *filename, int flags, int mode)
 {
   return __libc_open64(filename, flags, mode);

@@ -129,7 +129,8 @@ void set_errno_from_reply(seqf_t msg)
   __set_errno(ok ? err : ENOSYS);
 }
 
-/* EXPORT: new_open => WEAK:open WEAK:__open __libc_open __GI_open __GI___open __GI___libc_open open_not_cancel open_not_cancel_2 __open_nocancel */
+/* NB. __libc_open_nocancel is just for use by libpthread.so */
+/* EXPORT: new_open => WEAK:open WEAK:__open __libc_open __GI_open __GI___open __GI___libc_open open_not_cancel open_not_cancel_2 __open_nocancel __libc_open_nocancel */
 int new_open(const char *filename, int flags, ...)
 {
   region_t r = region_make();

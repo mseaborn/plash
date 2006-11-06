@@ -121,6 +121,12 @@ EXCLUDE="io/open.os io/open64.os io/creat.os io/creat64.os
 	posix/setresuid.os posix/setresgid.os
 	misc/seteuid.os misc/setegid.os
 	misc/setreuid.os misc/setregid.os"
+if [ $GLIBC_VERSION -ge 240 ]; then
+  EXCLUDE="$EXCLUDE
+	dirent/fdopendir.os
+	io/fxstatat.os
+	io/fxstatat64.os"
+fi
 
 if [ ! -d "$GLIBC" ]; then
   echo "Warning: glibc object files directory \"$GLIBC\" does not exist"
@@ -308,30 +314,37 @@ build_libc () {
 
 
 build_libpthread () {
-  echo 'Making libpthread.so (linuxthreads version)'
+  echo 'Making libpthread.so'
 
-  # linuxthreads builds its own linuxthreads/libc.so and then links
-  # against it.  This is a hack for changing which symbols
-  # libpthread.so imports from libc.so.  The code in
-  # linuxthreads/libc.so is never used; only the interface is
-  # significant.
-  # (See the comment in linuxthreads/Makefile.)
-
-  echo '  Build dummy libc.so solely for linking libpthread.so against'
-  if [ $STRIP_EARLY ]; then
-    # Stripping libc_pic.a now will make later steps go faster.
-    strip --strip-debug $GLIBC_PIC_DIR/libc_pic.a -o $OUT/libc_pic_lite.a
+  if [ $GLIBC_VERSION -ge 240 ]; then
+    LIBPTHREAD_DIR=nptl
   else
-    cp -av $GLIBC_PIC_DIR/libc_pic.a $OUT/libc_pic_lite.a
+    LIBPTHREAD_DIR=linuxthreads
   fi
-  ar -d $OUT/libc_pic_lite.a errno.os herrno.os res_libc.os
 
-  #  * Note that "-z defs" must be removed: it causes unresolved symbols
-  #    to be an error.  Removing those files above causes unresolved symbols.
-  #  * glibc uses -d as an argument to "ld" here when building the
-  #    intermediate *.os file.  What does it do?
-  #  * glibc 2.3.5 seems to add -Wl,-z,relro -- important?
-  $CC -Wl,--stats,--no-keep-memory  \
+  if [ $GLIBC_VERSION -lt 240 ]; then
+    # linuxthreads builds its own linuxthreads/libc.so and then links
+    # against it.  This is a hack for changing which symbols
+    # libpthread.so imports from libc.so.  The code in
+    # linuxthreads/libc.so is never used; only the interface is
+    # significant.
+    # (See the comment in linuxthreads/Makefile.)
+
+    echo '  Build dummy libc.so solely for linking libpthread.so against'
+    if [ $STRIP_EARLY ]; then
+      # Stripping libc_pic.a now will make later steps go faster.
+      strip --strip-debug $GLIBC_PIC_DIR/libc_pic.a -o $OUT/libc_pic_lite.a
+    else
+      cp -av $GLIBC_PIC_DIR/libc_pic.a $OUT/libc_pic_lite.a
+    fi
+    ar -d $OUT/libc_pic_lite.a errno.os herrno.os res_libc.os
+
+    #  * Note that "-z defs" must be removed: it causes unresolved symbols
+    #    to be an error.  Removing those files above causes unresolved symbols.
+    #  * glibc uses -d as an argument to "ld" here when building the
+    #    intermediate *.os file.  What does it do?
+    #  * glibc 2.3.5 seems to add -Wl,-z,relro -- important?
+    $CC -Wl,--stats,--no-keep-memory  \
 	-shared -static-libgcc \
 	-Wl,-dynamic-linker=/lib/ld-linux.so.2 \
 	-Wl,--version-script=$OUT/libc.map \
@@ -348,9 +361,10 @@ build_libpthread () {
 	-Wl,--no-whole-archive \
 	$GLIBC/elf/sofini.os $GLIBC/elf/interp.os $OUT/ld.so \
 	-lgcc -lgcc_eh
+  fi
 
   echo "  Making $OUT/libpthread_rem.a"
-  cp -av $GLIBC/linuxthreads/libpthread_pic.a $OUT/libpthread_rem.a
+  cp -av $GLIBC/$LIBPTHREAD_DIR/libpthread_pic.a $OUT/libpthread_rem.a
   ar -dv $OUT/libpthread_rem.a \
 	ptw-accept.os ptw-connect.os ptw-open.os ptw-open64.os \
 	ptw-close.os
@@ -371,7 +385,14 @@ build_libpthread () {
   #    Without this, some important initialisation doesn't get done,
   #    and libpthread segfaults in __pthread_initialize_manager().
   mkdir -p $OUT/linuxthreads
-  cp -av $GLIBC/linuxthreads/crt{i,n}.o $OUT/linuxthreads
+  cp -av $GLIBC/$LIBPTHREAD_DIR/crt{i,n}.o $OUT/linuxthreads
+  if [ $GLIBC_VERSION -lt 240 ]; then
+    LIBPTHREAD_LIBC=$OUT/dummy-libc.so
+    LINK_LIBPTHREAD=
+  else
+    LIBPTHREAD_LIBC=$OUT/libc.so
+    LINK_LIBPTHREAD="-e __nptl_main"
+  fi
   $CC -shared -static-libgcc -Wl,-O1 -Wl,-z,defs \
 	-Wl,-dynamic-linker=/lib/ld-linux.so.2 \
 	-B$OUT/linuxthreads -Bcsu \
@@ -380,11 +401,12 @@ build_libpthread () {
 	-Wl,-z,relro \
 	-Wl,--enable-new-dtags,-z,nodelete \
 	-Wl,--enable-new-dtags,-z,initfirst \
+	$LINK_LIBPTHREAD \
 	-o $OUT/libpthread.so \
 	-T $GLIBC/shlib.lds \
 	$GLIBC/csu/abi-note.o \
 	-Wl,--whole-archive $OUT/libpthread_rem.a $OUT/linuxthreads-extras.os -Wl,--no-whole-archive \
-	$GLIBC/elf/interp.os $OUT/dummy-libc.so $GLIBC_NONSHARED_DIR/libc_nonshared.a $OUT/ld.so
+	$GLIBC/elf/interp.os $LIBPTHREAD_LIBC $GLIBC_NONSHARED_DIR/libc_nonshared.a $OUT/ld.so
   #  * Normally we'd use $GLIBC/elf/ld.so there, not $OUT/ld.so.
   #    Could link against the installed /lib/ld-linux.so.2 instead.
 }
@@ -400,6 +422,7 @@ build_small_bits () {
 
 build_shell_etc() {
   # Populate $OUT/lib with shared objects to link against
+  rm -rf $OUT/lib
   mkdir -p $OUT/lib
   GLIBC_DIR=`cd $GLIBC && pwd`
   (cd $OUT/lib
@@ -409,8 +432,12 @@ build_shell_etc() {
   echo "GROUP ( libc.so.6 libc_nonshared.a )" >libc.so
   ln -sf ../ld.so ld-linux.so.2
   ln -sf ../libpthread.so libpthread.so.0
-  ln -sf $GLIBC_DIR/math/libm.so libm.so.6
-  ln -sf $GLIBC_DIR/dlfcn/libdl.so libdl.so.2
+  ln -sf $GLIBC_DIR/math/libm.so libm.so
+  ln -sf $GLIBC_DIR/dlfcn/libdl.so libdl.so
+  ln -sf $GLIBC_DIR/rt/librt.so librt.so
+  ln -sf libm.so libm.so.6
+  ln -sf librt.so librt.so.1
+  ln -sf libdl.so libdl.so.2
   )
 
   # Even though we use weak references, we need to link with our libc.so,

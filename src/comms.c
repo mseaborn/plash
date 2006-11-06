@@ -27,6 +27,9 @@
 #include "region.h"
 #include "comms.h"
 
+/* Should really be getting glibc's errno.h instead of this */
+#include "libc-errno.h"
+
 
 #define MOD_DEBUG 0
 #define MOD_MSG "comm: "

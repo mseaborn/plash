@@ -23,6 +23,7 @@
 #include "region.h"
 #include "comms.h"
 #include "filesysobj.h"
+#include "libc-errno.h"
 
 
 int new_open(const char *filename, int flags, ...);
@@ -30,8 +31,6 @@ int new_open(const char *filename, int flags, ...);
 
 int my_atoi(const char *str);
 
-
-#define __set_errno(x) (errno = (x))
 
 extern int comm_sock;
 extern struct comm *comm;

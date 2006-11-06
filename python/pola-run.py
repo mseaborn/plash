@@ -269,8 +269,7 @@ else:
 (pid2, status) = os.waitpid(pid, 0)
 assert pid == pid2
 if os.WIFEXITED(status):
-    print "exited with status:", os.WEXITSTATUS(status)
-elif os.WIFSIGNALED(status):
-    print "exited with signal:", os.WTERMSIG(status)
+    sys.exit(os.WEXITSTATUS(status))
 else:
-    print "unknown exit status:", status
+    # FIXME
+    sys.exit(1)

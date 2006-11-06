@@ -287,3 +287,26 @@ Run Bash with the same filesystem namespace as the caller.  This is
 useful for testing Plash:
 
 \pre- pola-run -fw=/ --prog /bin/bash
+
+
+\h2- Environment variables
+
+pola-run sets the following environment variables:
+
+\ul{
+  \li- LD_LIBRARY_PATH
+  \li- PLASH_CAPS
+  \li- PLASH_COMM_FD
+  \li- PLASH_FAKE_UID
+  \li- PLASH_FAKE_EUID
+  \li- PLASH_FAKE_GID
+  \li- PLASH_FAKE_EGID
+}
+
+\envar{LD_PRELOAD}: pola-run must treat this specially to ensure that
+it is preserved across the invocation of run-as-anonymous (the fact
+that this is a setuid executable usually causes LD_PRELOAD to be
+unset).
+
+\envar{XAUTHORITY}: pola-run looks at this when the --x11 option is
+used.

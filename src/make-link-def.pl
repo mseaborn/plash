@@ -23,6 +23,44 @@
 use IO::File;
 
 
+my $glibc_dir = `. src/config.sh && echo \$GLIBC`;
+chomp($glibc_dir);
+if($glibc_dir eq '') { die }
+
+# Some non-i386 architectures don't provide all version symbols.
+# For example, x86-64 glibc doesn't provide GLIBC_2.0, because that
+# predated glibc being ported to x86-64.
+# GLIBC_2.0 gets mapped to GLIBC_2.2.5 instead.
+
+# Read glibc's generated abi-versions.h in order to get a mapping of
+# version symbols, e.g.
+# #define VERSION_libc_GLIBC_2_1_1   GLIBC_2.1.1
+my $version_map = {};
+{
+  my $file = "$glibc_dir/abi-versions.h";
+  my $f = IO::File->new($file, 'r') || die "Can't open \"$file\"";
+  my $line;
+  while(defined($line = <$f>)) {
+    if($line =~ /^#define (VERSION_\S+)\s+(\S+)\s*$/) {
+      $version_map->{$1} = $2;
+    }
+  }
+  $f->close();
+}
+
+sub get_version_symbol {
+  my ($sym) = @_;
+
+  # Convert, e.g. "GLIBC_2.2" to "VERSION_libc_GLIBC_2_2"
+  $sym =~ s/\./_/g;
+  $sym = "VERSION_libc_$sym";
+  
+  my $x = $version_map->{$sym};
+  if(!defined $x) { die "Can't find version symbol \"$sym\"" }
+  $x
+}
+
+
 my $aliases = '';
 my @keep;
 my @rename;
@@ -89,6 +127,8 @@ sub process {
 	    # objcopy's --redefine-sym option (the @$rename list).
 	    elsif($s =~ /^VER:(.*),(.*)$/) {
 	      my ($name, $ver) = ($1, $2);
+	      $ver = get_version_symbol($ver);
+	      
 	      # my $n = $temp_num++;
 	      # $$aliases .= "__asm__(\".set temp$n, $sym; .symver temp$n,$name\@$ver\");\n";
 	      # push(@$keep, "$1\@$2");
@@ -101,6 +141,8 @@ sub process {
 	    # Default versioned symbol
 	    elsif($s =~ /^DEFVER:(.*),(.*)$/) {
 	      my ($name, $ver) = ($1, $2);
+	      $ver = get_version_symbol($ver);
+	      
 	      # $$aliases .= "__asm__(\".symver $sym,$1\@\@$2\");\n";
 	      # push(@$keep, "$1\@\@$2");
 

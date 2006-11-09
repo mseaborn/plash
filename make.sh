@@ -376,7 +376,7 @@ build_libpthread () {
   # so I can't remember exactly why it's there.
   # However, it *does* make sure that the `nm -D' output is the same as
   # it is for the normal build (er, except for weak/non-weak differences).
-  $CC -c src/linuxthreads-extras.c -o $OUT/linuxthreads-extras.os \
+  $CC -c src/libpthread-extras.c -o $OUT/libpthread-extras.os \
 	-O2 -Wall -fPIC -g
 
   echo "  Linking $OUT/libpthread.so"
@@ -384,8 +384,8 @@ build_libpthread () {
   #    linuxthreads/crti.o and linuxthreads/crtn.o to get linked.
   #    Without this, some important initialisation doesn't get done,
   #    and libpthread segfaults in __pthread_initialize_manager().
-  mkdir -p $OUT/linuxthreads
-  cp -av $GLIBC/$LIBPTHREAD_DIR/crt{i,n}.o $OUT/linuxthreads
+  mkdir -p $OUT/libpthread
+  cp -av $GLIBC/$LIBPTHREAD_DIR/crt{i,n}.o $OUT/libpthread
   if [ $GLIBC_VERSION -lt 240 ]; then
     LIBPTHREAD_LIBC=$OUT/dummy-libc.so
     LINK_LIBPTHREAD=
@@ -395,7 +395,7 @@ build_libpthread () {
   fi
   $CC -shared -static-libgcc -Wl,-O1 -Wl,-z,defs \
 	-Wl,-dynamic-linker=/lib/ld-linux.so.2 \
-	-B$OUT/linuxthreads -Bcsu \
+	-B$OUT/libpthread -Bcsu \
 	-Wl,--version-script=$GLIBC/libpthread.map -Wl,-soname=libpthread.so.0 \
 	-Wl,-z,combreloc \
 	-Wl,-z,relro \
@@ -405,7 +405,7 @@ build_libpthread () {
 	-o $OUT/libpthread.so \
 	-T $GLIBC/shlib.lds \
 	$GLIBC/csu/abi-note.o \
-	-Wl,--whole-archive $OUT/libpthread_rem.a $OUT/linuxthreads-extras.os -Wl,--no-whole-archive \
+	-Wl,--whole-archive $OUT/libpthread_rem.a $OUT/libpthread-extras.os -Wl,--no-whole-archive \
 	$GLIBC/elf/interp.os $LIBPTHREAD_LIBC $GLIBC_NONSHARED_DIR/libc_nonshared.a $OUT/ld.so
   #  * Normally we'd use $GLIBC/elf/ld.so there, not $OUT/ld.so.
   #    Could link against the installed /lib/ld-linux.so.2 instead.

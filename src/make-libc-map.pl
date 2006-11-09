@@ -28,11 +28,11 @@ $data .= "\n".<<END;
 # it with the same name.)
 PLASH_GLIBC_PRIVATE {
   __libc_open;
-  __libc_open_nocancel;
   __libc_open64;
   __libc_connect;
   __libc_accept;
   __libc_close;
+  __open_nocancel;
 };
 END
 

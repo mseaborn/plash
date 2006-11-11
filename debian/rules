@@ -71,7 +71,7 @@ stamp-dir/configure-glibc: stamp-dir/unpack-patch-glibc
 
 stamp-dir/build-glibc: stamp-dir/configure-glibc
 	cd $(GLIBC_BUILD) && make
-	GLIBC_SOURCE_DIR=`pwd`/$(GLIBC_DIR) GLIBC_BUILD_DIR=`pwd`/$(GLIBC_BUILD) ./make-glibc-extra.sh
+	./make-glibc-extra.sh $(GLIBC_DIR) $(GLIBC_BUILD_DIR)
 	mkdir -p stamp-dir
 	touch stamp-dir/build-glibc
 

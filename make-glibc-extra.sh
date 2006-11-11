@@ -22,10 +22,13 @@
 
 set -e
 
-if test "x$GLIBC_SOURCE_DIR" = x || test "x$GLIBC_BUILD_DIR" = x; then
-  echo "$0: GLIBC_SOURCE_DIR and GLIBC_BUILD_DIR must be defined"
+if [ $# -ne 2 ]; then
+  echo "Usage: $0 glibc-source-dir glibc-build-dir"
   exit 1
 fi
+
+GLIBC_SOURCE_DIR=`cd $1 && pwd`
+GLIBC_BUILD_DIR=`cd $2 && pwd`
 
 # This is a list of files needed for building Plash's version of ld.so.
 # They are not built in the normal course of glibc's build process

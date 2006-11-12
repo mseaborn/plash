@@ -80,7 +80,7 @@ build () {
 }
 
 build_extra () {
-  ./make-glibc-extra.sh $GLIBC_DIR $GLIBC_BUILD_DIR
+  ./make-glibc-extra.sh $GLIBC_DIR $GLIBC_BUILD
 }
 
 

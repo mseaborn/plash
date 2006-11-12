@@ -56,27 +56,27 @@ configure () {
   # -g1 saves a lot of space
 
   if [ $GLIBC_VERSION = 2.3.6 ]; then
-    cd $GLIBC_BUILD && \
-    ../$GLIBC_DIR/configure \
+    (cd $GLIBC_BUILD && \
+     ../$GLIBC_DIR/configure \
 	CC=gcc-3.3 \
 	--prefix=/usr \
 	--enable-add-ons=linuxthreads \
 	--without-selinux --enable-kernel=2.2.0 \
 	--with-tls --without-__thread \
-	--disable-profile CFLAGS="-pipe -fstrict-aliasing -g1 -O3"
+	--disable-profile CFLAGS="-pipe -fstrict-aliasing -g1 -O3")
   else
-    cd $GLIBC_BUILD && \
-    ../$GLIBC_DIR/configure \
+    (cd $GLIBC_BUILD && \
+     ../$GLIBC_DIR/configure \
 	CC=gcc-4.0 \
 	--prefix=/usr \
 	--without-selinux --enable-kernel=2.2.0 \
 	--with-tls \
-	--disable-profile CFLAGS="-pipe -fstrict-aliasing -g1 -O3"
+	--disable-profile CFLAGS="-pipe -fstrict-aliasing -g1 -O3")
   fi
 }
 
 build () {
-  cd $GLIBC_BUILD && make
+  (cd $GLIBC_BUILD && make)
 }
 
 build_extra () {

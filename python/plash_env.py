@@ -1,15 +1,15 @@
 
 import string
 import os
-import plash
+import plash_core
 
 # Whether we are running under the Plash environment
 under_plash = 'PLASH_CAPS' in os.environ
 
 def get_caps_nomemoize():
     names = string.split(os.environ['PLASH_CAPS'], ';')
-    fd = plash.libc_duplicate_connection()
-    caps_list = plash.cap_make_connection.make_conn2(fd, len(names), [])
+    fd = plash_core.libc_duplicate_connection()
+    caps_list = plash_core.cap_make_connection.make_conn2(fd, len(names), [])
     caps = {}
     for i in range(len(names)):
         caps[names[i]] = caps_list[i]
@@ -26,7 +26,7 @@ def get_root_dir():
     if under_plash:
         return get_caps()['fs_op'].fsop_get_root_dir()
     else:
-        return plash.initial_dir('/')
+        return plash_core.initial_dir('/')
 
 def get_return_cont():
     return get_caps()['return_cont']

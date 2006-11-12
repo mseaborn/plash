@@ -8,7 +8,7 @@
 #   --prog /bin/echo -a 'Hello world!'
 
 import os
-import plash
+import plash_core
 import plash_env
 import plash_namespace as ns
 from plash_process import Process_spec
@@ -40,7 +40,7 @@ root = ns.dir_of_node(root_node)
 # Create an fs_op object for that root directory.
 # The fs_op object provides POSIX pathname-based calls,
 # and keeps track of the current working directory.
-fs_op = plash.make_fs_op(root)
+fs_op = plash_core.make_fs_op(root)
 
 
 # Create a template for spawning a limited-authority subprocess.
@@ -73,7 +73,7 @@ pid = p.spawn()
 # Go into an event loop.  Handle object invocations on the connection
 # that we created.  This returns when no more objects are being
 # exported (when the references are dropped).
-plash.run_server()
+plash_core.run_server()
 
 
 # Wait for the subprocess to exit and check the exit code.

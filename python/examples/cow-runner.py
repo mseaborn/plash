@@ -1,7 +1,7 @@
 
 import os
 import sys
-import plash
+import plash_core
 import plash_env
 import plash_namespace as ns
 from plash_process import Process_spec
@@ -44,7 +44,7 @@ p.env['PLASH_FAKE_EGID'] = str(os.getgid())
 p.caps = { 'fs_op': fs_op,
            'conn_maker': ns.conn_maker }
 pid = p.spawn()
-plash.run_server()
+plash_core.run_server()
 
 # Wait for the subprocess to exit and check the exit code.
 (pid2, status) = os.waitpid(pid, 0)

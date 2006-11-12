@@ -5,7 +5,7 @@ import stat
 import sys
 import string
 import traceback
-import plash
+import plash_core
 import plash_marshal
 import plash_marshal as m
 import plash_namespace as ns
@@ -21,7 +21,7 @@ class Test_dir(plash_marshal.Pyobj_demarshal):
         print "accessed:", leaf
         return self.x
 
-root = plash.initial_dir("/")
+root = plash_core.initial_dir("/")
 #root = logger(root)
 
 next_inode = [1]
@@ -102,11 +102,11 @@ print "dir type:", root.fsobj_type()
 print "traverse:", root.dir_traverse("lib")
 
 assert root.fsobj_type() == 2
-assert isinstance(root.dir_traverse("lib"), plash.Wrapper)
+assert isinstance(root.dir_traverse("lib"), plash_core.Wrapper)
 #print "traverse2:", root.dir_traverse("doesnt-exist")
 
 # root2 = logger(root2)
-fs_op = plash.make_fs_op(root2)
+fs_op = plash_core.make_fs_op(root2)
 
 
 fs_op = logger(fs_op)
@@ -129,7 +129,7 @@ p.caps = { 'fs_op': fs_op,
 p.setcmd('/bin/sh', '-c', """/mybin/exec-obj arg1 arg2 | perl -ne 'print "Your message: $_"' """)
 pid = p.spawn()
 print "entering server"
-plash.run_server()
+plash_core.run_server()
 print "server done"
 
 (pid2, status) = os.waitpid(pid, 0)

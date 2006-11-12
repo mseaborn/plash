@@ -80,7 +80,7 @@ static PyMethodDef plpy_fd_object_methods[] = {
 PyTypeObject plpy_fd_type = {
   PyObject_HEAD_INIT(NULL)
   0,                         /* ob_size */
-  "plash.FD",                /* tp_name */
+  "plash_core.FD",           /* tp_name */
   sizeof(plpy_fd),           /* tp_basicsize */
   0,                         /* tp_itemsize */
   (destructor) plpy_fd_dealloc,   /* tp_dealloc */

@@ -17,7 +17,7 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 # USA.
 
-import plash
+import plash_core
 import plash_marshal
 import plash_marshal as m
 
@@ -51,14 +51,14 @@ m.add_format('dirstack_get_path', 'c')
 m.add_format('r_dirstack_get_path', 'S')
 
 
-conn_maker = plash.make_conn_maker()
+conn_maker = plash_core.make_conn_maker()
 
 
 def resolve_dir(root, pathname, cwd=None, symlink_limit=100):
     """Resolve pathname relative to root directory and optional cwd.
     Follows symlinks.  Returns a dirstack object.  Fails if the
     pathname does not resolve to a directory."""
-    return call(plash.resolve_dir, 'r_cap',
+    return call(plash_core.resolve_dir, 'r_cap',
                 'resolve_dir', root, cwd, symlink_limit, pathname)
 
 def resolve_obj(root, pathname, cwd=None, symlink_limit=100, nofollow=False):
@@ -68,22 +68,22 @@ def resolve_obj(root, pathname, cwd=None, symlink_limit=100, nofollow=False):
         nofollow = 1
     else:
         nofollow = 0
-    return call(plash.resolve_obj, 'r_cap',
+    return call(plash_core.resolve_obj, 'r_cap',
                 'resolve_obj', root, cwd, symlink_limit, nofollow, pathname)
 
 
 def make_node():
     "Create a namespace node with no objects attached to it."
-    return call(plash.fs_make_node, 'r_cap', 'fs_make_node')
+    return call(plash_core.fs_make_node, 'r_cap', 'fs_make_node')
 
 def attach_at_path(root_node, pathname, obj):
     "Attach obj to the namespace given by root_node at the given pathname."
-    return call(plash.fs_attach_at_path, 'okay',
+    return call(plash_core.fs_attach_at_path, 'okay',
                 'fs_attach_at_path', root_node, pathname, obj)
 
 def dir_of_node(node):
     "Create a directory object for accessing the given namespace."
-    return call(plash.fs_dir_of_node, 'r_cap',
+    return call(plash_core.fs_dir_of_node, 'r_cap',
                 'fs_dir_of_node', node)
 
 FS_READ_ONLY        = 0x0
@@ -92,22 +92,22 @@ FS_OBJECT_RW        = 0x2
 FS_FOLLOW_SYMLINKS  = 0x4
 
 def resolve_populate(root_dir, root_node, pathname, cwd=None, flags=0):
-    return call(plash.fs_resolve_populate, 'okay',
+    return call(plash_core.fs_resolve_populate, 'okay',
                 'fs_resolve_populate', root_dir, root_node, cwd,
                 flags, pathname)
 
 def make_union_dir(obj1, obj2):
-    return call(plash.make_union_dir, 'r_cap',
+    return call(plash_core.make_union_dir, 'r_cap',
                 'make_union_dir', obj1, obj2)
 
 def make_cow_dir(obj1, obj2):
-    return call(plash.make_cow_dir, 'r_cap',
+    return call(plash_core.make_cow_dir, 'r_cap',
                 'make_cow_dir', obj1, obj2)
 
 def make_read_only_proxy(obj):
-    return call(plash.make_read_only_proxy, 'r_cap',
+    return call(plash_core.make_read_only_proxy, 'r_cap',
                 'make_read_only_proxy', obj)
 
 def dirstack_get_path(obj):
-    return call(plash.dirstack_get_path, 'r_dirstack_get_path',
+    return call(plash_core.dirstack_get_path, 'r_dirstack_get_path',
                 'dirstack_get_path', obj)

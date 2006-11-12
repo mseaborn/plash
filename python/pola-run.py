@@ -2,7 +2,7 @@
 
 import sys
 import os
-import plash
+import plash_core
 import plash_env
 import plash_namespace as ns
 from plash_process import Process_spec
@@ -17,7 +17,7 @@ class Proc_spec(Process_spec):
         
         self.root_node = ns.make_node()
         root = ns.dir_of_node(self.root_node)
-        fs_op = plash.make_fs_op(root)
+        fs_op = plash_core.make_fs_op(root)
         self.caps = { 'fs_op': fs_op,
                       'conn_maker': ns.conn_maker }
 
@@ -263,7 +263,7 @@ if state.powerbox:
     import gtk
     gtk.main()
 else:
-    plash.run_server()
+    plash_core.run_server()
 
 # Wait for the subprocess to exit and check the exit code.
 (pid2, status) = os.waitpid(pid, 0)

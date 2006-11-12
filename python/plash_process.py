@@ -2,14 +2,14 @@
 import string
 import fcntl
 import os
-import plash
+import plash_core
 import plash_namespace as ns
 import plash_env
 import sys
 
 
 def kernel_execve(cmd, argv, env):
-    return plash.kernel_execve(cmd, tuple(argv),
+    return plash_core.kernel_execve(cmd, tuple(argv),
                                tuple([x[0]+"="+x[1] for x in env.items()]))
 
 def add_to_path(dir, path):
@@ -93,7 +93,7 @@ class Process_spec:
         pid = os.fork()
         if pid == 0:
             try:
-                plash.cap_close_all_connections()
+                plash_core.cap_close_all_connections()
                 try:
                     my_execve(self.cmd, [self.arg0] + self.args, self.env)
                 except:

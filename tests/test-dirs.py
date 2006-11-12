@@ -1,6 +1,6 @@
 
 import os
-import plash
+import plash_core
 import plash_marshal as pm
 
 
@@ -126,7 +126,7 @@ def test_cow_dir(write, read):
 
 fd = os.open(".", os.O_RDONLY)
 
-dir = plash.initial_dir(".")
+dir = plash_core.initial_dir(".")
 test_empty_writable_dir(dir)
 print "ok"
 
@@ -134,6 +134,6 @@ import plash_namespace as ns
 os.fchdir(fd)
 os.mkdir("write")
 os.mkdir("read")
-test_cow_dir(plash.initial_dir("write"),
-             plash.initial_dir("read"))
+test_cow_dir(plash_core.initial_dir("write"),
+             plash_core.initial_dir("read"))
 print "ok"

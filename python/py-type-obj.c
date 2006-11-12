@@ -303,7 +303,7 @@ static PyMethodDef plpy_obj_object_methods[] = {
 PyTypeObject plpy_obj_type = {
   PyObject_HEAD_INIT(NULL)
   0,                         /* ob_size */
-  "plash.Plash",             /* tp_name */
+  "plash_core.Plash",        /* tp_name */
   sizeof(plpy_obj),          /* tp_basicsize */
   0,                         /* tp_itemsize */
   (destructor) plpy_obj_dealloc, /* tp_dealloc */

@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 import os
-import plash
+import plash_core
 import plash_marshal
 import plash_env
 
@@ -43,5 +43,5 @@ class Exec_obj(plash_marshal.Pyobj_demarshal):
         return 0
 
 plash_env.get_return_cont().cap_invoke(('Okay', (Exec_obj(),), ()))
-plash.run_server()
+plash_core.run_server()
 print "server exited"

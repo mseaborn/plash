@@ -17,7 +17,7 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 # USA.
 
-import plash
+import plash_core
 import struct
 import string
 
@@ -455,12 +455,12 @@ def local_cap_invoke(self, args):
 # This is a base class for Python objects that implement cap_call()
 # but not other methods.  The other methods are defined in the base
 # class as marshallers which call cap_call().
-class Pyobj_marshal(plash.Pyobj):
+class Pyobj_marshal(plash_core.Pyobj):
     cap_invoke = local_cap_invoke
 
 # This is a base class for Python objects that implement specific
 # call-return methods but not cap_call() or cap_invoke().
-class Pyobj_demarshal(plash.Pyobj):
+class Pyobj_demarshal(plash_core.Pyobj):
     methods = {}
 
     cap_invoke = local_cap_invoke
@@ -482,7 +482,7 @@ class Pyobj_demarshal(plash.Pyobj):
             raise "No match"
 
 def add_marshaller(name, f):
-    setattr(plash.Wrapper, name, f)
+    setattr(plash_core.Wrapper, name, f)
     setattr(Pyobj_marshal, name, f)
 
 def add_method(name, result):

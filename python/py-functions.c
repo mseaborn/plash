@@ -486,7 +486,7 @@ static PyMethodDef module_methods[] = {
 };
 
 
-void initplash(void)
+void initplash_core(void)
 {
   PyObject *mod;
 
@@ -495,7 +495,7 @@ void initplash(void)
 
   plpy_init();
 
-  mod = Py_InitModule3("plash", module_methods,
+  mod = Py_InitModule3("plash_core", module_methods,
 		       "Plash module.");
 
   Py_INCREF(&plpy_fd_type);

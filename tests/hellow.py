@@ -1,6 +1,6 @@
 
 import os
-import plash
+import plash_core
 import plash_env
 import plash_namespace as ns
 from plash_process import Process_spec
@@ -18,7 +18,7 @@ if 'PLASH_LIBRARY_DIR' in os.environ:
                         os.environ['PLASH_LIBRARY_DIR'],
                         flags=ns.FS_FOLLOW_SYMLINKS)
 root = ns.dir_of_node(root_node)
-fs_op = plash.make_fs_op(root)
+fs_op = plash_core.make_fs_op(root)
 
 p = Process_spec()
 p.env = os.environ.copy()
@@ -26,7 +26,7 @@ p.caps = { 'fs_op': fs_op,
            'conn_maker': ns.conn_maker }
 p.setcmd('/bin/echo', 'Hello world!')
 pid = p.spawn()
-plash.run_server()
+plash_core.run_server()
 
 (pid2, status) = os.waitpid(pid, 0)
 assert pid == pid2

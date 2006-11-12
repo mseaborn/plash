@@ -284,6 +284,16 @@ test('install_chown',
 	       '-e', '/usr/bin/install', '-T', 'file', 'dest');
      });
 
+# Check that no file descriptors are leaked by pola-run to the child
+# process.
+test('check_fds',
+     sub {
+       run_cmd('gcc', '-Wall', "$start_dir/check-fds.c",
+	       '-o', "$start_dir/check-fds");
+       run_cmd(@pola_run, '-B', '-f', "$start_dir/check-fds",
+	       '-e', "$start_dir/check-fds");
+     });
+
 
 print "\n";
 if(scalar(@failed)) {

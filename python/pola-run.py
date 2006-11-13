@@ -3,9 +3,9 @@
 import sys
 import os
 import plash_core
-import plash_env
-import plash_namespace as ns
-from plash_process import Process_spec
+import plash.env
+import plash.namespace as ns
+from plash.process import Process_spec
 
 
 class BadArgException(Exception):
@@ -213,7 +213,7 @@ class State:
     pass
 state = State()
 state.namespace_empty = True
-state.caller_root = plash_env.get_root_dir()
+state.caller_root = plash.env.get_root_dir()
 state.cwd = ns.resolve_dir(state.caller_root, os.getcwd())
 state.pet_name = None
 state.powerbox = False
@@ -248,12 +248,12 @@ if state.cwd != None:
         pass
 
 if state.powerbox:
-    import plash_powerbox
+    import plash.powerbox
     # The pet name defaults to the executable name
     if state.pet_name == None:
         state.pet_name = proc.cmd
     proc.caps['powerbox_req_filename'] = \
-        plash_powerbox.Powerbox(user_namespace = state.caller_root,
+        plash.powerbox.Powerbox(user_namespace = state.caller_root,
                                 app_namespace = proc.root_node,
                                 pet_name = state.pet_name)
 

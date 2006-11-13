@@ -18,14 +18,14 @@
 # USA.
 
 import plash_core
-import plash_marshal
-import plash_marshal as m
+import plash.marshal
+import plash.marshal as m
 
 
 def call(obj, result, method, *args):
-    (m, r) = plash_marshal.unpack(
+    (m, r) = plash.marshal.unpack(
         obj.cap_call(
-        plash_marshal.pack(method, *args)))
+        plash.marshal.pack(method, *args)))
     if m == result:
         if len(r) == 1:
             return r[0]

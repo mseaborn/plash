@@ -3,8 +3,8 @@ import string
 import fcntl
 import os
 import plash_core
-import plash_namespace as ns
-import plash_env
+import plash.namespace as ns
+import plash.env
 import sys
 
 
@@ -52,7 +52,7 @@ class Process_spec:
                 if var in self.env:
                     args.extend(["-s", var + '=' + self.env[var]])
 
-        if not plash_env.under_plash:
+        if not plash.env.under_plash:
             if 'PLASH_SANDBOX_PROG' in os.environ:
                 prefix_cmd = [os.environ['PLASH_SANDBOX_PROG']]
                 # prefix_cmd = string.split(os.environ['PLASH_SANDBOX_PROGV'], ":")
@@ -79,7 +79,7 @@ class Process_spec:
 
     def spawn(self):
         self.plash_setup()
-        if plash_env.under_plash:
+        if plash.env.under_plash:
             my_execve = kernel_execve
         else:
             my_execve = os.execve

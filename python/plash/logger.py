@@ -1,16 +1,16 @@
 
-import plash_marshal
+import plash.marshal
 import traceback
 
 indent = ['>']
 
 # Logging proxy object
-class logger(plash_marshal.Pyobj_marshal):
+class logger(plash.marshal.Pyobj_marshal):
     def __init__(self, x1): self.x = x1
     def cap_call(self, args):
         print indent[0], "call",
         try:
-            print plash_marshal.unpack(args)
+            print plash.marshal.unpack(args)
         except:
             print args, "exception:",
             traceback.print_exc()
@@ -27,7 +27,7 @@ class logger(plash_marshal.Pyobj_marshal):
             return
         print indent[0], "->",
         try:
-            print plash_marshal.unpack(r)
+            print plash.marshal.unpack(r)
         except:
             print r
         return r

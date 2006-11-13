@@ -6,15 +6,15 @@ import sys
 import string
 import traceback
 import plash_core
-import plash_marshal
-import plash_marshal as m
-import plash_namespace as ns
-import plash_process
-from plash_process import Process_spec
-from plash_logger import logger
+import plash.marshal
+import plash.marshal as m
+import plash.namespace as ns
+import plash.process
+from plash.process import Process_spec
+from plash.logger import logger
 
 
-class Test_dir(plash_marshal.Pyobj_demarshal):
+class Test_dir(plash.marshal.Pyobj_demarshal):
     def __init__(self, x): self.x = x
     def fsobj_type(self): return m.OBJT_DIR
     def dir_traverse(self, leaf):
@@ -26,7 +26,7 @@ root = plash_core.initial_dir("/")
 
 next_inode = [1]
 
-class Exec_obj(plash_marshal.Pyobj_demarshal):
+class Exec_obj(plash.marshal.Pyobj_demarshal):
     def __init__(self):
         self.inode = next_inode[0]
         next_inode[0] += 1
@@ -54,7 +54,7 @@ class Exec_obj(plash_marshal.Pyobj_demarshal):
         os.write(stdout.fileno(), "This is an executable object.\n")
         return 0
 
-class Fab_dir(plash_marshal.Pyobj_demarshal):
+class Fab_dir(plash.marshal.Pyobj_demarshal):
     def __init__(self, dict):
         self.dict = dict
         self.inode = next_inode[0]

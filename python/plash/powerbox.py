@@ -1,11 +1,11 @@
 
 import gtk
-import plash_marshal
-import plash_namespace
+import plash.marshal
+import plash.namespace
 import traceback
 
 
-class Powerbox(plash_marshal.Pyobj_demarshal):
+class Powerbox(plash.marshal.Pyobj_demarshal):
 
     def __init__(self, user_namespace, app_namespace, pet_name):
         self.dir = '/'
@@ -16,7 +16,7 @@ class Powerbox(plash_marshal.Pyobj_demarshal):
     # Dispatch incoming invocations to cap_call_cont
     def cap_invoke(self, args):
         try:
-            (method, args2) = plash_marshal.method_unpack(args)
+            (method, args2) = plash.marshal.method_unpack(args)
             if method == 'Call':
                 (data, caps, fds) = args2
                 self.cap_call_cont((data, caps[1:], fds), caps[0])
@@ -28,7 +28,7 @@ class Powerbox(plash_marshal.Pyobj_demarshal):
 
     # Dispatch to powerbox_req_filename_cont
     def cap_call_cont(self, args, cont):
-        x = plash_marshal.methods_by_name['powerbox_req_filename']['packer'].unpack_r(args)
+        x = plash.marshal.methods_by_name['powerbox_req_filename']['packer'].unpack_r(args)
         self.powerbox_req_filename_cont(x, cont)
     
     def powerbox_req_filename_cont(self, args, cont):
@@ -89,10 +89,10 @@ class Powerbox(plash_marshal.Pyobj_demarshal):
             if response_id == gtk.RESPONSE_ACCEPT:
                 pathname = dialog.get_filename()
                 print "response =", response_id, pathname
-                plash_namespace.resolve_populate(self.user_namespace,
+                plash.namespace.resolve_populate(self.user_namespace,
                                                  self.app_namespace,
                                                  pathname)
-                cont.cap_invoke(plash_marshal.pack('powerbox_result_filename',
+                cont.cap_invoke(plash.marshal.pack('powerbox_result_filename',
                                                    pathname))
             dialog.hide()
 

@@ -1,7 +1,7 @@
 
 import os
 import plash_core
-import plash_marshal as pm
+import plash.marshal as pm
 
 
 def assert_equal(got, expect):
@@ -130,7 +130,7 @@ dir = plash_core.initial_dir(".")
 test_empty_writable_dir(dir)
 print "ok"
 
-import plash_namespace as ns
+import plash.namespace as ns
 os.fchdir(fd)
 os.mkdir("write")
 os.mkdir("read")

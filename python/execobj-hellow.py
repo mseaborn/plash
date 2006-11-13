@@ -2,12 +2,12 @@
 
 import os
 import plash_core
-import plash_marshal
-import plash_env
+import plash.marshal
+import plash.env
 
 next_inode = [1]
 
-class Exec_obj(plash_marshal.Pyobj_demarshal):
+class Exec_obj(plash.marshal.Pyobj_demarshal):
     def __init__(self):
         self.inode = next_inode[0]
         next_inode[0] += 1
@@ -42,6 +42,6 @@ class Exec_obj(plash_marshal.Pyobj_demarshal):
         os.write(stdout.fileno(), "This is an executable object.\n")
         return 0
 
-plash_env.get_return_cont().cap_invoke(('Okay', (Exec_obj(),), ()))
+plash.env.get_return_cont().cap_invoke(('Okay', (Exec_obj(),), ()))
 plash_core.run_server()
 print "server exited"

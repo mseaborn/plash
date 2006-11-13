@@ -1,12 +1,12 @@
 
 import os
 import plash_core
-import plash_env
-import plash_namespace as ns
-from plash_process import Process_spec
+import plash.env
+import plash.namespace as ns
+from plash.process import Process_spec
 
 
-caller_root = plash_env.get_root_dir()
+caller_root = plash.env.get_root_dir()
 root_node = ns.make_node()
 ns.resolve_populate(caller_root, root_node, "/bin")
 ns.resolve_populate(caller_root, root_node, "/lib")

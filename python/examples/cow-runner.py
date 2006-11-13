@@ -2,9 +2,9 @@
 import os
 import sys
 import plash_core
-import plash_env
-import plash_namespace as ns
-from plash_process import Process_spec
+import plash.env
+import plash.namespace as ns
+from plash.process import Process_spec
 
 
 args = sys.argv[1:]
@@ -12,7 +12,7 @@ if len(args) < 3:
     print "Usage: %s <write-layer-dir> <read-layer-dir> <prog> <args...>" % sys.argv[0]
     sys.exit(1)
 
-caller_root = plash_env.get_root_dir()
+caller_root = plash.env.get_root_dir()
 caller_cwd_path = os.getcwd()
 caller_cwd = ns.resolve_dir(caller_root, caller_cwd_path)
 

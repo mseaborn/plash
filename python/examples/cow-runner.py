@@ -32,7 +32,7 @@ ns.attach_at_path(root_node, "/tmp",
 ns.attach_at_path(root_node, "/dev",
                   ns.resolve_obj(caller_root, "/dev"))
 
-fs_op = plash.make_fs_op(ns.dir_of_node(root_node))
+fs_op = plash_core.make_fs_op(ns.dir_of_node(root_node))
 fs_op.fsop_chdir(caller_cwd_path)
 p = Process_spec()
 p.setcmd(*args[2:])

@@ -9,14 +9,14 @@
 
 import os
 import plash_core
-import plash.env
-import plash.namespace as ns
-from plash.process import Process_spec
+import plash_env
+import plash_namespace as ns
+from plash_process import Process_spec
 
 
 # Create a file namespace for the subprocess:
 # First, get the root directory of our own file namespace.
-caller_root = plash.env.get_root_dir()
+caller_root = plash_env.get_root_dir()
 
 # Create an empty namespace.
 root_node = ns.make_node()

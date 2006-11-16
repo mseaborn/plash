@@ -511,7 +511,8 @@ void handle_fs_op_message(region_t r, struct process *proc,
 			  seqf_t msg_orig, fds_t fds_orig, cap_seq_t cap_args,
 			  seqt_t *reply, fds_t *reply_fds,
 			  cap_seq_t *r_caps,
-			  seqt_t *log_msg, seqt_t *log_reply)
+			  seqt_t *log_msg, seqt_t *log_reply,
+			  int *log_read_only)
 {
   seqf_t msg = msg_orig;
   int ok = 1;
@@ -696,6 +697,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
 		      mk_int(r, argc + extra_args),
 		      got);
 	*log_reply = mk_string(r, "ok");
+	*log_read_only = 1;
 	return;
       }
     exec_fail:
@@ -719,6 +721,9 @@ void handle_fs_op_message(region_t r, struct process *proc,
       *log_msg =
 	cat2(r, mk_printf(r, "open: flags=0o%o, mode=0o%o, ", flags, mode),
 	     mk_leaf(r, pathname));
+      if((flags & O_ACCMODE) == O_RDONLY) {
+	*log_read_only = 1;
+      }
             
       fd = process_open_d(proc->root, proc->cwd, pathname, flags, mode, &err,
 			  &dummy_fd, &d_obj);
@@ -774,6 +779,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
       *log_msg = cat3(r, mk_string(r, nofollow ? "lstat" : "stat"),
 		      mk_string(r, ": "),
 		      mk_leaf(r, pathname));
+      *log_read_only = 1;
 
       obj = resolve_obj_simple(proc->root, proc->cwd, pathname,
 			       SYMLINK_LIMIT, nofollow, &err);
@@ -815,6 +821,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
 	*reply = cat2(r, mk_string(r, "RRdl"),
 		      mk_leaf(r, link_dest));
       }
+      *log_read_only = 1;
       return;
     }
     break;
@@ -833,6 +840,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
 	*reply = cat2(r, mk_int(r, METHOD_FAIL),
 		      mk_int(r, E_NO_CWD_DEFINED));
       }
+      *log_read_only = 1;
       return;
     }
     break;
@@ -870,6 +878,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
 		      mk_int(r, err));
 	*log_reply = mk_string(r, "resolve fail");
       }
+      *log_read_only = 1;
       return;
     }
     break;
@@ -906,6 +915,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
 		      mk_int(r, err));
 	*log_reply = mk_string(r, "fail");
       }
+      *log_read_only = 1;
       return;
     }
     break;
@@ -1206,6 +1216,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
 	*reply = cat2(r, mk_int(r, METHOD_FAIL),
 		      mk_int(r, err));
       }
+      *log_read_only = 1;
       return;
     }
     break;
@@ -1231,6 +1242,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
 		      mk_int(r, ENOTDIR));
 	*log_reply = mk_string(r, "fail: not a dir_stack object");
       }
+      *log_read_only = 1;
       return;
     }
     break;
@@ -1262,6 +1274,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
 		      mk_int(r, ENOTDIR));
 	*log_reply = mk_string(r, "fail: not a dir_stack object");
       }
+      *log_read_only = 1;
       return;
     }
   }
@@ -1269,6 +1282,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
   {
     if(ok) {
       *log_msg = cat2(r, mk_string(r, "log: "), mk_leaf(r, msg));
+      *log_read_only = 1;
       return;
     }
   }
@@ -1335,6 +1349,7 @@ void fs_op_call(struct filesys_obj *obj1, region_t r,
   struct fs_op_object *obj = (void *) obj1;
   seqt_t log_msg = mk_string(r, "?");
   seqt_t log_reply = mk_string(r, "?");
+  int log_read_only = 0;
   
   if(obj->shared->log && obj->shared->log_messages) {
     fprintf(obj->shared->log, "\nmessage from process %i\n", obj->id);
@@ -1347,7 +1362,7 @@ void fs_op_call(struct filesys_obj *obj1, region_t r,
   handle_fs_op_message(r, &obj->p, obj, flatten_reuse(r, args.data),
 		       args.fds, args.caps,
 		       &result->data, &result->fds, &result->caps,
-		       &log_msg, &log_reply);
+		       &log_msg, &log_reply, &log_read_only);
   caps_free(args.caps);
   close_fds(args.fds);
   
@@ -1357,7 +1372,8 @@ void fs_op_call(struct filesys_obj *obj1, region_t r,
     fprint_data(obj->shared->log, flatten(r, result->data));
   }
   if(obj->shared->log && obj->shared->log_summary) {
-    fprintf(obj->shared->log, "#%i: %s: %s\n", obj->id,
+    fprintf(obj->shared->log, "#%i: [%c] %s: %s\n", obj->id,
+	    log_read_only ? 'r' : 'w',
 	    flatten_str(r, log_msg),
 	    flatten_str(r, log_reply));
   }

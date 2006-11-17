@@ -303,7 +303,7 @@ int process_readlink(region_t r,
   void *result;
   region_t r2 = region_make();
   int rc = resolve_obj(r2, root, cwd, pathname, SYMLINK_LIMIT,
-		       1 /* nofollow */, 0 /* create */, &result, err);
+		       TRUE /* nofollow */, 0 /* create */, &result, err);
   region_free(r2);
   if(rc == RESOLVED_FILE_OR_SYMLINK) {
     struct filesys_obj *obj = result;
@@ -332,7 +332,7 @@ int process_readlink(region_t r,
    won't be redirected. */
 int open_executable_file(struct filesys_obj *obj, seqf_t cmd_filename, int *err)
 {
-  int read_perm_missing = 0;
+  int read_perm_missing = FALSE;
   int fd;
   
   /* If this is a setuid executable, warn that setuid is not supported. */
@@ -342,7 +342,7 @@ int open_executable_file(struct filesys_obj *obj, seqf_t cmd_filename, int *err)
     struct stat st;
     if(obj->vtable->stat(obj, &st, err) >= 0) {
       if((st.st_mode & S_IROTH) == 0) {
-	read_perm_missing = 1;
+	read_perm_missing = TRUE;
       }
       if(st.st_mode & (S_ISUID | S_ISGID)) {
 	region_t r = region_make();
@@ -434,7 +434,7 @@ int exec_for_scripts
       int fd;
       r2 = region_make();
       obj = resolve_file(r2, root, cwd, icmd, SYMLINK_LIMIT,
-			 0 /* nofollow */, err);
+			 FALSE /* nofollow */, err);
       region_free(r2);
       if(!obj) return -1; /* Error */
       fd = obj->vtable->open(obj, O_RDONLY, err);
@@ -592,7 +592,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
       log->op_name = "fsop_get_obj";
       *log_msg = mk_leaf(r, pathname);
       obj = resolve_obj_simple(proc->root, proc->cwd, pathname,
-			       SYMLINK_LIMIT, 0, &err);
+			       SYMLINK_LIMIT, FALSE /* nofollow */, &err);
       if(obj) {
 	*r_caps = mk_caps1(r, obj);
 	*reply = mk_int(r, METHOD_OKAY);
@@ -646,7 +646,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
       }
 
       obj = resolve_file(r, proc->root, proc->cwd, cmd_filename,
-			 SYMLINK_LIMIT, 0 /* nofollow */, &err);
+			 SYMLINK_LIMIT, FALSE /* nofollow */, &err);
       if(!obj) goto exec_fail;
 
       /* Is this an executable object?  If so, we return the object for
@@ -702,7 +702,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
 		      mk_int(r, argc + extra_args),
 		      got);
 	*log_reply = mk_string(r, "ok");
-	log->read_only = 1;
+	log->read_only = TRUE;
 	return 0;
       }
     exec_fail:
@@ -725,7 +725,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
 	cat2(r, mk_printf(r, "flags=0o%o, mode=0o%o, ", flags, mode),
 	     mk_leaf(r, pathname));
       if((flags & O_ACCMODE) == O_RDONLY) {
-	log->read_only = 1;
+	log->read_only = TRUE;
       }
             
       fd = process_open_d(proc->root, proc->cwd, pathname, flags, mode, &err,
@@ -780,7 +780,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
 
       log->op_name = nofollow ? "lstat" : "stat";
       *log_msg = mk_leaf(r, pathname);
-      log->read_only = 1;
+      log->read_only = TRUE;
 
       obj = resolve_obj_simple(proc->root, proc->cwd, pathname,
 			       SYMLINK_LIMIT, nofollow, &err);
@@ -807,7 +807,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
       
       log->op_name = "readlink";
       *log_msg = mk_leaf(r, pathname);
-      log->read_only = 1;
+      log->read_only = TRUE;
       if(process_readlink(r, proc->root, proc->cwd, pathname,
 			  &link_dest, &err) < 0) {
 	return err;
@@ -826,7 +826,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
     m_end(&ok, &msg);
     if(ok) {
       log->op_name = "getcwd";
-      log->read_only = 1;
+      log->read_only = TRUE;
       if(proc->cwd) {
 	*log_reply = mk_string(r, "ok");
 	*reply = cat2(r, mk_int(r, METHOD_R_FSOP_GETCWD),
@@ -847,7 +847,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
       struct dir_stack *ds;
       log->op_name = "dirlist";
       *log_msg = mk_leaf(r, pathname);
-      log->read_only = 1;
+      log->read_only = TRUE;
       ds = resolve_dir(r, proc->root, proc->cwd, pathname, SYMLINK_LIMIT, &err);
       if(ds) {
 	seqt_t result;
@@ -897,9 +897,9 @@ int handle_fs_op_message(region_t r, struct process *proc,
 
       log->op_name = "access";
       *log_msg = mk_leaf(r, pathname);
-      log->read_only = 1;
+      log->read_only = TRUE;
       obj = resolve_obj_simple(proc->root, proc->cwd, pathname, SYMLINK_LIMIT,
-			       0 /*nofollow*/, &err);
+			       FALSE /*nofollow*/, &err);
       if(obj) {
 	filesys_obj_free(obj);
 	*reply = mk_int(r, METHOD_OKAY);
@@ -1143,7 +1143,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
       log->op_name = "connect";
       *log_msg = mk_leaf(r, pathname);
       obj = resolve_file(r, proc->root, proc->cwd, pathname,
-			 SYMLINK_LIMIT, 0 /*nofollow*/, &err);
+			 SYMLINK_LIMIT, FALSE /*nofollow*/, &err);
       if(obj) {
 	if(obj->vtable->socket_connect(obj, sock_fd, &err) >= 0) {
 	  filesys_obj_free(obj);
@@ -1196,7 +1196,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
 
       log->op_name = "chdir";
       *log_msg = mk_leaf(r, pathname);
-      log->read_only = 1;
+      log->read_only = TRUE;
       e = process_chdir(proc, pathname, &err);
       if(e == 0) {
 	*log_reply = mk_string(r, "ok");
@@ -1219,7 +1219,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
       struct dir_stack *n = dir_stack_upcast(cap_args.caps[0]);
 
       log->op_name = "fchdir";
-      log->read_only = 1;
+      log->read_only = TRUE;
       if(n) {
 	if(proc->cwd) dir_stack_free(proc->cwd);
 	n->hdr.refcount++;
@@ -1243,7 +1243,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
       struct dir_stack *n = dir_stack_upcast(cap_args.caps[0]);
 
       log->op_name = "dir_fstat";
-      log->read_only = 1;
+      log->read_only = TRUE;
       if(n) {
 	int err;
 	struct stat st;
@@ -1271,7 +1271,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
     if(ok) {
       log->op_name = "log";
       *log_msg = mk_leaf(r, msg);
-      log->read_only = 1;
+      log->read_only = TRUE;
       return 0;
     }
   }
@@ -1340,7 +1340,7 @@ void fs_op_call(struct filesys_obj *obj1, region_t r,
   struct log_info log_info;
   int err;
 
-  log_info.read_only = 0;
+  log_info.read_only = FALSE;
   log_info.op_name = "???";
   
   if(obj->shared->log && obj->shared->log_messages) {

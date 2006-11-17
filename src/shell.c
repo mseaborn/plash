@@ -108,7 +108,6 @@ struct shell_state {
   cap_t conn_maker_local;
   /* Not used: */
   cap_t union_dir_maker;
-  cap_t fab_dir_maker;
 
   const char *prompt; /* may be null for default */
 
@@ -1661,7 +1660,7 @@ int command_invocation_sec
   {
     const char *caps_names;
     int sock_fd; /* client's connection to server */
-    int cap_count = 5 + (return_cont ? 1:0);
+    int cap_count = 4 + (return_cont ? 1:0);
     cap_t *imports; /* not used */
     cap_t *caps = region_alloc(r, cap_count * sizeof(cap_t));
     job->shared->refcount++;
@@ -1672,14 +1671,13 @@ int command_invocation_sec
     caps[i++] = inc_ref(job->conn_maker_for_client);
     caps[i++] = inc_ref(job->fs_op_maker);
     caps[i++] = inc_ref(state->union_dir_maker);
-    caps[i++] = inc_ref(state->fab_dir_maker);
     if(return_cont) {
       caps[i++] = return_cont;
-      caps_names = "fs_op;conn_maker;fs_op_maker;union_dir_maker;fab_dir_maker;return_cont";
+      caps_names = "fs_op;conn_maker;fs_op_maker;union_dir_maker;return_cont";
       return_cont = 0;
     }
     else {
-      caps_names = "fs_op;conn_maker;fs_op_maker;union_dir_maker;fab_dir_maker";
+      caps_names = "fs_op;conn_maker;fs_op_maker;union_dir_maker";
     }
     assert(i == cap_count);
     if(0) {
@@ -2587,7 +2585,7 @@ int main(int argc, char *argv[])
 
   if(single_server) {
     region_t r = region_make();
-    int export_count = 4;
+    int export_count = 3;
     int socks[2];
     int pid;
     cap_t *import;
@@ -2619,7 +2617,6 @@ int main(int argc, char *argv[])
       }
       caps[1] = conn_maker_make();
       caps[2] = union_dir_maker_make();
-      caps[3] = fab_dir_maker_make();
       {
 	int i;
 	for(i = 0; i < export_count; i++) {
@@ -2645,7 +2642,6 @@ int main(int argc, char *argv[])
     state.root = import[0];
     state.conn_maker = import[1];
     state.union_dir_maker = import[2];
-    state.fab_dir_maker = import[3];
     region_free(r);
   }
   else {
@@ -2657,7 +2653,6 @@ int main(int argc, char *argv[])
     }
     state.conn_maker = inc_ref(state.conn_maker_local);
     state.union_dir_maker = union_dir_maker_make();
-    state.fab_dir_maker = fab_dir_maker_make();
   }
 
   /* Start server used for mediating only. */

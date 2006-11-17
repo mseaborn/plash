@@ -1665,21 +1665,23 @@ int command_invocation_sec
     cap_t *imports; /* not used */
     cap_t *caps = region_alloc(r, cap_count * sizeof(cap_t));
     job->shared->refcount++;
-    caps[0] = make_fs_op_server(job->shared, root, cwd);
+
+    i = 0;
+    caps[i++] = make_fs_op_server(job->shared, root, cwd);
     root = 0;
-    caps[1] = inc_ref(job->conn_maker_for_client);
-    caps[2] = inc_ref(job->fs_op_maker);
-    caps[3] = inc_ref(state->union_dir_maker);
-    caps[4] = inc_ref(state->fab_dir_maker);
+    caps[i++] = inc_ref(job->conn_maker_for_client);
+    caps[i++] = inc_ref(job->fs_op_maker);
+    caps[i++] = inc_ref(state->union_dir_maker);
+    caps[i++] = inc_ref(state->fab_dir_maker);
     if(return_cont) {
-      // caps[5] = 0; /* Filled out by next desc */
-      caps[5] = return_cont;
+      caps[i++] = return_cont;
       caps_names = "fs_op;conn_maker;fs_op_maker;union_dir_maker;fab_dir_maker;return_cont";
       return_cont = 0;
     }
     else {
       caps_names = "fs_op;conn_maker;fs_op_maker;union_dir_maker;fab_dir_maker";
     }
+    assert(i == cap_count);
     if(0) {
       int i;
       for(i = 0; i < cap_count; i++) {

@@ -36,7 +36,6 @@ static inline void cap_invoke(cap_t c, struct cap_args args)
 
 int expect_ok(struct cap_args args);
 int expect_cap1(struct cap_args args, cap_t *c);
-int expect_fd1(struct cap_args args, int *fd);
 
 int parse_cap_list(seqf_t list, seqf_t *elt, seqf_t *rest);
 int get_process_caps(const char *arg, ...);

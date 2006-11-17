@@ -55,24 +55,6 @@ int expect_cap1(struct cap_args args, cap_t *c)
   return -1;
 }
 
-int expect_fd1(struct cap_args args, int *fd)
-{
-  region_t r = region_make();
-  seqf_t data = flatten_reuse(r, args.data);
-  int ok = 1;
-  m_str(&ok, &data, "Okay");
-  m_end(&ok, &data);
-  if(ok && args.caps.size == 0 && args.fds.count == 1) {
-    *fd = args.fds.fds[0];
-    region_free(r);
-    return 0;
-  }
-  region_free(r);
-  caps_free(args.caps);
-  close_fds(args.fds);
-  return -1;
-}
-
 
 int parse_cap_list(seqf_t list, seqf_t *elt, seqf_t *rest)
 {

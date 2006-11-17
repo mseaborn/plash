@@ -506,13 +506,13 @@ static seqt_t pack_stat_info(region_t r, struct stat *st)
 	      mk_int(r, st->st_ctime)));
 }
 
-void handle_fs_op_message(region_t r, struct process *proc,
-			  struct fs_op_object *obj,
-			  seqf_t msg_orig, fds_t fds_orig, cap_seq_t cap_args,
-			  seqt_t *reply, fds_t *reply_fds,
-			  cap_seq_t *r_caps,
-			  seqt_t *log_msg, seqt_t *log_reply,
-			  int *log_read_only)
+int handle_fs_op_message(region_t r, struct process *proc,
+			 struct fs_op_object *obj,
+			 seqf_t msg_orig, fds_t fds_orig, cap_seq_t cap_args,
+			 seqt_t *reply, fds_t *reply_fds,
+			 cap_seq_t *r_caps,
+			 seqt_t *log_msg, seqt_t *log_reply,
+			 int *log_read_only)
 {
   seqf_t msg = msg_orig;
   int ok = 1;
@@ -533,7 +533,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
       *reply = mk_int(r, METHOD_OKAY);
       *log_reply = mk_printf(r, "ok, created #%i",
 			     ((struct fs_op_object *) new_server)->id);
-      return;
+      return 0;
     }
     break;
   }
@@ -546,7 +546,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
       *r_caps = mk_caps1(r, inc_ref(proc->root));
       *reply = mk_int(r, METHOD_R_CAP);
       *log_reply = mk_printf(r, "ok");
-      return;
+      return 0;
     }
     break;
   }
@@ -565,13 +565,11 @@ void handle_fs_op_message(region_t r, struct process *proc,
 	dir_stack_free(ds);
 	*reply = mk_int(r, METHOD_OKAY);
 	*log_reply = mk_printf(r, "ok");
+	return 0;
       }
       else {
-	*r_caps = caps_empty;
-	*reply = cat2(r, mk_int(r, METHOD_FAIL), mk_int(r, err));
-	*log_reply = mk_printf(r, "fail");
+	return err;
       }
-      return;
     }
     break;
   }
@@ -591,13 +589,11 @@ void handle_fs_op_message(region_t r, struct process *proc,
 	*r_caps = mk_caps1(r, obj);
 	*reply = mk_int(r, METHOD_OKAY);
 	*log_reply = mk_printf(r, "ok");
+	return 0;
       }
       else {
-	*r_caps = caps_empty;
-	*reply = cat2(r, mk_int(r, METHOD_FAIL), mk_int(r, err));
-	*log_reply = mk_printf(r, "fail");
+	return err;
       }
-      return;
     }
     break;
   }
@@ -655,7 +651,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
 	  *reply = mk_string(r, "RExo");
 	  *r_caps = mk_caps1(r, obj);
 	  *log_reply = mk_string(r, "ok: executable object");
-	  return;
+	  return 0;
 	}
       }
 
@@ -698,13 +694,10 @@ void handle_fs_op_message(region_t r, struct process *proc,
 		      got);
 	*log_reply = mk_string(r, "ok");
 	*log_read_only = 1;
-	return;
+	return 0;
       }
     exec_fail:
-      *reply = cat2(r, mk_int(r, METHOD_FAIL),
-		    mk_int(r, err));
-      *log_reply = mk_string(r, "fail");
-      return;
+      return err;
     }
     break;
   }
@@ -731,6 +724,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
 	*reply = mk_string(r, "ROpn");
 	*reply_fds = mk_fds1(r, fd);
 	*log_reply = mk_string(r, "ok");
+	return 0;
       }
       else if(dummy_fd) {
 	/* Open a file descriptor to use as the dummy FD.
@@ -750,19 +744,17 @@ void handle_fs_op_message(region_t r, struct process *proc,
 	*log_reply = mk_string(r, "got dir, use dummy FD");
 	*reply_fds = mk_fds1(r, fd);
 	*r_caps = mk_caps1(r, d_obj);
-	return;
+	return 0;
       dummy_fail:
 	filesys_obj_free(d_obj);
 	*reply = cat2(r, mk_int(r, METHOD_FAIL),
 		      mk_int(r, EIO));
 	*log_reply = mk_string(r, "fail: can't use /dev/null as dummy");
+	return 0;
       }
       else {
-	*reply = cat2(r, mk_int(r, METHOD_FAIL),
-		      mk_int(r, err));
-	*log_reply = mk_printf(r, "fail: %s", strerror(err));
+	return err;
       }
-      return;
     }
     break;
   }
@@ -784,22 +776,16 @@ void handle_fs_op_message(region_t r, struct process *proc,
       obj = resolve_obj_simple(proc->root, proc->cwd, pathname,
 			       SYMLINK_LIMIT, nofollow, &err);
       if(!obj) {
-	*log_reply = mk_string(r, "fail");
-	*reply = cat2(r, mk_int(r, METHOD_FAIL),
-		      mk_int(r, err));
-	return;
+	return err;
       }
       if(obj->vtable->stat(obj, &stat, &err) < 0) {
 	filesys_obj_free(obj);
-	*log_reply = mk_string(r, "fail");
-	*reply = cat2(r, mk_int(r, METHOD_FAIL),
-		      mk_int(r, err));
-	return;
+	return err;
       }
       filesys_obj_free(obj);
       *reply = cat2(r, mk_string(r, "RSta"), pack_stat_info(r, &stat));
       *log_reply = mk_string(r, "ok");
-      return;
+      return 0;
     }
     break;
   }
@@ -810,19 +796,17 @@ void handle_fs_op_message(region_t r, struct process *proc,
       seqf_t link_dest;
       int err;
       *log_msg = cat2(r, mk_string(r, "readlink: "), mk_leaf(r, pathname));
+      *log_read_only = 1;
       if(process_readlink(r, proc->root, proc->cwd, pathname,
 			  &link_dest, &err) < 0) {
-	*log_reply = mk_string(r, "fail");
-	*reply = cat2(r, mk_int(r, METHOD_FAIL),
-		      mk_int(r, err));
+	return err;
       }
       else {
 	*log_reply = mk_string(r, "ok");
 	*reply = cat2(r, mk_string(r, "RRdl"),
 		      mk_leaf(r, link_dest));
+	return 0;
       }
-      *log_read_only = 1;
-      return;
     }
     break;
   }
@@ -831,17 +815,16 @@ void handle_fs_op_message(region_t r, struct process *proc,
     m_end(&ok, &msg);
     if(ok) {
       *log_msg = mk_string(r, "getcwd");
+      *log_read_only = 1;
       if(proc->cwd) {
 	*log_reply = mk_string(r, "ok");
 	*reply = cat2(r, mk_string(r, "RCwd"),
 		      string_of_cwd(r, proc->cwd));
+	return 0;
       }
       else {
-	*reply = cat2(r, mk_int(r, METHOD_FAIL),
-		      mk_int(r, E_NO_CWD_DEFINED));
+	return E_NO_CWD_DEFINED;
       }
-      *log_read_only = 1;
-      return;
     }
     break;
   }
@@ -852,6 +835,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
       int err = 0;
       struct dir_stack *ds;
       *log_msg = cat2(r, mk_string(r, "dirlist: "), mk_leaf(r, pathname));
+      *log_read_only = 1;
       ds = resolve_dir(r, proc->root, proc->cwd, pathname, SYMLINK_LIMIT, &err);
       if(ds) {
 	seqt_t result;
@@ -866,20 +850,17 @@ void handle_fs_op_message(region_t r, struct process *proc,
 	  *reply = cat2(r, mk_string(r, "RDls"), result);
 	  *log_reply = mk_string(r, "ok");
 	  dir_stack_free(ds);
+	  return 0;
 	}
 	else {
-	  *reply = cat2(r, mk_int(r, METHOD_FAIL),
-			mk_int(r, err));
-	  *log_reply = mk_string(r, "list fail");
+	  /* Failed in getting list */
+	  return err;
 	}
       }
       else {
-	*reply = cat2(r, mk_int(r, METHOD_FAIL),
-		      mk_int(r, err));
-	*log_reply = mk_string(r, "resolve fail");
+	/* Failed in resolving path */
+	return err;
       }
-      *log_read_only = 1;
-      return;
     }
     break;
   }
@@ -903,20 +884,18 @@ void handle_fs_op_message(region_t r, struct process *proc,
       int err;
 
       *log_msg = cat2(r, mk_string(r, "access: "), mk_leaf(r, pathname));
+      *log_read_only = 1;
       obj = resolve_obj_simple(proc->root, proc->cwd, pathname, SYMLINK_LIMIT,
 			       0 /*nofollow*/, &err);
       if(obj) {
 	filesys_obj_free(obj);
 	*reply = mk_int(r, METHOD_OKAY);
 	*log_reply = mk_string(r, "ok");
+	return 0;
       }
       else {
-	*reply = cat2(r, mk_int(r, METHOD_FAIL),
-		      mk_int(r, err));
-	*log_reply = mk_string(r, "fail");
+	return err;
       }
-      *log_read_only = 1;
-      return;
     }
     break;
   }
@@ -930,15 +909,13 @@ void handle_fs_op_message(region_t r, struct process *proc,
       int err = 0;
       *log_msg = cat2(r, mk_string(r, "mkdir: "), mk_leaf(r, pathname));
       if(process_mkdir(proc, pathname, mode, &err) < 0) {
-	*reply = cat2(r, mk_int(r, METHOD_FAIL),
-		      mk_int(r, err));
-	*log_reply = mk_string(r, "fail");
+	return err;
       }
       else {
 	*reply = mk_int(r, METHOD_OKAY);
 	*log_reply = mk_string(r, "ok");
+	return 0;
       }
-      return;
     }
     break;
   }
@@ -953,13 +930,12 @@ void handle_fs_op_message(region_t r, struct process *proc,
       *log_msg = cat4(r, mk_string(r, "symlink: "), mk_leaf(r, newpath),
 		      mk_string(r, " to link to "), mk_leaf(r, oldpath));
       if(process_symlink(proc, newpath, oldpath, &err) < 0) {
-	*reply = cat2(r, mk_int(r, METHOD_FAIL),
-		      mk_int(r, err));
+	return err;
       }
       else {
 	*reply = mk_int(r, METHOD_OKAY);
+	return 0;
       }
-      return;
     }
     break;
   }
@@ -974,15 +950,12 @@ void handle_fs_op_message(region_t r, struct process *proc,
       *log_msg = cat4(r, mk_string(r, "rename: "), mk_leaf(r, oldpath),
 		      mk_string(r, " to "), mk_leaf(r, newpath));
       if(process_rename(proc, oldpath, newpath, &err) < 0) {
-	*reply = cat2(r, mk_int(r, METHOD_FAIL),
-		      mk_int(r, err));
-	*log_reply = mk_string(r, "fail");
-	return;
+	return err;
       }
       else {
 	*reply = mk_int(r, METHOD_OKAY);
 	*log_reply = mk_string(r, "ok");
-	return;
+	return 0;
       }
     }
     break;
@@ -998,15 +971,12 @@ void handle_fs_op_message(region_t r, struct process *proc,
       *log_msg = cat4(r, mk_string(r, "hard link: create "), mk_leaf(r, newpath),
 		      mk_string(r, " to link to "), mk_leaf(r, oldpath));
       if(process_link(proc, oldpath, newpath, &err) < 0) {
-	*reply = cat2(r, mk_int(r, METHOD_FAIL),
-		      mk_int(r, err));
-	*log_reply = mk_string(r, "fail");
-	return;
+	return err;
       }
       else {
 	*reply = mk_int(r, METHOD_OKAY);
 	*log_reply = mk_string(r, "ok");
-	return;
+	return 0;
       }
     }
     break;
@@ -1027,15 +997,13 @@ void handle_fs_op_message(region_t r, struct process *proc,
       int err;
       *log_msg = cat2(r, mk_string(r, "chmod: "), mk_leaf(r, pathname));
       if(process_chmod(proc, pathname, mode, nofollow, &err) < 0) {
-	*reply = cat2(r, mk_int(r, METHOD_FAIL),
-		      mk_int(r, err));
-	*log_reply = mk_string(r, "fail");
+	return err;
       }
       else {
 	*reply = mk_int(r, METHOD_OKAY);
 	*log_reply = mk_string(r, "ok");
+	return 0;
       }
-      return;
     }
     break;
   }
@@ -1054,15 +1022,13 @@ void handle_fs_op_message(region_t r, struct process *proc,
 		      mk_leaf(r, pathname));
       if(process_chown(proc, pathname, owner_uid, group_gid,
 		       nofollow, &err) < 0) {
-	*reply = cat2(r, mk_int(r, METHOD_FAIL),
-		      mk_int(r, err));
-	*log_reply = mk_string(r, "fail");
+	return err;
       }
       else {
 	*reply = mk_int(r, METHOD_OKAY);
 	*log_reply = mk_string(r, "ok");
+	return 0;
       }
-      return;
     }
     break;
   }
@@ -1087,15 +1053,13 @@ void handle_fs_op_message(region_t r, struct process *proc,
       mtime.tv_usec = mtime_usec;
       *log_msg = cat2(r, mk_string(r, "utime: "), mk_leaf(r, pathname));
       if(process_utimes(proc, pathname, nofollow, &atime, &mtime, &err) < 0) {
-	*reply = cat2(r, mk_int(r, METHOD_FAIL),
-		      mk_int(r, err));
-	*log_reply = mk_string(r, "fail");
+	return err;
       }
       else {
 	*reply = mk_int(r, METHOD_OKAY);
 	*log_reply = mk_string(r, "ok");
+	return 0;
       }
-      return;
     }
     break;
   }
@@ -1107,15 +1071,13 @@ void handle_fs_op_message(region_t r, struct process *proc,
       int err;
       *log_msg = cat2(r, mk_string(r, "unlink: "), mk_leaf(r, pathname));
       if(process_unlink(proc, pathname, &err) < 0) {
-	*reply = cat2(r, mk_int(r, METHOD_FAIL),
-		      mk_int(r, err));
-	*log_reply = mk_string(r, "fail");
+	return err;
       }
       else {
 	*reply = mk_int(r, METHOD_OKAY);
 	*log_reply = mk_string(r, "ok");
+	return 0;
       }
-      return;
     }
     break;
   }
@@ -1127,15 +1089,13 @@ void handle_fs_op_message(region_t r, struct process *proc,
       int err;
       *log_msg = cat2(r, mk_string(r, "rmdir: "), mk_leaf(r, pathname));
       if(process_rmdir(proc, pathname, &err) < 0) {
-	*reply = cat2(r, mk_int(r, METHOD_FAIL),
-		      mk_int(r, err));
-	*log_reply = mk_string(r, "fail");
+	return err;
       }
       else {
 	*reply = mk_int(r, METHOD_OKAY);
 	*log_reply = mk_string(r, "ok");
+	return 0;
       }
-      return;
     }
     break;
   }
@@ -1157,14 +1117,11 @@ void handle_fs_op_message(region_t r, struct process *proc,
 	  filesys_obj_free(obj);
 	  *log_reply = mk_string(r, "ok");
 	  *reply = mk_int(r, METHOD_OKAY);
-	  return;
+	  return 0;
 	}
 	filesys_obj_free(obj);
       }
-      *log_reply = mk_string(r, "fail");
-      *reply = cat2(r, mk_int(r, METHOD_FAIL),
-		    mk_int(r, err));
-      return;
+      return err;
     }
     break;
   }
@@ -1187,14 +1144,11 @@ void handle_fs_op_message(region_t r, struct process *proc,
 	  free_resolved_slot(slot);
 	  *log_reply = mk_string(r, "ok");
 	  *reply = mk_int(r, METHOD_OKAY);
-	  return;
+	  return 0;
 	}
 	free_resolved_slot(slot);
       }
-      *log_reply = mk_string(r, "fail");
-      *reply = cat2(r, mk_int(r, METHOD_FAIL),
-		    mk_int(r, err));
-      return;
+      return err;
     }
     break;
   }
@@ -1206,18 +1160,16 @@ void handle_fs_op_message(region_t r, struct process *proc,
       int err = 0;
       int e;
       *log_msg = cat2(r, mk_string(r, "chdir: "), mk_leaf(r, pathname));
+      *log_read_only = 1;
       e = process_chdir(proc, pathname, &err);
       if(e == 0) {
 	*log_reply = mk_string(r, "ok");
 	*reply = mk_int(r, METHOD_OKAY);
+	return 0;
       }
       else {
-	*log_reply = mk_string(r, "fail");
-	*reply = cat2(r, mk_int(r, METHOD_FAIL),
-		      mk_int(r, err));
+	return err;
       }
-      *log_read_only = 1;
-      return;
     }
     break;
   }
@@ -1230,20 +1182,19 @@ void handle_fs_op_message(region_t r, struct process *proc,
     if(ok && cap_args.size == 1) {
       struct dir_stack *n = dir_stack_upcast(cap_args.caps[0]);
       *log_msg = mk_string(r, "fchdir");
+      *log_read_only = 1;
       if(n) {
 	if(proc->cwd) dir_stack_free(proc->cwd);
 	n->hdr.refcount++;
 	proc->cwd = n;
 	*reply = mk_int(r, METHOD_OKAY);
 	*log_reply = mk_string(r, "ok");
+	return 0;
       }
       else {
-	*reply = cat2(r, mk_int(r, METHOD_FAIL),
-		      mk_int(r, ENOTDIR));
-	*log_reply = mk_string(r, "fail: not a dir_stack object");
+	/* Fail: not a dir_stack object */
+	return ENOTDIR;
       }
-      *log_read_only = 1;
-      return;
     }
     break;
   }
@@ -1254,6 +1205,7 @@ void handle_fs_op_message(region_t r, struct process *proc,
     if(ok && cap_args.size == 1) {
       struct dir_stack *n = dir_stack_upcast(cap_args.caps[0]);
       *log_msg = mk_string(r, "dir_fstat");
+      *log_read_only = 1;
       if(n) {
 	int err;
 	struct stat st;
@@ -1268,14 +1220,12 @@ void handle_fs_op_message(region_t r, struct process *proc,
 	  *log_reply = mk_string(r, "ok");
 	}
 	dir_stack_free(n);
+	return 0;
       }
       else {
-	*reply = cat2(r, mk_int(r, METHOD_FAIL),
-		      mk_int(r, ENOTDIR));
-	*log_reply = mk_string(r, "fail: not a dir_stack object");
+	/* Fail: not a dir_stack object */
+	return ENOTDIR;
       }
-      *log_read_only = 1;
-      return;
     }
   }
   case METHOD_FSOP_LOG:
@@ -1283,15 +1233,14 @@ void handle_fs_op_message(region_t r, struct process *proc,
     if(ok) {
       *log_msg = cat2(r, mk_string(r, "log: "), mk_leaf(r, msg));
       *log_read_only = 1;
-      return;
+      return 0;
     }
   }
   }
 
   // if(DO_LOG_SUMMARY(state)) fprintf(state->log, "Unknown message!\n");
   /* Send a Fail reply. */
-  *reply = cat2(r, mk_int(r, METHOD_FAIL),
-		mk_int(r, ENOSYS));
+  return ENOSYS;
 }
 
 
@@ -1350,6 +1299,7 @@ void fs_op_call(struct filesys_obj *obj1, region_t r,
   seqt_t log_msg = mk_string(r, "?");
   seqt_t log_reply = mk_string(r, "?");
   int log_read_only = 0;
+  int err;
   
   if(obj->shared->log && obj->shared->log_messages) {
     fprintf(obj->shared->log, "\nmessage from process %i\n", obj->id);
@@ -1359,10 +1309,15 @@ void fs_op_call(struct filesys_obj *obj1, region_t r,
   result->data = seqt_empty;
   result->caps = caps_empty;
   result->fds = fds_empty;
-  handle_fs_op_message(r, &obj->p, obj, flatten_reuse(r, args.data),
+  err = handle_fs_op_message(r, &obj->p, obj, flatten_reuse(r, args.data),
 		       args.fds, args.caps,
 		       &result->data, &result->fds, &result->caps,
 		       &log_msg, &log_reply, &log_read_only);
+  if(err) {
+    result->data = cat2(r, mk_int(r, METHOD_FAIL),
+			mk_int(r, err));
+    log_reply = mk_printf(r, "fail: %s", strerror(err));
+  }
   caps_free(args.caps);
   close_fds(args.fds);
   

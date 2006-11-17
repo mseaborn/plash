@@ -30,6 +30,7 @@
 #include "region.h"
 #include "filesysobj.h"
 #include "cap-protocol.h"
+#include "marshal.h"
 
 
 #define CAPP_ID_SHIFT 8
@@ -332,7 +333,7 @@ static void print_msg(FILE *fp, seqf_t data_orig)
     seqf_t data = data_orig;
     int ok = 1;
     int method;
-    m_str(&ok, &data, "Call");
+    m_int_const(&ok, &data, METHOD_CALL);
     m_int(&ok, &data, &method);
     if(ok) {
       char *x = alloca(sizeof(int) + 1);

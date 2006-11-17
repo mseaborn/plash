@@ -387,7 +387,7 @@ int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
     seqf_t msg = flatten_reuse(r, result.data);
     int err;
     int ok = 1;
-    m_str(&ok, &msg, "Fail");
+    m_int_const(&ok, &msg, METHOD_FAIL);
     m_int(&ok, &msg, &err);
     m_end(&ok, &msg);
     if(ok && result.caps.size == 0 && result.fds.count == 0) {

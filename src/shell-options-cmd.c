@@ -19,6 +19,7 @@
 
 #include "cap-utils.h"
 #include "shell-options.h"
+#include "marshal.h"
 
 
 void print_option(region_t r, cap_t opts, const char *name)
@@ -45,7 +46,7 @@ int main(int argc, char *argv[])
 
     r = region_make();
     cap_call(fs_server, r,
-	     cap_args_make(cat2(r, mk_string(r, "Gobj"),
+	     cap_args_make(cat2(r, mk_int(r, METHOD_FSOP_GET_OBJ),
 				mk_string(r, argv[1])),
 			   caps_empty, fds_empty),
 	     &result);

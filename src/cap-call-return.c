@@ -58,7 +58,7 @@ void generic_obj_call(struct filesys_obj *obj, region_t r,
     a[0] = make_return_cont(state);
     memcpy(a + 1, args.caps.caps, args.caps.size * sizeof(cap_t));
     obj->vtable->cap_invoke(obj,
-			    cap_args_make(cat2(r, mk_string(r, "Call"),
+			    cap_args_make(cat2(r, mk_int(r, METHOD_CALL),
 					       args.data),
 					  cap_seq_make(a, args.caps.size + 1),
 					  args.fds));

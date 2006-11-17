@@ -139,7 +139,7 @@ void edit_obj_invoke(struct filesys_obj *obj1, struct cap_args args)
     seqf_t data = flatten_reuse(r, args.data);
     bufref_t args_ref;
     int ok = 1;
-    m_str(&ok, &data, "Call");
+    m_int_const(&ok, &data, METHOD_CALL);
     m_int_const(&ok, &data, METHOD_EO_EXEC);
     m_int(&ok, &data, &args_ref);
     if(ok && args.caps.size >= 1) {

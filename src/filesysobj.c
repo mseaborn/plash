@@ -210,7 +210,7 @@ void marshal_cap_call(struct filesys_obj *obj, region_t r,
       result->caps = caps_empty;
       result->fds = fds_empty;
       if(obj->vtable->stat(obj, &stat, &err) < 0) {
-	result->data = cat2(r, mk_string(r, "Fail"), mk_int(r, err));
+	result->data = cat2(r, mk_int(r, METHOD_FAIL), mk_int(r, err));
 	return;
       }
       result->data = cat4(r, mk_int(r, METHOD_R_FSOBJ_STAT),
@@ -511,7 +511,7 @@ int marshal_stat(struct filesys_obj *obj, struct stat *buf, int *err)
   region_t r = region_make();
   struct cap_args result;
   cap_call(obj, r,
-	   cap_args_make(mk_string(r, "Osta"),
+	   cap_args_make(mk_int(r, METHOD_FSOBJ_STAT),
 			 caps_empty, fds_empty),
 	   &result);
   {

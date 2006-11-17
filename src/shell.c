@@ -1353,7 +1353,7 @@ void spawn_inv_process(void *spawn_h, struct process_desc_fork *f,
     }
   }
   cap_invoke(obj->exec_obj,
-	     cap_args_make(cat4(r, mk_string(r, "Call"),
+	     cap_args_make(cat4(r, mk_int(r, METHOD_CALL),
 				mk_int(r, METHOD_EO_EXEC),
 				mk_int(r, spawn_args),
 				argbuf_data(argbuf)),

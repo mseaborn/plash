@@ -605,7 +605,7 @@ static void file_powerbox_send_request(FilePowerbox *pb)
     bufref_t arg_list = argmk_array(argbuf, arg_count, &a);
     for(i = 0; i < arg_count; i++) { a[i] = args[i]; }
     cap_invoke(powerbox_req,
-	       cap_args_dc(cat4(r, mk_string(r, "Call"),
+	       cap_args_dc(cat4(r, mk_int(r, METHOD_CALL),
 				mk_int(r, METHOD_POWERBOX_REQ_FILENAME),
 				mk_int(r, arg_list),
 				argbuf_data(argbuf)),

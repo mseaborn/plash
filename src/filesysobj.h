@@ -333,43 +333,5 @@ static inline cap_t inc_ref(cap_t x)
 #define DECLARE_VTABLE(name) \
 extern const struct filesys_obj_vtable name
 
-#define OBJECT_VTABLE(name, obj_free, obj_call) \
-struct const filesys_obj_vtable name = { \
-  /* .free = */ obj_free, \
- \
-  /* .cap_invoke = */ local_obj_invoke, \
-  /* .cap_call = */ obj_call, \
-  /* .single_use = */ 0, \
- \
-  /* .type = */ objt_unknown, \
-  /* .stat = */ dummy_stat, \
-  /* .utimes = */ dummy_utimes, \
-  /* .chmod = */ dummy_chmod, \
-  /* .open = */ dummy_open, \
-  /* .connect = */ dummy_socket_connect, \
-  /* .traverse = */ dummy_traverse, \
-  /* .list = */ dummy_list, \
-  /* .create_file = */ dummy_create_file, \
-  /* .mkdir = */ dummy_mkdir, \
-  /* .symlink = */ dummy_symlink, \
-  /* .rename = */ dummy_rename_or_link, \
-  /* .link = */ dummy_rename_or_link, \
-  /* .unlink = */ dummy_unlink, \
-  /* .rmdir = */ dummy_rmdir, \
-  /* .socket_bind = */ dummy_socket_bind, \
-  /* .readlink = */ dummy_readlink, \
-  /* .slot_get = */ dummy_slot_get, \
-  /* .slot_create_file = */ dummy_slot_create_file, \
-  /* .slot_mkdir = */ dummy_slot_mkdir, \
-  /* .slot_symlink = */ dummy_slot_symlink, \
-  /* .slot_unlink = */ dummy_slot_unlink, \
-  /* .slot_rmdir = */ dummy_slot_rmdir, \
-  /* .slot_socket_bind = */ dummy_slot_socket_bind, \
-  /* .make_conn = */ dummy_make_conn, \
-  /* .make_conn2 = */ dummy_make_conn2, \
-  /* .vtable_name = */ "unknown", \
-  1 \
-}
-
 
 #endif

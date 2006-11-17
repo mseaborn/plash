@@ -39,7 +39,6 @@
 #include "cap-protocol.h"
 #include "cap-utils.h"
 #include "fs-operations.h"
-#include "filesysobj-fab.h"
 #include "filesysobj-union.h"
 #include "marshal.h"
 #include "marshal-pack.h"
@@ -1401,72 +1400,6 @@ int conn_maker_make_conn(struct filesys_obj *obj1, region_t r,
   *import = cap_make_connection(r, socks[1], export, import_count,
 				"to-client");
   return socks[0];
-}
-
-
-DECLARE_VTABLE(fab_dir_maker_vtable);
-
-cap_t fab_dir_maker_make()
-{
-  return filesys_obj_make(sizeof(struct filesys_obj), &fab_dir_maker_vtable);
-}
-
-extern int next_inode;
-
-void fab_dir_maker_call(struct filesys_obj *obj1, region_t r,
-			struct cap_args args, struct cap_args *result)
-{
-  seqf_t data = flatten_reuse(r, args.data);
-  bufref_t entries;
-  int ok = 1;
-  m_str(&ok, &data, "Mkfb");
-  m_int(&ok, &data, &entries);
-  if(ok) {
-    struct arg_m_buf argbuf = { data, args.caps, args.fds };
-    struct obj_list *list = 0;
-    int i;
-    int size;
-    const bufref_t *a;
-    argm_array(&argbuf, entries, &size, &a);
-    /* Check arguments first. */
-    for(i = 0; i < size; i++) {
-      bufref_t name_ref, obj_ref;
-      seqf_t name;
-      cap_t obj;
-      if(argm_pair(&argbuf, a[i], &name_ref, &obj_ref)) goto error;
-      if(argm_str(&argbuf, name_ref, &name)) goto error;
-      if(argm_cap(&argbuf, obj_ref, &obj)) goto error;
-    }
-    for(i = 0; i < size; i++) {
-      struct obj_list *node = amalloc(sizeof(struct obj_list));
-      bufref_t name_ref, obj_ref;
-      seqf_t name;
-      cap_t obj;
-      argm_pair(&argbuf, a[i], &name_ref, &obj_ref);
-      argm_str(&argbuf, name_ref, &name);
-      argm_cap(&argbuf, obj_ref, &obj);
-      node->name = strdup_seqf(name);
-      node->obj = inc_ref(obj);
-      node->next = list;
-      list = node;
-    }
-    {
-      struct fab_dir *dir =
-	filesys_obj_make(sizeof(struct fab_dir), &fab_dir_vtable);
-      dir->entries = list;
-      dir->inode = next_inode++;
-      result->data = mk_int(r, METHOD_OKAY);
-      result->caps = mk_caps1(r, (struct filesys_obj *) dir);
-      result->fds = fds_empty;
-    }
-    return;
-  }
- error:
-  caps_free(args.caps);
-  close_fds(args.fds);
-  result->data = mk_string(r, "RMsg");
-  result->caps = caps_empty;
-  result->fds = fds_empty;
 }
 
 

@@ -453,13 +453,6 @@ put('gensrc/out-vtable-fs-operations.h',
 	  ['make_conn', 'conn_maker_make_conn'],
 	 ]
      },
-     { Name => 'fab_dir_maker_vtable',
-       Contents =>
-         [['free', 'generic_free'],
-	  ['mark', 'NULL'],
-	  ['cap_call', 'fab_dir_maker_call'],
-	 ]
-     },
      { Name => 'union_dir_maker_vtable',
        Contents =>
          [['free', 'generic_free'],

@@ -654,7 +654,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
       {
 	struct cap_args result;
 	cap_call(obj, r,
-		 cap_args_make(mk_string(r, "Exep"), caps_empty, fds_empty),
+		 cap_args_make(mk_int(r, METHOD_EO_IS_EXECUTABLE), caps_empty, fds_empty),
 		 &result);
 	if(expect_ok(result) >= 0) {
 	  *reply = mk_int(r, METHOD_R_FSOP_EXEC_OBJECT);

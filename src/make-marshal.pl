@@ -61,6 +61,8 @@ my $methods =
    ['Fcon', 'fsop_connect'],
    ['Fbnd', 'fsop_bind'],
    ['Exec', 'fsop_exec'],
+     ['RExe', 'r_fsop_exec'],
+     ['RExo', 'r_fsop_exec_object'],
 
    # File, directory and symlink objects:
    ['Otyp', 'fsobj_type',

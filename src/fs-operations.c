@@ -657,7 +657,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
 		 cap_args_make(mk_string(r, "Exep"), caps_empty, fds_empty),
 		 &result);
 	if(expect_ok(result) >= 0) {
-	  *reply = mk_string(r, "RExo");
+	  *reply = mk_int(r, METHOD_R_FSOP_EXEC_OBJECT);
 	  *r_caps = mk_caps1(r, obj);
 	  *log_reply = mk_string(r, "ok: executable object");
 	  return 0;
@@ -696,7 +696,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
 		     mk_int(r, strlen(argv2[i])),
 		     mk_string(r, argv2[i]));
 	}
-	*reply = cat5(r, mk_string(r, "RExe"),
+	*reply = cat5(r, mk_int(r, METHOD_R_FSOP_EXEC),
 		      mk_int(r, cmd_filename2.size),
 		      mk_leaf(r, cmd_filename2),
 		      mk_int(r, argc + extra_args),
@@ -731,7 +731,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
       fd = process_open_d(proc->root, proc->cwd, pathname, flags, mode, &err,
 			  &dummy_fd, &d_obj);
       if(fd >= 0) {
-	*reply = mk_string(r, "ROpn");
+	*reply = mk_int(r, METHOD_R_FSOP_OPEN);
 	*reply_fds = mk_fds1(r, fd);
 	*log_reply = mk_string(r, "ok");
 	return 0;
@@ -750,7 +750,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
 	  goto dummy_fail;
 	}
 	
-	*reply = mk_string(r, "RDfd");
+	*reply = mk_int(r, METHOD_R_FSOP_OPEN_DIR);
 	*log_reply = mk_string(r, "got dir, use dummy FD");
 	*reply_fds = mk_fds1(r, fd);
 	*r_caps = mk_caps1(r, d_obj);
@@ -792,7 +792,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
 	return err;
       }
       filesys_obj_free(obj);
-      *reply = cat2(r, mk_string(r, "RSta"), pack_stat_info(r, &stat));
+      *reply = cat2(r, mk_int(r, METHOD_R_FSOP_STAT), pack_stat_info(r, &stat));
       *log_reply = mk_string(r, "ok");
       return 0;
     }
@@ -814,7 +814,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
       }
       else {
 	*log_reply = mk_string(r, "ok");
-	*reply = cat2(r, mk_string(r, "RRdl"),
+	*reply = cat2(r, mk_int(r, METHOD_R_FSOP_DIRLIST),
 		      mk_leaf(r, link_dest));
 	return 0;
       }
@@ -829,7 +829,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
       log->read_only = 1;
       if(proc->cwd) {
 	*log_reply = mk_string(r, "ok");
-	*reply = cat2(r, mk_string(r, "RCwd"),
+	*reply = cat2(r, mk_int(r, METHOD_R_FSOP_GETCWD),
 		      string_of_cwd(r, proc->cwd));
 	return 0;
       }
@@ -859,7 +859,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
 			  mk_int(r, ent->d_type),
 			  mk_int(r, len),
 			  mk_leaf2(r, str, len)); */
-	  *reply = cat2(r, mk_string(r, "RDls"), result);
+	  *reply = cat2(r, mk_int(r, METHOD_R_FSOP_DIRLIST), result);
 	  *log_reply = mk_string(r, "ok");
 	  dir_stack_free(ds);
 	  return 0;

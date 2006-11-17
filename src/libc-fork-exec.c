@@ -352,7 +352,7 @@ int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
     seqf_t cmd_filename2;
     int argc;
     int ok = 1;
-    m_str(&ok, &msg, "RExe");
+    m_int_const(&ok, &msg, METHOD_R_FSOP_EXEC);
     m_lenblock(&ok, &msg, &cmd_filename2);
     m_int(&ok, &msg, &argc);
     if(ok && result.fds.count == 0 && result.caps.size == 0) {
@@ -373,7 +373,7 @@ int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
   {
     seqf_t msg = flatten_reuse(r, result.data);
     int ok = 1;
-    m_str(&ok, &msg, "RExo");
+    m_int_const(&ok, &msg, METHOD_R_FSOP_EXEC_OBJECT);
     m_end(&ok, &msg);
     if(ok && result.fds.count == 0 && result.caps.size == 1) {
       cap_t exec_obj = result.caps.caps[0];

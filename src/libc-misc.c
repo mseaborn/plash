@@ -162,7 +162,7 @@ int new_open(const char *filename, int flags, ...)
   {
     seqf_t msg = flatten_reuse(r, result.data);
     int ok = 1;
-    m_str(&ok, &msg, "ROpn");
+    m_int_const(&ok, &msg, METHOD_R_FSOP_OPEN);
     m_end(&ok, &msg);
     if(ok && result.fds.count == 1 && result.caps.size == 0) {
       int fd = result.fds.fds[0];
@@ -177,7 +177,7 @@ int new_open(const char *filename, int flags, ...)
        passes us a dummy FD for /dev/null, which we return. */
     seqf_t msg = flatten_reuse(r, result.data);
     int ok = 1;
-    m_str(&ok, &msg, "RDfd");
+    m_int_const(&ok, &msg, METHOD_R_FSOP_OPEN_DIR);
     m_end(&ok, &msg);
     if(ok && result.fds.count == 1 && result.caps.size == 1) {
       int fd = result.fds.fds[0];
@@ -390,7 +390,7 @@ char *new_getcwd(char *buf, size_t size)
   {
     seqf_t msg = reply;
     int ok = 1;
-    m_str(&ok, &msg, "RCwd");
+    m_int_const(&ok, &msg, METHOD_R_FSOP_GETCWD);
     if(ok) {
       if(!buf) {
 	if(size == 0) {
@@ -520,7 +520,7 @@ DIR *new_opendir(const char *pathname)
   {
     seqf_t msg = reply;
     int ok = 1;
-    m_str(&ok, &msg, "RDls");
+    m_int_const(&ok, &msg, METHOD_R_FSOP_DIRLIST);
     if(ok) {
       void *buf = amalloc(sizeof(struct dirstream) + msg.size);
       struct dirstream *dir = buf;
@@ -1079,7 +1079,7 @@ int my_stat(int nofollow, int type, const char *pathname, void *buf)
   {
     seqf_t msg = reply;
     int ok = 1;
-    m_str(&ok, &msg, "RSta");
+    m_int_const(&ok, &msg, METHOD_R_FSOP_STAT);
     m_stat_info(&ok, &msg, type, buf);
     m_end(&ok, &msg);
     if(ok) {
@@ -1291,7 +1291,7 @@ int new_readlink(const char *pathname, char *buf, size_t buf_size)
   {
     seqf_t msg = reply;
     int ok = 1;
-    m_str(&ok, &msg, "RRdl");
+    m_int_const(&ok, &msg, METHOD_R_FSOP_READLINK);
     if(ok) {
       int count = msg.size;
       if(count > buf_size) count = buf_size;

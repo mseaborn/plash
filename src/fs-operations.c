@@ -505,13 +505,18 @@ static seqt_t pack_stat_info(region_t r, struct stat *st)
 	      mk_int(r, st->st_ctime)));
 }
 
+struct log_info {
+  const char *op_name; /* Name of operation */
+  int read_only; /* Whether the operation attempted was read-only */
+};
+
 int handle_fs_op_message(region_t r, struct process *proc,
 			 struct fs_op_object *obj,
 			 seqf_t msg_orig, fds_t fds_orig, cap_seq_t cap_args,
 			 seqt_t *reply, fds_t *reply_fds,
 			 cap_seq_t *r_caps,
 			 seqt_t *log_msg, seqt_t *log_reply,
-			 int *log_read_only)
+			 struct log_info *log)
 {
   seqf_t msg = msg_orig;
   int ok = 1;
@@ -523,7 +528,8 @@ int handle_fs_op_message(region_t r, struct process *proc,
     m_end(&ok, &msg);
     if(ok) {
       cap_t new_server;
-      *log_msg = mk_string(r, "copy fs ops object");
+      log->op_name = "fsop_copy";
+      
       obj->shared->refcount++;
       inc_ref(proc->root);
       if(proc->cwd) proc->cwd->hdr.refcount++;
@@ -541,7 +547,8 @@ int handle_fs_op_message(region_t r, struct process *proc,
     /* Return a reference to the root directory */
     m_end(&ok, &msg);
     if(ok) {
-      *log_msg = mk_string(r, "get root dir");
+      log->op_name = "fsop_get_root_dir";
+      
       *r_caps = mk_caps1(r, inc_ref(proc->root));
       *reply = mk_int(r, METHOD_R_CAP);
       *log_reply = mk_printf(r, "ok");
@@ -556,8 +563,9 @@ int handle_fs_op_message(region_t r, struct process *proc,
       seqf_t pathname = msg;
       struct dir_stack *ds;
       int err;
-      
-      *log_msg = cat2(r, mk_string(r, "get dir: "), mk_leaf(r, pathname));
+
+      log->op_name = "fsop_get_dir";
+      *log_msg = mk_leaf(r, pathname);
       ds = resolve_dir(r, proc->root, proc->cwd, pathname, SYMLINK_LIMIT, &err);
       if(ds) {
 	*r_caps = mk_caps1(r, inc_ref(ds->dir));
@@ -581,7 +589,8 @@ int handle_fs_op_message(region_t r, struct process *proc,
       int err;
       struct filesys_obj *obj;
 
-      *log_msg = cat2(r, mk_string(r, "get obj: "), mk_leaf(r, pathname));
+      log->op_name = "fsop_get_obj";
+      *log_msg = mk_leaf(r, pathname);
       obj = resolve_obj_simple(proc->root, proc->cwd, pathname,
 			       SYMLINK_LIMIT, 0, &err);
       if(obj) {
@@ -614,7 +623,8 @@ int handle_fs_op_message(region_t r, struct process *proc,
       int fd;
       const char *executable_filename; /* of interpreter for #! scripts */
 
-      *log_msg = cat2(r, mk_string(r, "exec: "), mk_leaf(r, cmd_filename));
+      log->op_name = "exec";
+      *log_msg = mk_leaf(r, cmd_filename);
 
       /* Unpack arguments. */
       {
@@ -692,7 +702,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
 		      mk_int(r, argc + extra_args),
 		      got);
 	*log_reply = mk_string(r, "ok");
-	*log_read_only = 1;
+	log->read_only = 1;
 	return 0;
       }
     exec_fail:
@@ -710,11 +720,12 @@ int handle_fs_op_message(region_t r, struct process *proc,
       int fd, err = 0, dummy_fd;
       cap_t d_obj;
 
+      log->op_name = "open";
       *log_msg =
-	cat2(r, mk_printf(r, "open: flags=0o%o, mode=0o%o, ", flags, mode),
+	cat2(r, mk_printf(r, "flags=0o%o, mode=0o%o, ", flags, mode),
 	     mk_leaf(r, pathname));
       if((flags & O_ACCMODE) == O_RDONLY) {
-	*log_read_only = 1;
+	log->read_only = 1;
       }
             
       fd = process_open_d(proc->root, proc->cwd, pathname, flags, mode, &err,
@@ -767,10 +778,9 @@ int handle_fs_op_message(region_t r, struct process *proc,
       int err;
       struct stat stat;
 
-      *log_msg = cat3(r, mk_string(r, nofollow ? "lstat" : "stat"),
-		      mk_string(r, ": "),
-		      mk_leaf(r, pathname));
-      *log_read_only = 1;
+      log->op_name = nofollow ? "lstat" : "stat";
+      *log_msg = mk_leaf(r, pathname);
+      log->read_only = 1;
 
       obj = resolve_obj_simple(proc->root, proc->cwd, pathname,
 			       SYMLINK_LIMIT, nofollow, &err);
@@ -794,8 +804,10 @@ int handle_fs_op_message(region_t r, struct process *proc,
       seqf_t pathname = msg;
       seqf_t link_dest;
       int err;
-      *log_msg = cat2(r, mk_string(r, "readlink: "), mk_leaf(r, pathname));
-      *log_read_only = 1;
+      
+      log->op_name = "readlink";
+      *log_msg = mk_leaf(r, pathname);
+      log->read_only = 1;
       if(process_readlink(r, proc->root, proc->cwd, pathname,
 			  &link_dest, &err) < 0) {
 	return err;
@@ -813,8 +825,8 @@ int handle_fs_op_message(region_t r, struct process *proc,
   {
     m_end(&ok, &msg);
     if(ok) {
-      *log_msg = mk_string(r, "getcwd");
-      *log_read_only = 1;
+      log->op_name = "getcwd";
+      log->read_only = 1;
       if(proc->cwd) {
 	*log_reply = mk_string(r, "ok");
 	*reply = cat2(r, mk_string(r, "RCwd"),
@@ -833,8 +845,9 @@ int handle_fs_op_message(region_t r, struct process *proc,
       seqf_t pathname = msg;
       int err = 0;
       struct dir_stack *ds;
-      *log_msg = cat2(r, mk_string(r, "dirlist: "), mk_leaf(r, pathname));
-      *log_read_only = 1;
+      log->op_name = "dirlist";
+      *log_msg = mk_leaf(r, pathname);
+      log->read_only = 1;
       ds = resolve_dir(r, proc->root, proc->cwd, pathname, SYMLINK_LIMIT, &err);
       if(ds) {
 	seqt_t result;
@@ -882,8 +895,9 @@ int handle_fs_op_message(region_t r, struct process *proc,
       struct filesys_obj *obj;
       int err;
 
-      *log_msg = cat2(r, mk_string(r, "access: "), mk_leaf(r, pathname));
-      *log_read_only = 1;
+      log->op_name = "access";
+      *log_msg = mk_leaf(r, pathname);
+      log->read_only = 1;
       obj = resolve_obj_simple(proc->root, proc->cwd, pathname, SYMLINK_LIMIT,
 			       0 /*nofollow*/, &err);
       if(obj) {
@@ -906,7 +920,9 @@ int handle_fs_op_message(region_t r, struct process *proc,
     if(ok) {
       seqf_t pathname = msg;
       int err = 0;
-      *log_msg = cat2(r, mk_string(r, "mkdir: "), mk_leaf(r, pathname));
+      
+      log->op_name = "mkdir";
+      *log_msg = mk_leaf(r, pathname);
       if(process_mkdir(proc, pathname, mode, &err) < 0) {
 	return err;
       }
@@ -926,7 +942,9 @@ int handle_fs_op_message(region_t r, struct process *proc,
     if(ok) {
       seqf_t oldpath = msg;
       int err;
-      *log_msg = cat4(r, mk_string(r, "symlink: "), mk_leaf(r, newpath),
+      
+      log->op_name = "symlink";
+      *log_msg = cat3(r, mk_leaf(r, newpath),
 		      mk_string(r, " to link to "), mk_leaf(r, oldpath));
       if(process_symlink(proc, newpath, oldpath, &err) < 0) {
 	return err;
@@ -946,7 +964,9 @@ int handle_fs_op_message(region_t r, struct process *proc,
     if(ok) {
       seqf_t oldpath = msg;
       int err;
-      *log_msg = cat4(r, mk_string(r, "rename: "), mk_leaf(r, oldpath),
+      
+      log->op_name = "rename";
+      *log_msg = cat3(r, mk_leaf(r, oldpath),
 		      mk_string(r, " to "), mk_leaf(r, newpath));
       if(process_rename(proc, oldpath, newpath, &err) < 0) {
 	return err;
@@ -967,7 +987,9 @@ int handle_fs_op_message(region_t r, struct process *proc,
     if(ok) {
       seqf_t oldpath = msg;
       int err;
-      *log_msg = cat4(r, mk_string(r, "hard link: create "), mk_leaf(r, newpath),
+
+      log->op_name = "link";
+      *log_msg = cat4(r, mk_string(r, "create "), mk_leaf(r, newpath),
 		      mk_string(r, " to link to "), mk_leaf(r, oldpath));
       if(process_link(proc, oldpath, newpath, &err) < 0) {
 	return err;
@@ -994,7 +1016,9 @@ int handle_fs_op_message(region_t r, struct process *proc,
     if(ok) {
       seqf_t pathname = msg;
       int err;
-      *log_msg = cat2(r, mk_string(r, "chmod: "), mk_leaf(r, pathname));
+
+      log->op_name = nofollow ? "lchmod" : "chmod";
+      *log_msg = mk_leaf(r, pathname);
       if(process_chmod(proc, pathname, mode, nofollow, &err) < 0) {
 	return err;
       }
@@ -1017,8 +1041,9 @@ int handle_fs_op_message(region_t r, struct process *proc,
     if(ok) {
       seqf_t pathname = msg;
       int err;
-      *log_msg = cat2(r, mk_string(r, nofollow ? "lchown: " : "chown: "),
-		      mk_leaf(r, pathname));
+
+      log->op_name = nofollow ? "lchown" : "chown";
+      *log_msg = mk_leaf(r, pathname);
       if(process_chown(proc, pathname, owner_uid, group_gid,
 		       nofollow, &err) < 0) {
 	return err;
@@ -1050,7 +1075,9 @@ int handle_fs_op_message(region_t r, struct process *proc,
       atime.tv_usec = atime_usec;
       mtime.tv_sec = mtime_sec;
       mtime.tv_usec = mtime_usec;
-      *log_msg = cat2(r, mk_string(r, "utime: "), mk_leaf(r, pathname));
+
+      log->op_name = nofollow ? "lutime" : "utime";
+      *log_msg = mk_leaf(r, pathname);
       if(process_utimes(proc, pathname, nofollow, &atime, &mtime, &err) < 0) {
 	return err;
       }
@@ -1068,7 +1095,9 @@ int handle_fs_op_message(region_t r, struct process *proc,
     if(ok) {
       seqf_t pathname = msg;
       int err;
-      *log_msg = cat2(r, mk_string(r, "unlink: "), mk_leaf(r, pathname));
+
+      log->op_name = "unlink";
+      *log_msg = mk_leaf(r, pathname);
       if(process_unlink(proc, pathname, &err) < 0) {
 	return err;
       }
@@ -1086,7 +1115,9 @@ int handle_fs_op_message(region_t r, struct process *proc,
     if(ok) {
       seqf_t pathname = msg;
       int err;
-      *log_msg = cat2(r, mk_string(r, "rmdir: "), mk_leaf(r, pathname));
+
+      log->op_name = "rmdir";
+      *log_msg = mk_leaf(r, pathname);
       if(process_rmdir(proc, pathname, &err) < 0) {
 	return err;
       }
@@ -1108,7 +1139,9 @@ int handle_fs_op_message(region_t r, struct process *proc,
       seqf_t pathname = msg;
       int err;
       struct filesys_obj *obj;
-      *log_msg = cat2(r, mk_string(r, "connect: "), mk_leaf(r, pathname));
+
+      log->op_name = "connect";
+      *log_msg = mk_leaf(r, pathname);
       obj = resolve_file(r, proc->root, proc->cwd, pathname,
 			 SYMLINK_LIMIT, 0 /*nofollow*/, &err);
       if(obj) {
@@ -1134,7 +1167,9 @@ int handle_fs_op_message(region_t r, struct process *proc,
       seqf_t pathname = msg;
       int err;
       struct resolved_slot *slot;
-      *log_msg = cat2(r, mk_string(r, "bind: "), mk_leaf(r, pathname));
+
+      log->op_name = "bind";
+      *log_msg = mk_leaf(r, pathname);
       slot = resolve_empty_slot(proc->root, proc->cwd, pathname,
 				SYMLINK_LIMIT, &err);
       if(slot) {
@@ -1158,8 +1193,10 @@ int handle_fs_op_message(region_t r, struct process *proc,
       seqf_t pathname = msg;
       int err = 0;
       int e;
-      *log_msg = cat2(r, mk_string(r, "chdir: "), mk_leaf(r, pathname));
-      *log_read_only = 1;
+
+      log->op_name = "chdir";
+      *log_msg = mk_leaf(r, pathname);
+      log->read_only = 1;
       e = process_chdir(proc, pathname, &err);
       if(e == 0) {
 	*log_reply = mk_string(r, "ok");
@@ -1180,8 +1217,9 @@ int handle_fs_op_message(region_t r, struct process *proc,
     m_end(&ok, &msg);
     if(ok && cap_args.size == 1) {
       struct dir_stack *n = dir_stack_upcast(cap_args.caps[0]);
-      *log_msg = mk_string(r, "fchdir");
-      *log_read_only = 1;
+
+      log->op_name = "fchdir";
+      log->read_only = 1;
       if(n) {
 	if(proc->cwd) dir_stack_free(proc->cwd);
 	n->hdr.refcount++;
@@ -1203,8 +1241,9 @@ int handle_fs_op_message(region_t r, struct process *proc,
     m_end(&ok, &msg);
     if(ok && cap_args.size == 1) {
       struct dir_stack *n = dir_stack_upcast(cap_args.caps[0]);
-      *log_msg = mk_string(r, "dir_fstat");
-      *log_read_only = 1;
+
+      log->op_name = "dir_fstat";
+      log->read_only = 1;
       if(n) {
 	int err;
 	struct stat st;
@@ -1230,8 +1269,9 @@ int handle_fs_op_message(region_t r, struct process *proc,
   case METHOD_FSOP_LOG:
   {
     if(ok) {
-      *log_msg = cat2(r, mk_string(r, "log: "), mk_leaf(r, msg));
-      *log_read_only = 1;
+      log->op_name = "log";
+      *log_msg = mk_leaf(r, msg);
+      log->read_only = 1;
       return 0;
     }
   }
@@ -1295,10 +1335,13 @@ void fs_op_call(struct filesys_obj *obj1, region_t r,
 		struct cap_args args, struct cap_args *result)
 {
   struct fs_op_object *obj = (void *) obj1;
-  seqt_t log_msg = mk_string(r, "?");
+  seqt_t log_msg = mk_string(r, "");
   seqt_t log_reply = mk_string(r, "?");
-  int log_read_only = 0;
+  struct log_info log_info;
   int err;
+
+  log_info.read_only = 0;
+  log_info.op_name = "???";
   
   if(obj->shared->log && obj->shared->log_messages) {
     fprintf(obj->shared->log, "\nmessage from process %i\n", obj->id);
@@ -1311,7 +1354,7 @@ void fs_op_call(struct filesys_obj *obj1, region_t r,
   err = handle_fs_op_message(r, &obj->p, obj, flatten_reuse(r, args.data),
 		       args.fds, args.caps,
 		       &result->data, &result->fds, &result->caps,
-		       &log_msg, &log_reply, &log_read_only);
+		       &log_msg, &log_reply, &log_info);
   if(err) {
     result->data = cat2(r, mk_int(r, METHOD_FAIL),
 			mk_int(r, err));
@@ -1326,8 +1369,10 @@ void fs_op_call(struct filesys_obj *obj1, region_t r,
     fprint_data(obj->shared->log, flatten(r, result->data));
   }
   if(obj->shared->log && obj->shared->log_summary) {
-    fprintf(obj->shared->log, "#%i: [%c] %s: %s\n", obj->id,
-	    log_read_only ? 'r' : 'w',
+    fprintf(obj->shared->log, "#%i: [%c] %s%s%s: %s\n", obj->id,
+	    log_info.read_only ? 'r' : 'w',
+	    log_info.op_name,
+	    log_msg.size > 0 ? ": " : "",
 	    flatten_str(r, log_msg),
 	    flatten_str(r, log_reply));
   }

@@ -2,3 +2,17 @@
 These programs make dubious requests of an X server, doing things such
 as snooping for keypresses.  The purpose of the programs is to test
 the effectiveness of X security extensions.
+
+
+Other tests:
+
+xwd -root | xwud
+- take screenshot and display it in window
+
+echo 'hello' | xclip
+
+xeyes
+- detects mouse movements outside the client's own windows
+
+xdpyinfo
+- lists X extensions

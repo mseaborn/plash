@@ -1190,8 +1190,9 @@ void fs_op_call(struct filesys_obj *obj1, region_t r,
   close_fds(args.fds);
   
   if(obj->log) {
-    seqt_t msg = mk_printf(r, "[%c] %s%s%s: %s",
+    seqt_t msg = mk_printf(r, "[%c%c] %s%s%s: %s",
 	    log_info.read_only ? 'r' : 'w',
+	    err ? '!' : '.',
 	    log_info.op_name,
 	    log_msg.size > 0 ? ": " : "",
 	    flatten_str(r, log_msg),

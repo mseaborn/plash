@@ -19,7 +19,8 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 # USA.
 
-use IO::File;
+use lib qw(./src);
+use FileUtil qw(write_file_if_changed);
 
 # Fields of a vtable.  All must be filled in.
 my $methods =
@@ -645,15 +646,8 @@ sub put {
     put_vtable(\@out, $vtable);
   }
 
-  # Don't write out the file if there has been no change.
-  # Saves having to recompile files that depend on this output.
   my $data = join('', map { "$_\n" } @out);
-  if($data ne read_file($file)) {
-    write_file($file, $data);
-  }
-  else {
-    print "  no change\n";
-  }
+  write_file_if_changed($file, $data);
 }
 
 sub put_vtable {
@@ -700,21 +694,4 @@ sub put_vtable {
   push(@$out, "};");
 
   $bytes += scalar(@$methods) * 4;
-}
-
-sub read_file {
-  my ($file) = @_;
-  my $f = IO::File->new($file, 'r');
-  if(!defined $f) { die "Can't open `$file' for reading" }
-  my $data = join('', <$f>);
-  $f->close();
-  $data;
-}
-
-sub write_file {
-  my ($file, $data) = @_;
-  my $f = IO::File->new($file, 'w');
-  if(!defined $f) { die "Can't open `$file' for writing" }
-  print $f $data;
-  $f->close();
 }

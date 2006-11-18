@@ -58,7 +58,6 @@ int main(int argc, char *argv[])
 
     if(argc == 2) {
       print_option(r, opts, "log_summary");
-      print_option(r, opts, "log_messages");
       print_option(r, opts, "log_into_xterm");
       print_option(r, opts, "print_fs_tree");
       print_option(r, opts, "enable_x11");

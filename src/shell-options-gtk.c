@@ -28,7 +28,6 @@ struct window_info {
   cap_t opts;
   GtkWidget *window;
   GtkWidget *o_log_summary;
-  GtkWidget *o_log_messages;
   GtkWidget *o_log_into_xterm;
   GtkWidget *o_print_fs_tree;
   GtkWidget *o_enable_x11;
@@ -42,8 +41,6 @@ void window_ok(GtkWidget *widget, gpointer data)
 
   set_option(r, opts, "log_summary",
 	     gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(w->o_log_summary)));
-  set_option(r, opts, "log_messages",
-	     gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(w->o_log_messages)));
   set_option(r, opts, "log_into_xterm",
 	     gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(w->o_log_into_xterm)));
   set_option(r, opts, "print_fs_tree",
@@ -54,7 +51,6 @@ void window_ok(GtkWidget *widget, gpointer data)
 
   /*
   w->state->log_summary = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(w->o_log_summary));
-  w->state->log_messages = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(w->o_log_messages));
   w->state->log_into_xterm = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(w->o_log_into_xterm));
   w->state->print_fs_tree = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(w->o_print_fs_tree));
   */
@@ -93,12 +89,6 @@ void option_window(cap_t opts)
   gtk_widget_show(widget);
   w.o_log_summary = widget;
 
-  widget = gtk_check_button_new_with_label(_("Log messages in/out"));
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget),
-			       get_option(r, opts, "log_messages"));
-  gtk_widget_show(widget);
-  w.o_log_messages = widget;
-
   widget = gtk_check_button_new_with_label(_("Send log data to new xterm"));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget),
 			       get_option(r, opts, "log_into_xterm"));
@@ -123,7 +113,6 @@ void option_window(cap_t opts)
   
   vbox = gtk_vbox_new(0, 5);
   gtk_box_pack_start(GTK_BOX(vbox), w.o_log_summary, FALSE, FALSE, 0);
-  gtk_box_pack_start(GTK_BOX(vbox), w.o_log_messages, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(vbox), w.o_log_into_xterm, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(vbox), w.o_print_fs_tree, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(vbox), w.o_enable_x11, FALSE, FALSE, 0);

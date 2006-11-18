@@ -120,7 +120,6 @@ struct shell_state {
   struct termios tmodes; /* Saved terminal state */
 
   int log_summary;
-  int log_messages;
   int log_into_xterm;
   int print_fs_tree;
   int enable_x11;
@@ -2475,10 +2474,6 @@ void options_obj_call(struct filesys_obj *obj, region_t r,
 	 !argm_int(&argbuf, arg_ref, &i)) {
 	state->log_summary = i;
       }
-      else if(seqf_equal(name, seqf_string("log_messages")) &&
-	      !argm_int(&argbuf, arg_ref, &i)) {
-	state->log_messages = i;
-      }
       else if(seqf_equal(name, seqf_string("log_into_xterm")) &&
 	      !argm_int(&argbuf, arg_ref, &i)) {
 	state->log_into_xterm = i;
@@ -2510,9 +2505,6 @@ void options_obj_call(struct filesys_obj *obj, region_t r,
       bufref_t x;
       if(seqf_equal(msg, seqf_string("log_summary"))) {
 	x = argmk_int(argbuf, state->log_summary);
-      }
-      else if(seqf_equal(msg, seqf_string("log_messages"))) {
-	x = argmk_int(argbuf, state->log_messages);
       }
       else if(seqf_equal(msg, seqf_string("log_into_xterm"))) {
 	x = argmk_int(argbuf, state->log_into_xterm);
@@ -2712,7 +2704,6 @@ int main(int argc, char *argv[])
   state.prompt = 0; /* "plash$ " */
 
   state.log_summary = 0;
-  state.log_messages = 0;
   state.log_into_xterm = 0;
   state.print_fs_tree = 0;
   state.enable_x11 = 0;

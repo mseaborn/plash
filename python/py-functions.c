@@ -56,24 +56,10 @@ static PyObject *plpy_initial_dir(PyObject *self, PyObject *args)
 static PyObject *plpy_make_fs_op(PyObject *self, PyObject *args)
 {
   plpy_obj *root_dir;
-  struct server_shared *shared;
   if(!PyArg_ParseTuple(args, "O!", &plpy_obj_type, &root_dir)) { return NULL; }
-  
-  shared = amalloc(sizeof(struct server_shared));
-  shared->refcount = 1;
-  shared->next_id = 1;
-  {
-    int fd = dup(STDERR_FILENO);
-    if(fcntl(fd, F_SETFD, FD_CLOEXEC) < 0) {
-      return PyErr_SetFromErrno(PyExc_Exception);
-    }
-    shared->log = fdopen(fd, "w");
-    setvbuf(shared->log, 0, _IONBF, 0);
-  }
-  shared->log_summary = 0;
-  shared->log_messages = 0;
-  shared->call_count = 0;
-  return plpy_obj_to_py(make_fs_op_server(shared, inc_ref(root_dir->obj),
+
+  /* NB. Logging is not enabled here.  Should be fixed. */
+  return plpy_obj_to_py(make_fs_op_server(NULL /* log */, inc_ref(root_dir->obj),
 					  NULL /* cwd */));
 }
 

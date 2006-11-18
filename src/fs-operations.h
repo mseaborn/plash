@@ -34,27 +34,16 @@ struct process {
   struct dir_stack *cwd;
 };
 
-struct server_shared {
-  int refcount;
-  int next_id;
-
-  FILE *log; /* 0 if not doing logging */
-  int log_summary, log_messages;
-  int call_count; /* Number of calls received */
-};
-void server_shared_free(struct server_shared *s);
-
 struct fs_op_object {
   struct filesys_obj hdr;
   struct process p;
-  struct server_shared *shared;
-  int id;
+  struct filesys_obj *log; /* May be NULL */
 };
 
-cap_t make_fs_op_server(struct server_shared *shared,
+cap_t make_fs_op_server(struct filesys_obj *log,
 			struct filesys_obj *root, struct dir_stack *cwd);
 
-cap_t fs_op_maker_make(struct server_shared *shared);
+cap_t fs_op_maker_make(struct filesys_obj *log);
 
 cap_t conn_maker_make(void);
 cap_t union_dir_maker_make(void);

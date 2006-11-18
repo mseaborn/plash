@@ -56,6 +56,7 @@
 #include "serialise.h"
 #include "marshal.h"
 #include "exec.h"
+#include "log.h"
 
 
 extern char **environ;
@@ -1199,7 +1200,7 @@ int resolve_executable(region_t r, seqf_t filename, seqf_t *result)
 }
 
 struct job_cons_args {
-  struct server_shared *shared;
+  cap_t log;
   cap_t fs_op_maker;
   // struct server_desc *conns;
   /* Used to make connections between the forked client and the server.
@@ -1664,10 +1665,10 @@ int command_invocation_sec
     int cap_count = 4 + (return_cont ? 1:0);
     cap_t *imports; /* not used */
     cap_t *caps = region_alloc(r, cap_count * sizeof(cap_t));
-    job->shared->refcount++;
 
     i = 0;
-    caps[i++] = make_fs_op_server(job->shared, root, cwd);
+    if(job->log) inc_ref(job->log);
+    caps[i++] = make_fs_op_server(job->log, root, cwd);
     root = 0;
     caps[i++] = inc_ref(job->conn_maker_for_client);
     caps[i++] = inc_ref(job->fs_op_maker);
@@ -1925,17 +1926,11 @@ int pipeline_invocation
   return -1;
 }
 
-struct server_shared *make_server_shared(struct shell_state *state)
+cap_t make_server_shared(struct shell_state *state)
 {
-  struct server_shared *shared = amalloc(sizeof(struct server_shared));
-  shared->refcount = 1;
-  shared->next_id = 1;
-  shared->log = 0;
-  shared->log_summary = state->log_summary;
-  shared->log_messages = state->log_messages;
-  shared->call_count = 0;
+  if(state->log_summary) {
+    FILE *fp;
 
-  if(state->log_messages || state->log_summary) {
     if(state->log_into_xterm) {
       int pipe_fd[2];
       int pid;
@@ -1955,16 +1950,19 @@ struct server_shared *make_server_shared(struct shell_state *state)
       }
       if(pid < 0) perror("fork");
       close(pipe_fd[0]);
-      shared->log = fdopen(pipe_fd[1], "w");
+      fp = fdopen(pipe_fd[1], "w");
     }
     else {
-      shared->log = fdopen(dup(STDERR_FILENO), "w");
+      fp = fdopen(dup(STDERR_FILENO), "w");
     }
-    assert(shared->log);
-    setvbuf(shared->log, 0, _IONBF, 0);
-  }
+    assert(fp);
+    setvbuf(fp, 0, _IONBF, 0);
 
-  return shared;
+    return make_log(fp);
+  }
+  else {
+    return NULL;
+  }
 }
 
 cap_t eval_expr(struct shell_state *state, struct shell_expr *expr)
@@ -2048,10 +2046,10 @@ cap_t eval_expr(struct shell_state *state, struct shell_expr *expr)
       return 0;
     }
 
-    job_cons.shared = make_server_shared(state);
+    job_cons.log = make_server_shared(state);
 	
-    job_cons.shared->refcount++;
-    job_cons.fs_op_maker = fs_op_maker_make(job_cons.shared);
+    if(job_cons.log) inc_ref(job_cons.log);
+    job_cons.fs_op_maker = fs_op_maker_make(job_cons.log);
 
     if(state->fork_server_per_job) {
       d_conn = filesys_obj_make(sizeof(struct d_conn_maker), &d_conn_maker_vtable);
@@ -2069,7 +2067,7 @@ cap_t eval_expr(struct shell_state *state, struct shell_expr *expr)
     rc = command_invocation_sec(sock_r, state, &job_cons, cmd_filename, args,
 				STDIN_FILENO, STDOUT_FILENO,
 				make_reconnectable(make_return_cont(&ret_state)));
-    server_shared_free(job_cons.shared);
+    if(job_cons.log) filesys_obj_free(job_cons.log);
     filesys_obj_free(job_cons.fs_op_maker);
     if(rc >= 0) {
       spawn_job(sock_r, state, d_conn ? d_conn->conns : 0, job_cons.procs,
@@ -2143,10 +2141,10 @@ void shell_command(region_t r, struct shell_state *state, struct command *comman
       struct job_cons_args job_cons;
       struct d_conn_maker *d_conn = 0;
 
-      job_cons.shared = make_server_shared(state);
+      job_cons.log = make_server_shared(state);
 	
-      job_cons.shared->refcount++;
-      job_cons.fs_op_maker = fs_op_maker_make(job_cons.shared);
+      if(job_cons.log) inc_ref(job_cons.log);
+      job_cons.fs_op_maker = fs_op_maker_make(job_cons.log);
 
       if(state->fork_server_per_job) {
 	d_conn = filesys_obj_make(sizeof(struct d_conn_maker), &d_conn_maker_vtable);
@@ -2163,7 +2161,7 @@ void shell_command(region_t r, struct shell_state *state, struct command *comman
 
       rc = pipeline_invocation(sock_r, state, &job_cons, pipeline,
 			       STDIN_FILENO, STDOUT_FILENO);
-      server_shared_free(job_cons.shared);
+      if(job_cons.log) filesys_obj_free(job_cons.log);
       filesys_obj_free(job_cons.fs_op_maker);
       if(rc >= 0) {
 	struct job *job;

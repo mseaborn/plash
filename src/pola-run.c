@@ -49,6 +49,7 @@
 #include "powerbox.h"
 #include "config-read.h"
 #include "exec.h"
+#include "log.h"
 
 
 #define NAME "pola-run"
@@ -669,7 +670,7 @@ int main(int argc, char **argv)
     {
       cap_t child_root;
       struct dir_stack *child_cwd = NULL;
-      struct server_shared *shared;
+      cap_t log;
       int cap_count;
       cap_t *caps;
       const char *cap_names;
@@ -717,21 +718,21 @@ int main(int argc, char **argv)
 	return 1;
       }
 
-      shared = amalloc(sizeof(struct server_shared));
-      shared->refcount = 1;
-      shared->next_id = 1;
-      {
+      if(state.log_summary) {
+	FILE *log_fp;
 	int fd = dup(STDERR_FILENO);
 	if(fcntl(fd, F_SETFD, FD_CLOEXEC) < 0) {
 	  perror("fcntl");
 	  return -1;
 	}
-	shared->log = fdopen(fd, "w");
-	setvbuf(shared->log, 0, _IONBF, 0);
+	log_fp = fdopen(fd, "w");
+	setvbuf(log_fp, 0, _IONBF, 0);
+	
+	log = make_log(log_fp);
       }
-      shared->log_summary = state.log_summary;
-      shared->log_messages = 0;
-      shared->call_count = 0;
+      else {
+	log = NULL;
+      }
 
       // "fs_op;conn_maker;fs_op_maker;union_dir_maker"
       if(state.powerbox) {
@@ -743,9 +744,9 @@ int main(int argc, char **argv)
 	cap_count = 3;
       }
       caps = region_alloc(r, cap_count * sizeof(cap_t));
-      shared->refcount++;
-      caps[0] = make_fs_op_server(shared, child_root, child_cwd);
-      caps[1] = fs_op_maker_make(shared);
+      if(log) inc_ref(log);
+      caps[0] = make_fs_op_server(log, child_root, child_cwd);
+      caps[1] = fs_op_maker_make(log);
       caps[2] = conn_maker_make();
       if(state.powerbox) {
 #ifdef USE_GTK

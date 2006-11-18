@@ -370,16 +370,20 @@ int handle_fs_op_message(region_t r, struct process *proc,
     m_end(&ok, &msg);
     if(ok) {
       cap_t new_server;
+      cap_t new_log = NULL;
       log->op_name = "fsop_copy";
+
+      if(obj->log) {
+	new_log = obj->log->vtable->log_branch(obj->log, seqf_string(""));
+      }
       
-      obj->shared->refcount++;
       inc_ref(proc->root);
       if(proc->cwd) proc->cwd->hdr.refcount++;
-      new_server = make_fs_op_server(obj->shared, proc->root, proc->cwd);
+      new_server = make_fs_op_server(new_log, proc->root, proc->cwd);
+      
       *r_caps = mk_caps1(r, new_server);
       *reply = mk_int(r, METHOD_OKAY);
-      *log_reply = mk_printf(r, "ok, created #%i",
-			     ((struct fs_op_object *) new_server)->id);
+      *log_reply = mk_string(r, "ok");
       return 0;
     }
     break;
@@ -1128,40 +1132,25 @@ int handle_fs_op_message(region_t r, struct process *proc,
 DECLARE_VTABLE(fs_op_vtable);
 
 /* Takes owning references. */
-cap_t make_fs_op_server(struct server_shared *shared,
+cap_t make_fs_op_server(struct filesys_obj *log,
 			struct filesys_obj *root, struct dir_stack *cwd)
 {
   struct fs_op_object *obj =
     filesys_obj_make(sizeof(struct fs_op_object), &fs_op_vtable);
   obj->p.root = root;
   obj->p.cwd = cwd;
-  obj->shared = shared;
-  obj->id = shared->next_id++;
+  obj->log = log;
   return (cap_t) obj;
-}
-
-void server_shared_free(struct server_shared *s)
-{
-  assert(s->refcount > 0);
-  s->refcount--;
-  if(s->refcount == 0) {
-    if(s->log) fclose(s->log);
-    free(s);
-  }
 }
 
 void fs_op_free(struct filesys_obj *obj1)
 {
   struct fs_op_object *obj = (void *) obj1;
   
-  if(obj->shared->log && obj->shared->log_summary) {
-    fprintf(obj->shared->log, "#%i: end\n", obj->id);
-  }
-  
   filesys_obj_free(obj->p.root);
   if(obj->p.cwd) dir_stack_free(obj->p.cwd);
 
-  server_shared_free(obj->shared);
+  if(obj->log) filesys_obj_free(obj->log);
 }
 
 #ifdef GC_DEBUG
@@ -1185,11 +1174,6 @@ void fs_op_call(struct filesys_obj *obj1, region_t r,
   log_info.read_only = FALSE;
   log_info.op_name = "???";
   
-  if(obj->shared->log && obj->shared->log_messages) {
-    fprintf(obj->shared->log, "\nmessage from process %i\n", obj->id);
-    fprint_data(obj->shared->log, flatten_reuse(r, args.data));
-  }
-
   result->data = seqt_empty;
   result->caps = caps_empty;
   result->fds = fds_empty;
@@ -1205,41 +1189,37 @@ void fs_op_call(struct filesys_obj *obj1, region_t r,
   caps_free(args.caps);
   close_fds(args.fds);
   
-  if(obj->shared->log && obj->shared->log_messages) {
-    fprintf(obj->shared->log, "reply with %i FDs and this data:\n",
-	    result->fds.count);
-    fprint_data(obj->shared->log, flatten(r, result->data));
-  }
-  if(obj->shared->log && obj->shared->log_summary) {
-    fprintf(obj->shared->log, "#%i: [%c] %s%s%s: %s\n", obj->id,
+  if(obj->log) {
+    seqt_t msg = mk_printf(r, "[%c] %s%s%s: %s",
 	    log_info.read_only ? 'r' : 'w',
 	    log_info.op_name,
 	    log_msg.size > 0 ? ": " : "",
 	    flatten_str(r, log_msg),
 	    flatten_str(r, log_reply));
+    obj->log->vtable->log_msg(obj->log, flatten(r, msg));
   }
-  obj->shared->call_count++;
 }
 
 
 DECLARE_VTABLE(fs_op_maker_vtable);
 struct fs_op_maker {
   struct filesys_obj hdr;
-  struct server_shared *shared;
+  
+  struct filesys_obj *log; /* May be NULL */
 };
 
-cap_t fs_op_maker_make(struct server_shared *shared)
+cap_t fs_op_maker_make(struct filesys_obj *log)
 {
   struct fs_op_maker *obj =
     filesys_obj_make(sizeof(struct fs_op_maker), &fs_op_maker_vtable);
-  obj->shared = shared;
+  obj->log = log;
   return (struct filesys_obj *) obj;
 }
 
 void fs_op_maker_free(struct filesys_obj *obj1)
 {
   struct fs_op_maker *obj = (void *) obj1;
-  server_shared_free(obj->shared);
+  if(obj->log) filesys_obj_free(obj->log);
 }
 
 void fs_op_maker_call(struct filesys_obj *obj1, region_t r,
@@ -1249,9 +1229,9 @@ void fs_op_maker_call(struct filesys_obj *obj1, region_t r,
 
   cap_t root_dir;
   if(pl_unpack(r, args, METHOD_MAKE_FS_OP, "c", &root_dir)) {
-    obj->shared->refcount++;
+    if(obj->log) inc_ref(obj->log);
     *result = pl_pack(r, METHOD_R_CAP, "c",
-		      make_fs_op_server(obj->shared, root_dir, NULL /* cwd */));
+		      make_fs_op_server(obj->log, root_dir, NULL /* cwd */));
   }
   else {
     pl_args_free(&args);

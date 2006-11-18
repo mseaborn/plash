@@ -1,5 +1,9 @@
 #!/usr/bin/perl -w
 
+# Usage:  ./run-tests.pl [test-name ...]
+# Runs the specified tests, or, without arguments, runs all tests.
+
+
 use IO::File;
 use Cwd;
 use File::stat;
@@ -19,6 +23,21 @@ $exec_object = "exec-object";
 @pola_run = ($pola_run);
 
 my @failed;
+
+my @tests;
+my $tests_by_name = {};
+
+# Add a test to the list
+sub test {
+  my ($name, $fun) = @_;
+  
+  my $test =
+    { T_name => $name,
+      T_fun => $fun,
+    };
+  push(@tests, $test);
+  $tests_by_name->{$name} = $test;
+}
 
 
 test('shell_hello',
@@ -295,6 +314,22 @@ test('check_fds',
      });
 
 
+my @tests_to_run;
+if(scalar(@ARGV) == 0) {
+  @tests_to_run = @tests;
+}
+else {
+  foreach my $arg (@ARGV) {
+    my $test = $tests_by_name->{$arg};
+    if(!defined $test) { die "Test \"$arg\" not known" }
+    push(@tests_to_run, $test);
+  }
+}
+
+foreach my $t (@tests_to_run) {
+  run_test($t);
+}
+
 print "\n";
 if(scalar(@failed)) {
   printf "%i tests failed: %s\n", scalar(@failed), join(', ', @failed);
@@ -304,21 +339,23 @@ else {
 }
 
 
-sub test {
-  my ($name, $f) = @_;
+sub run_test {
+  my ($test) = @_;
+  die if $test->{T_name} eq '';
+  
   eval {
-    my $dir = "$start_dir/out/$name";
+    my $dir = "$start_dir/out/$test->{T_name}";
     run_cmd('mkdir', '-p', $dir);
     chdir($dir) || die;
-    print "\n--- running $name\n" if $verbose;
-    &$f();
+    print "\n--- running $test->{T_name}\n" if $verbose;
+    &{$test->{T_fun}}();
   };
   if($@) {
-    print "** $name failed: $@\n";
-    push(@failed, $name);
+    print "** $test->{T_name} failed: $@\n";
+    push(@failed, $test->{T_name});
   }
   else {
-    print "** $name ok\n";
+    print "** $test->{T_name} ok\n";
   }
 }
 

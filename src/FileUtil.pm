@@ -31,7 +31,7 @@ sub write_file {
 sub write_file_if_changed {
   my ($file, $data) = @_;
 
-  if($data ne read_file($file)) {
+  if(!-e $file || $data ne read_file($file)) {
     write_file($file, $data);
   }
 }

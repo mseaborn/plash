@@ -55,6 +55,8 @@ my $methods =
       slot_socket_bind
       make_conn
       make_conn2
+      log_msg
+      log_branch
       vtable_name)];
 my $methods_hash = { map { $_ => 1 } @$methods };
 
@@ -91,6 +93,8 @@ my $defaults =
       'slot_socket_bind' => 'dummy_slot_socket_bind',
       'make_conn' => 'dummy_make_conn',
       'make_conn2' => 'dummy_make_conn2',
+      'log_msg' => 'dummy_log_msg',
+      'log_branch' => 'dummy_log_branch',
     };
 
 my $bytes = 0;
@@ -169,6 +173,8 @@ put('gensrc/out-vtable-filesysobj.h',
 	  ['slot_socket_bind', 'NULL'],
 	  ['make_conn', 'NULL'],
 	  ['make_conn2', 'NULL'],
+	  ['log_msg', 'invalid_log_msg'],
+	  ['log_branch', 'invalid_log_branch'],
 	 ]
      }]);
 
@@ -555,6 +561,18 @@ put('gensrc/out-vtable-build-fs-dynamic.h',
 	  ['unlink', 'comb_dir_unlink'],
 	  ['rmdir', 'comb_dir_rmdir'],
 	  ['socket_bind', 'comb_dir_socket_bind'],
+	 ]
+     }
+    ]);
+
+put('gensrc/out-vtable-log.h',
+    [{ Name => 'log_stream_vtable',
+       Interfaces => [],
+       Contents =>
+         [['free', 'log_free'],
+	  ['mark', 'log_mark'],
+	  ['log_msg', 'log_msg'],
+	  ['log_branch', 'log_branch'],
 	 ]
      }
     ]);

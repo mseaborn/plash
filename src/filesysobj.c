@@ -1032,6 +1032,15 @@ int dummy_make_conn2(struct filesys_obj *obj, region_t r, int sock_fd,
   return -1;
 }
 
+void dummy_log_msg(struct filesys_obj *obj, seqf_t msg)
+{
+}
+
+struct filesys_obj *dummy_log_branch(struct filesys_obj *obj, seqf_t msg)
+{
+  return NULL;
+}
+
 
 void invalid_mark(struct filesys_obj *obj)
 {
@@ -1154,6 +1163,17 @@ int invalid_socket_connect(struct filesys_obj *obj, int sock_fd, int *err)
   assert(0);
   *err = ENOSYS;
   return -1;
+}
+
+void invalid_log_msg(struct filesys_obj *obj, seqf_t msg)
+{
+  assert(0);
+}
+
+struct filesys_obj *invalid_log_branch(struct filesys_obj *obj, seqf_t msg)
+{
+  assert(0);
+  return NULL;
 }
 
 #include "out-vtable-filesysobj.h"

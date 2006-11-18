@@ -68,6 +68,7 @@ build_lib('filesysobj-readonly');
 build_lib('filesysobj-union');
 build_lib('filesysobj-cow');
 build_lib('filesysslot');
+build_lib('log');
 build_lib('log-proxy');
 build_lib('reconnectable-obj');
 build_lib('build-fs');

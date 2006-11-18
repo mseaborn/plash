@@ -158,6 +158,11 @@ struct filesys_obj_vtable {
 		    int sock_fd, cap_seq_t export,
 		    int import_count, cap_t **import);
 
+  /* Output a message to the log stream. */
+  void (*log_msg)(struct filesys_obj *obj, seqf_t msg);
+  /* Fork the log stream.  Returns a new stream, or NULL. */
+  struct filesys_obj *(*log_branch)(struct filesys_obj *obj, seqf_t msg);
+
   /* This is for debugging. */
   char *vtable_name;
 
@@ -236,6 +241,8 @@ int dummy_make_conn(struct filesys_obj *obj, region_t r, cap_seq_t export,
 		    int import_count, cap_t **import);
 int dummy_make_conn2(struct filesys_obj *obj, region_t r, int sock_fd,
 		     cap_seq_t export, int import_count, cap_t **import);
+void dummy_log_msg(struct filesys_obj *obj, seqf_t msg);
+struct filesys_obj *dummy_log_branch(struct filesys_obj *obj, seqf_t msg);
 
 int marshal_stat(struct filesys_obj *obj, struct stat *buf, int *err);
 int marshal_utimes(struct filesys_obj *obj, const struct timeval *atime,

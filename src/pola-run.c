@@ -54,6 +54,9 @@
 #define NAME_MSG NAME ": "
 
 
+typedef int bool;
+
+
 int under_plash = FALSE;
 
 
@@ -537,6 +540,36 @@ static void args_to_exec_elf_program
 }
 
 
+static void server_process(int argc, char **argv,
+			   bool use_gtk)
+{
+#ifdef GC_DEBUG
+  gc_init();
+  cap_mark_exported_objects();
+  gc_check();
+#endif
+
+#ifdef USE_GTK
+  if(use_gtk) {
+    /* NB. We have already processed arguments!  Gtk should not
+       take anything from this arg list, we hope. */
+    gtk_init(&argc, &argv);
+    
+    /* It seems that if the X11 connection is broken, gtk_main() calls
+       exit() rather than returning.  That's not what we want. */
+    while(cap_server_exporting()) {
+      gtk_main_iteration();
+    }
+  }
+#endif
+  
+  /* We'd like to fall back to a normal non-X11 server if the X11
+     event loop exits.  This in turn will exit if we're not serving
+     any references any more. */
+  cap_run_server();
+}
+
+
 int main(int argc, char **argv)
 {
   region_t r = region_make();
@@ -739,34 +772,13 @@ int main(int argc, char **argv)
       }
       if(state.server_as_parent ? pid > 0 : pid == 0) {
 	close(socks[0]);
+	
 	cap_make_connection(r, socks[1], cap_seq_make(caps, cap_count),
 			    0, "to-client");
 	caps_free(cap_seq_make(caps, cap_count));
 	region_free(r);
 
-#ifdef GC_DEBUG
-	gc_init();
-	cap_mark_exported_objects();
-	gc_check();
-#endif
-
-#ifdef USE_GTK
-	if(state.powerbox) {
-	  /* NB. We have already processed arguments!  Gtk should not
-	     take anything from this arg list, we hope. */
-	  gtk_init(&argc, &argv);
-	  
-	  /* It seems that if the X11 connection is broken, gtk_main() calls
-	     exit() rather than returning.  That's not what we want. */
-	  while(cap_server_exporting()) {
-	    gtk_main_iteration();
-	  }
-	}
-#endif
-	/* We'd like to fall back to a normal non-X11 server if the X11
-	   event loop exits.  This in turn will exit if we're not serving
-	   any references any more. */
-	cap_run_server();
+	server_process(argc, argv, state.powerbox /* use_gtk */);
 	exit(0);
       }
       cap_close_all_connections();

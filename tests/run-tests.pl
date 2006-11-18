@@ -22,8 +22,6 @@ $exec_object = "exec-object";
 
 @pola_run = ($pola_run);
 
-my @failed;
-
 my @tests;
 my $tests_by_name = {};
 
@@ -326,17 +324,15 @@ else {
   }
 }
 
+my @succeeded;
+my @failed;
 foreach my $t (@tests_to_run) {
   run_test($t);
 }
 
 print "\n";
-if(scalar(@failed)) {
-  printf "%i tests failed: %s\n", scalar(@failed), join(', ', @failed);
-}
-else {
-  print "Success!\n";
-}
+printf "%i tests succeeded: %s\n", scalar(@succeeded), join(', ', @succeeded);
+printf "%i tests failed: %s\n", scalar(@failed), join(', ', @failed);
 
 
 sub run_test {
@@ -356,6 +352,7 @@ sub run_test {
   }
   else {
     print "** $test->{T_name} ok\n";
+    push(@succeeded, $test->{T_name});
   }
 }
 

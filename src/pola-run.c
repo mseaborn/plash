@@ -57,53 +57,6 @@
 int under_plash = FALSE;
 
 
-void print_args(int argc, const char **argv)
-{
-  int i;
-  printf("%i args:\n", argc);
-  for(i = 0; i < argc; i++) {
-    fprintf(stderr, "  arg %i: \"%s\"\n", i, argv[i]);
-  }
-}
-
-void list_fds()
-{
-  int fd;
-  for(fd = 0; fd < 1024; fd++) {
-    int flags = fcntl(fd, F_GETFD);
-    if(flags < 0 && errno != EBADF) { perror(NAME_MSG "fcntl"); }
-    if(flags >= 0) {
-      fprintf(stderr, "fd %i%s\n", fd,
-	      flags & FD_CLOEXEC ? " (ok, close-on-exec)" : "");
-    }
-  }
-}
-
-#include <sys/wait.h>
-/* This is used for determining whether it is the server or client
-   that dies from a segfault. */
-void monitor_this_process(const char *name)
-{
-  int status, pid2;
-  int pid = fork();
-  if(pid < 0) { perror("fork"); exit(1); }
-  if(pid == 0) return; /* Returns to the child process. */
-  /* Parent monitors the child: */
-  pid2 = waitpid(pid, &status, 0);
-  if(WIFEXITED(status)) {
-    fprintf(stderr, "%s: exited with code %i\n", name, WEXITSTATUS(status));
-  }
-  else if(WIFSIGNALED(status)) {
-    fprintf(stderr, "%s: exited with signal %i (%s)\n",
-	    name, WTERMSIG(status), strsignal(WTERMSIG(status)));
-  }
-  else {
-    fprintf(stderr, "%s: ??\n", name);
-  }
-  exit(0);
-}
-
-
 struct dir_stack *copy_cwd(struct filesys_obj *root_dir)
 {
   /* Set up the current directory */
@@ -785,7 +738,6 @@ int main(int argc, char **argv)
 	return 1; /* Error */
       }
       if(state.server_as_parent ? pid > 0 : pid == 0) {
-	// monitor_this_process("server");
 	close(socks[0]);
 	cap_make_connection(r, socks[1], cap_seq_make(caps, cap_count),
 			    0, "to-client");
@@ -837,32 +789,6 @@ int main(int argc, char **argv)
 				 args_count2, args_array2,
 				 &cmd, &args_count2, &args_array2,
 				 state.debug);
-
-	if(0) {
-	  print_args(args_count2, args_array2);
-	  // printf("exec_fd=%i, sock_fd=%i\n", socks[0], executable_fd2);
-	  list_fds();
-	  monitor_this_process("client");
-	}
-	if(0) {
-	  /* Check for FDs that have been left open that shouldn't be. */
-	  int fd;
-	  int fail = 0;
-	  for(fd = 0; fd < 1024; fd++) {
-	    int flags = fcntl(fd, F_GETFD);
-	    if(flags < 0 && errno != EBADF) { perror(NAME_MSG "fcntl"); }
-	    if(flags >= 0 &&
-	       !(flags & FD_CLOEXEC) &&
-	       fd > 2 &&
-	       fd != socks[0]
-	       // && fd != executable_fd2
-	       ) {
-	      fprintf(stderr, "fd %i left open\n", fd);
-	      fail = 1;
-	    }
-	  }
-	  assert(!fail);
-	}
 
 	if(under_plash) {
 	  assert(plash_libc_kernel_execve);

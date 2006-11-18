@@ -147,6 +147,7 @@ struct state {
   int debug;
   const char *pet_name;
   int powerbox;
+  int server_as_parent;
 };
 
 void init_state(struct state *state)
@@ -161,6 +162,7 @@ void init_state(struct state *state)
   state->debug = FALSE;
   state->pet_name = NULL;
   state->powerbox = FALSE;
+  state->server_as_parent = FALSE;
 }
 
 void usage(FILE *fp)
@@ -183,6 +185,7 @@ void usage(FILE *fp)
 	  "  [--x11]         Grant access to X11 Window System\n"
 	  "  [--net]         Grant access to network config files\n"
 	  "  [--log]         Print method calls client makes to file server\n"
+	  "  [--server-as-parent]  Server runs as the parent process, not the child\n"
 	  "  [--pet-name <name>]\n"
 	  "  [--powerbox]\n"
 	  "  [-e <command> <arg>...]\n"
@@ -497,6 +500,11 @@ int handle_arguments(region_t r, struct state *state,
       goto arg_handled;
     }
 
+    if(!strcmp(arg, "--server-as-parent")) {
+      state->server_as_parent = TRUE;
+      goto arg_handled;
+    }
+
     if(!strcmp(arg, "--help")) { usage(stdout); return 1; }
 
   unknown:
@@ -772,7 +780,11 @@ int main(int argc, char **argv)
 	 not be expecting to handle SIGCHILD signals.  Or perhaps these
 	 aren't delivered after an exec() call. */
       pid = fork();
-      if(pid == 0) {
+      if(pid < 0) {
+	perror(NAME_MSG "fork");
+	return 1; /* Error */
+      }
+      if(state.server_as_parent ? pid > 0 : pid == 0) {
 	// monitor_this_process("server");
 	close(socks[0]);
 	cap_make_connection(r, socks[1], cap_seq_make(caps, cap_count),
@@ -804,10 +816,6 @@ int main(int argc, char **argv)
 	   any references any more. */
 	cap_run_server();
 	exit(0);
-      }
-      if(pid < 0) {
-	perror(NAME_MSG "fork");
-	return 1; /* Error */
       }
       cap_close_all_connections();
 

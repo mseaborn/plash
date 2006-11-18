@@ -27,16 +27,6 @@
 int process_open(struct filesys_obj *root, struct dir_stack *cwd,
 		 seqf_t pathname, int flags, int mode, int *err);
 
-int open_executable_file(struct filesys_obj *obj, seqf_t cmd_filename, int *err);
-
-int exec_for_scripts
-  (region_t r,
-   struct filesys_obj *root, struct dir_stack *cwd,
-   const char *cmd, int exec_fd, int argc, const char **argv,
-   int *exec_fd_out, const char **exec_filename_out,
-   int *argc_out, const char ***argv_out,
-   int *err);
-
 /* This could be merged into struct fs_op_object now */
 struct process {
   struct filesys_obj *root;

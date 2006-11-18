@@ -55,6 +55,7 @@
 #include "reconnectable-obj.h"
 #include "serialise.h"
 #include "marshal.h"
+#include "exec.h"
 
 
 extern char **environ;

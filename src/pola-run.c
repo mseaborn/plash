@@ -48,6 +48,7 @@
 #include "plash-libc.h"
 #include "powerbox.h"
 #include "config-read.h"
+#include "exec.h"
 
 
 #define NAME "pola-run"

@@ -75,6 +75,7 @@ build_lib('build-fs-static');
 build_lib('build-fs-dynamic');
 build_lib('resolve-filename');
 build_lib('fs-operations');
+build_lib('exec');
 build_lib('config-read');
 build_lib('shell-fds');
 build_lib('shell-wait');

@@ -547,7 +547,7 @@ DIR *new_fdopendir(int fd)
 {
   log_msg(MOD_MSG "fdopendir\n");
   __set_errno(ENOSYS);
-  return -1;
+  return NULL;
 }
 
 /* EXPORT: new_readdir => WEAK:readdir __readdir */

@@ -221,6 +221,3 @@ int my_getsockname(int sock_fd, struct sockaddr *name, socklen_t *name_len)
   
   return getsockname(sock_fd, name, name_len);
 }
-
-
-#include "out-aliases_libc-connect.h"

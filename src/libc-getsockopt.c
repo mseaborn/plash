@@ -54,6 +54,3 @@ int new_getsockopt(int sock_fd, int level, int opt_name,
 
   return rc;
 }
-
-
-#include "out-aliases_libc-getsockopt.h"

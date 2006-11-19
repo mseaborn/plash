@@ -128,6 +128,3 @@ int new_lutimes(const char *path, struct timeval times[2])
     return my_utimes(1 /* nofollow */, path, &time, &time);
   }
 }
-
-
-#include "out-aliases_libc-utime.h"

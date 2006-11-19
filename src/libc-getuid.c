@@ -161,6 +161,3 @@ int new_setresgid(gid_t rgid, gid_t egid, gid_t sgid)
   libc_log("setresgid");
   return 0;
 }
-
-
-#include "out-aliases_libc-getuid.h"

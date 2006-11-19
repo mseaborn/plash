@@ -562,7 +562,6 @@ build_python_module () {
 if [ "$1" != "--include" ]; then
 
 build_small_bits
-./src/make-link-def.pl  # Must come before compiling src/libc-*.c files
 (export CC; cd setuid && ./make-setuid.sh)
 ./make-objs.pl
 build_libc_ldso_extras

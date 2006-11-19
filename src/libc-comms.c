@@ -253,6 +253,3 @@ int plash_libc_duplicate_connection()
   region_free(r);
   return fd;
 }
-
-
-#include "out-aliases_libc-comms.h"

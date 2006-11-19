@@ -1961,6 +1961,3 @@ int new_lremovexattr(const char *path, const char *name)
   __set_errno(ENOSYS);
   return -1;
 }
-
-
-#include "out-aliases_libc-misc.h"

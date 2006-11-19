@@ -40,6 +40,3 @@ int new_truncate(const char *path, off_t length)
   close(fd);
   return rc;
 }
-
-
-#include "out-aliases_libc-truncate.h"

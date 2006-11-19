@@ -206,18 +206,40 @@ build_libc_ldso_extras () {
   # to "fork" and *then* keeps "fork", which leaves us with *two* definitions
   # of "fork", our one and dietlibc's.
 
-  # These scripts rename symbols and hide symbols.
-  # They are built by ./src/make-link-def.pl.
+  prepare_combined_obj () {
+    # Hide all symbols except those to be exported to the rest of glibc.
+    
+    # errno:  this can be removed?
+    # __fork_block:  exported by glibc's fork.os.
+    # __pthread_fork:  imported weakly by glibc's fork.os.
+    # __i686.get_pc_thunk.*:  some linker magic (necessary for gcc >=3.3).
+    # __libc_missing_32bit_uids:  defined in posix/getuid.os but used by
+    #     other UID/GID-related files.
+    
+    objcopy --wildcard \
+      -G "export_*" \
+      -G "exportver_*" \
+      -G errno \
+      -G __fork_block \
+      -G __pthread_fork \
+      -G __i686.get_pc_thunk.bx \
+      -G __i686.get_pc_thunk.cx \
+      -G __libc_missing_32bit_uids \
+      $1
+  }
+
+  # TO BE REMOVED:
+  REDEFINES="--redefine-sym glibc_getenv=getenv"
   
   echo Hiding and renaming symbols in $OUT/combined-libc.os
   ./src/get-export-syms.pl $OUT/combined-libc.os >$OUT/symbol-list-libc
-  sh gensrc/out-link_main.sh $OUT/combined-libc.os
-  objcopy `./src/export-renames.pl <$OUT/symbol-list-libc` $OUT/combined-libc.os
+  prepare_combined_obj $OUT/combined-libc.os
+  objcopy $REDEFINES `./src/export-renames.pl <$OUT/symbol-list-libc` $OUT/combined-libc.os
   
   echo Hiding and renaming symbols in $OUT/combined-rtld.os
   ./src/get-export-syms.pl $OUT/combined-rtld.os >$OUT/symbol-list-rtld
-  sh gensrc/out-link_rtld.sh $OUT/combined-rtld.os
-  objcopy `./src/export-renames.pl --rtld <$OUT/symbol-list-rtld` $OUT/combined-rtld.os
+  prepare_combined_obj $OUT/combined-rtld.os
+  objcopy $REDEFINES `./src/export-renames.pl --rtld <$OUT/symbol-list-rtld` $OUT/combined-rtld.os
 }
 
 

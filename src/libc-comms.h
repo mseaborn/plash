@@ -56,6 +56,15 @@ void libc_log(const char *msg);
   extern int aliasname() __attribute ((weak, alias (#name)));
 
 
+/* NB. Semicolons not necessary */
+/* export(new_open, __open) */
+/* export_weak_alias(new_open, open) */
+#define export(name, aliasname) \
+  extern int export_##aliasname() __attribute ((alias (#name)));
+#define export_weak_alias(name, aliasname) \
+  extern int export_##aliasname() __attribute ((weak, alias (#name)));
+
+
 #define offsetof(s, f) ((int) &((s *) 0)->f)
 
 

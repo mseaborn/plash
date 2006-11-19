@@ -25,7 +25,12 @@
 #include "libc-comms.h"
 
 
-/* EXPORT: new_truncate => truncate __GI_truncate __truncate __GI___truncate */
+export(new_truncate, truncate);
+export(new_truncate, __GI_truncate);
+export(new_truncate, __truncate);
+export(new_truncate, __GI___truncate);
+
+/* OLD-EXPORT: new_truncate => truncate __GI_truncate __truncate __GI___truncate */
 int new_truncate(const char *path, off_t length)
 {
   int rc;

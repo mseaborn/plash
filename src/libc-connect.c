@@ -37,7 +37,12 @@
 #include "marshal.h"
 
 
-/* EXPORT: new_connect => WEAK:connect WEAK:__connect __libc_connect __connect_internal */
+export_weak_alias(new_connect, connect);
+export_weak_alias(new_connect, __connect);
+export(new_connect, __libc_connect);
+export(new_connect, __connect_internal);
+
+/* OLD-EXPORT: new_connect => WEAK:connect WEAK:__connect __libc_connect __connect_internal */
 int new_connect(int sock_fd, const struct sockaddr *addr, socklen_t addr_len)
 {
   if(!addr) { __set_errno(EINVAL); return -1; }
@@ -111,7 +116,11 @@ int new_connect(int sock_fd, const struct sockaddr *addr, socklen_t addr_len)
   }
 }
 
-/* EXPORT: new_bind => bind WEAK:__bind */
+
+export(new_bind, bind);
+export_weak_alias(new_bind, __bind);
+
+/* OLD-EXPORT: new_bind => bind WEAK:__bind */
 int new_bind(int sock_fd, struct sockaddr *addr, socklen_t addr_len)
 {
   if(!addr) { __set_errno(EINVAL); return -1; }
@@ -185,7 +194,11 @@ int new_bind(int sock_fd, struct sockaddr *addr, socklen_t addr_len)
   }
 }
 
-/* EXPORT: my_getsockname => getsockname WEAK:__getsockname */
+
+export(my_getsockname, getsockname);
+export_weak_alias(my_getsockname, __getsockname);
+
+/* OLD-EXPORT: my_getsockname => getsockname WEAK:__getsockname */
 int my_getsockname(int sock_fd, struct sockaddr *name, socklen_t *name_len)
 {
   /* Try return a filename stored by connect() or bind(). */

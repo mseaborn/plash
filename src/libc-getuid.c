@@ -22,7 +22,10 @@
 #include "libc-comms.h"
 
 
-/* EXPORT: new_getuid => WEAK:getuid __getuid */
+export_weak_alias(new_getuid, getuid);
+export(new_getuid, __getuid);
+
+/* OLD-EXPORT: new_getuid => WEAK:getuid __getuid */
 int new_getuid()
 {
   int uid = my_atoi(getenv("PLASH_FAKE_UID"));
@@ -31,7 +34,11 @@ int new_getuid()
   return uid;
 }
 
-/* EXPORT: new_getgid => WEAK:getgid __getgid */
+
+export_weak_alias(new_getgid, getgid);
+export(new_getgid, __getgid);
+
+/* OLD-EXPORT: new_getgid => WEAK:getgid __getgid */
 int new_getgid()
 {
   int gid = my_atoi(getenv("PLASH_FAKE_GID"));
@@ -40,7 +47,11 @@ int new_getgid()
   return gid;
 }
 
-/* EXPORT: new_geteuid => WEAK:geteuid __geteuid */
+
+export_weak_alias(new_geteuid, geteuid);
+export(new_geteuid, __geteuid);
+
+/* OLD-EXPORT: new_geteuid => WEAK:geteuid __geteuid */
 int new_geteuid()
 {
   int euid = my_atoi(getenv("PLASH_FAKE_EUID"));
@@ -49,7 +60,11 @@ int new_geteuid()
   return euid;
 }
 
-/* EXPORT: new_getegid => WEAK:getegid __getegid */
+
+export_weak_alias(new_getegid, getegid);
+export(new_getegid, __getegid);
+
+/* OLD-EXPORT: new_getegid => WEAK:getegid __getegid */
 int new_getegid()
 {
   int egid = my_atoi(getenv("PLASH_FAKE_EGID"));
@@ -62,52 +77,85 @@ int new_getegid()
 /* These functions simply report success.  I don't see much point in
    having them check the process's faked UIDs and GIDs. */
 
-/* EXPORT: new_setuid => WEAK:setuid __setuid */
+export_weak_alias(new_setuid, setuid);
+export(new_setuid, __setuid);
+
+/* OLD-EXPORT: new_setuid => WEAK:setuid __setuid */
 int new_setuid(uid_t uid)
 {
   libc_log("setuid");
   return 0;
 }
-/* EXPORT: new_setgid => WEAK:setgid __setgid */
+
+export_weak_alias(new_setgid, setgid);
+export(new_setgid, __setgid);
+
+/* OLD-EXPORT: new_setgid => WEAK:setgid __setgid */
 int new_setgid(gid_t gid)
 {
   libc_log("setgid");
   return 0;
 }
 
-/* EXPORT: new_seteuid => seteuid __GI_seteuid */
+
+export(new_seteuid, seteuid);
+export(new_seteuid, __GI_seteuid);
+
+/* OLD-EXPORT: new_seteuid => seteuid __GI_seteuid */
 int new_seteuid(uid_t euid)
 {
   libc_log("seteuid");
   return 0;
 }
-/* EXPORT: new_setegid => setegid __GI_setegid */
+
+export(new_setegid, setegid);
+export(new_setegid, __GI_setegid);
+
+/* OLD-EXPORT: new_setegid => setegid __GI_setegid */
 int new_setegid(gid_t egid)
 {
   libc_log("setegid");
   return 0;
 }
 
-/* EXPORT: new_setreuid => WEAK:setreuid __setreuid */
+
+export_weak_alias(new_setreuid, setreuid);
+export(new_setreuid, __setreuid);
+
+/* OLD-EXPORT: new_setreuid => WEAK:setreuid __setreuid */
 int new_setreuid(uid_t ruid, uid_t euid)
 {
   libc_log("setreuid");
   return 0;
 }
-/* EXPORT: new_setregid => WEAK:setregid __setregid */
+
+export_weak_alias(new_setregid, setregid);
+export(new_setregid, __setregid);
+
+/* OLD-EXPORT: new_setregid => WEAK:setregid __setregid */
 int new_setregid(gid_t rgid, gid_t egid)
 {
   libc_log("setregid");
   return 0;
 }
 
-/* EXPORT: new_setresuid => WEAK:setresuid __setresuid __GI___setresuid */
+
+export_weak_alias(new_setresuid, setresuid);
+export(new_setresuid, __setresuid);
+export(new_setresuid, __GI___setresuid);
+
+/* OLD-EXPORT: new_setresuid => WEAK:setresuid __setresuid __GI___setresuid */
 int new_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 {
   libc_log("setresuid");
   return 0;
 }
-/* EXPORT: new_setresgid => WEAK:setresgid __setresgid __GI___setresgid */
+
+export_weak_alias(new_setresgid, setresgid);
+export(new_setresgid, __setresgid);
+export(new_setresgid, __GI___setresgid);
+
+/* OLD-EXPORT: new_setresgid => WEAK:setresgid __setresgid __GI___setresgid */
 int new_setresgid(gid_t rgid, gid_t egid, gid_t sgid)
 {
   libc_log("setresgid");

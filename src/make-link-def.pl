@@ -183,7 +183,10 @@ sub obj_copy_cmds {
   "# This is for use on $obj_file\n".
   'if [ "$#" -ne 1 ]; then echo Expect 1 argument; exit 1; fi'.
   "\n\n".
-  "objcopy \\\n".join('', map { "  -G $_ \\\n" } @$keep)."  \$1\n".
+  "objcopy \\\n".join('', map { "  -G $_ \\\n" } @$keep).
+    ' --wildcard -G "export_*"'.
+    #'  `for SYM in $(cat shobj/symbol-list); do echo -G $SYM; done` '.
+    "  \$1\n".
   "objcopy \\\n".
     join('', map { "  --redefine-sym $_->[0]=$_->[1] \\\n" } @$rename).
     "  \$1\n"

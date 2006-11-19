@@ -42,7 +42,15 @@
 #include "marshal-pack.h"
 
 
-/* EXPORT: new_fork => WEAK:fork WEAK:__fork WEAK:vfork WEAK:__vfork __libc_fork __GI___fork __GI___vfork */
+export_weak_alias(new_fork, fork);
+export_weak_alias(new_fork, __fork);
+export_weak_alias(new_fork, vfork);
+export_weak_alias(new_fork, __vfork);
+export(new_fork, __libc_fork);
+export(new_fork, __GI___fork);
+export(new_fork, __GI___vfork);
+
+/* OLD-EXPORT: new_fork => WEAK:fork WEAK:__fork WEAK:vfork WEAK:__vfork __libc_fork __GI___fork __GI___vfork */
 /* vfork() just calls normal fork(). */
 /* If there is an error in duplicating the server's connection, we have
    the choice of carrying on with the fork and stopping any communication
@@ -291,13 +299,20 @@ static int exec_object(cap_t obj, int argc, const char **argv,
   return -1;
 }
 
-/* EXPORT: plash_libc_kernel_execve */
+
+export(plash_libc_kernel_execve, plash_libc_kernel_execve);
+
+/* OLD-EXPORT: plash_libc_kernel_execve */
 int plash_libc_kernel_execve(const char *cmd_filename, char *argv[], char *envp[])
 {
   return execve(cmd_filename, argv, envp);
 }
 
-/* EXPORT: new_execve => WEAK:execve __execve */
+
+export_weak_alias(new_execve, execve);
+export(new_execve, __execve);
+
+/* OLD-EXPORT: new_execve => WEAK:execve __execve */
 /* This execs an executable using a particular dynamic linker.
    Won't work for shell scripts (using "#!") or for setuid executables. */
 /* We don't need to do anything special to hand off the connection to

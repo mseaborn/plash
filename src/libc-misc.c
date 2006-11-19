@@ -129,7 +129,18 @@ void set_errno_from_reply(seqf_t msg)
   __set_errno(ok ? err : ENOSYS);
 }
 
-/* EXPORT: new_open => WEAK:open WEAK:__open __libc_open __GI_open __GI___open __GI___libc_open open_not_cancel open_not_cancel_2 __open_nocancel */
+
+export_weak_alias(new_open, __open);
+export_weak_alias(new_open, open);
+export(new_open, __libc_open);
+export(new_open, __GI_open);
+export(new_open, __GI___open);
+export(new_open, __GI___libc_open);
+export(new_open, open_not_cancel);
+export(new_open, open_not_cancel_2);
+export(new_open, __open_nocancel);
+
+/* OLD-EXPORT: new_open => WEAK:open WEAK:__open __libc_open __GI_open __GI___open __GI___libc_open open_not_cancel open_not_cancel_2 __open_nocancel */
 int new_open(const char *filename, int flags, ...)
 {
   region_t r = region_make();
@@ -203,6 +214,7 @@ int new_open(const char *filename, int flags, ...)
   return -1;
 }
 
+
 /* This has turned out not to be a good idea. */
 #if 0
 static void relocate_comm_fd()
@@ -233,7 +245,18 @@ static void relocate_comm_fd()
 }
 #endif
 
-/* EXPORT: new_close => WEAK:close WEAK:__close __libc_close __GI_close __GI___close __GI___libc_close close_not_cancel close_not_cancel_no_status __close_nocancel */
+
+export_weak_alias(new_close, close);
+export_weak_alias(new_close, __close);
+export(new_close, __libc_close);
+export(new_close, __GI_close);
+export(new_close, __GI___close);
+export(new_close, __GI___libc_close);
+export(new_close, close_not_cancel);
+export(new_close, close_not_cancel_no_status);
+export(new_close, __close_nocancel);
+
+/* OLD-EXPORT: new_close => WEAK:close WEAK:__close __libc_close __GI_close __GI___close __GI___libc_close close_not_cancel close_not_cancel_no_status __close_nocancel */
 int new_close(int fd)
 {
   log_msg(MOD_MSG "close\n");
@@ -264,7 +287,13 @@ int new_close(int fd)
   return close(fd);
 }
 
-/* EXPORT: new_dup2 => WEAK:dup2 __dup2 __GI_dup2 __GI___dup2 */
+
+export_weak_alias(new_dup2, dup2);
+export(new_dup2, __dup2);
+export(new_dup2, __GI_dup2);
+export(new_dup2, __GI___dup2);
+
+/* OLD-EXPORT: new_dup2 => WEAK:dup2 __dup2 __GI_dup2 __GI___dup2 */
 int new_dup2(int source_fd, int dest_fd)
 {
   int rc;
@@ -301,7 +330,13 @@ int new_dup2(int source_fd, int dest_fd)
   return rc;
 }
 
-/* EXPORT: new_fchdir => WEAK:fchdir __fchdir __GI_fchdir __GI___fchdir */
+
+export_weak_alias(new_fchdir, fchdir);
+export(new_fchdir, __fchdir);
+export(new_fchdir, __GI_fchdir);
+export(new_fchdir, __GI___fchdir);
+
+/* OLD-EXPORT: new_fchdir => WEAK:fchdir __fchdir __GI_fchdir __GI___fchdir */
 int new_fchdir(int fd)
 {
   log_msg(MOD_MSG "fchdir\n");
@@ -342,7 +377,13 @@ int new_fchdir(int fd)
   return -1;
 }
 
-/* EXPORT: new_open64 => WEAK:open64 WEAK:__open64 __libc_open64 __GI___open64 */
+
+export_weak_alias(new_open64, open64);
+export_weak_alias(new_open64, __open64);
+export(new_open64, __libc_open64);
+export(new_open64, __GI___open64);
+
+/* OLD-EXPORT: new_open64 => WEAK:open64 WEAK:__open64 __libc_open64 __GI___open64 */
 int new_open64(const char *filename, int flags, ...)
 {
   int mode = 0;
@@ -356,21 +397,34 @@ int new_open64(const char *filename, int flags, ...)
   return new_open(filename, flags | O_LARGEFILE, mode);
 }
 
-/* EXPORT: new_creat => WEAK:creat __libc_creat __GI_creat __GI___libc_creat */
+
+export_weak_alias(new_creat, creat);
+export(new_creat, __libc_creat);
+export(new_creat, __GI_creat);
+export(new_creat, __GI___libc_creat);
+
+/* OLD-EXPORT: new_creat => WEAK:creat __libc_creat __GI_creat __GI___libc_creat */
 int new_creat(const char *filename, int mode)
 {
   log_msg(MOD_MSG "creat\n");
   return new_open(filename, O_WRONLY | O_CREAT | O_TRUNC, mode);
 }
 
-/* EXPORT: new_creat64 => creat64 */
+
+export(new_creat64, creat64);
+
+/* OLD-EXPORT: new_creat64 => creat64 */
 int new_creat64(const char *filename, int mode)
 {
   log_msg(MOD_MSG "creat64\n");
   return new_open64(filename, O_WRONLY | O_CREAT | O_TRUNC, mode);
 }
 
-/* EXPORT: new_getcwd => WEAK:getcwd __getcwd */
+
+export_weak_alias(new_getcwd, getcwd);
+export(new_getcwd, __getcwd);
+
+/* OLD-EXPORT: new_getcwd => WEAK:getcwd __getcwd */
 /* glibc implements getwd in terms of __getcwd. */
 /* What about get_current_dir_name()? */
 /* Cases:
@@ -419,7 +473,13 @@ char *new_getcwd(char *buf, size_t size)
   return 0;
 }
 
-/* EXPORT: new_chdir => WEAK:chdir __chdir __GI_chdir __GI___chdir */
+
+export_weak_alias(new_chdir, chdir);
+export(new_chdir, __chdir);
+export(new_chdir, __GI_chdir);
+export(new_chdir, __GI___chdir);
+
+/* OLD-EXPORT: new_chdir => WEAK:chdir __chdir __GI_chdir __GI___chdir */
 int new_chdir(const char *pathname)
 {
   region_t r = region_make();
@@ -505,7 +565,11 @@ struct dirent64 {
   char d_name[256];
 };
 
-/* EXPORT: new_opendir => WEAK:opendir __opendir */
+
+export_weak_alias(new_opendir, opendir);
+export(new_opendir, __opendir);
+
+/* OLD-EXPORT: new_opendir => WEAK:opendir __opendir */
 DIR *new_opendir(const char *pathname)
 {
   region_t r = region_make();
@@ -541,8 +605,12 @@ DIR *new_opendir(const char *pathname)
   return 0;
 }
 
+
+export(new_fdopendir, fdopendir);
+export(new_fdopendir, __fdopendir);
+
 /* Added in glibc 2.4 */
-/* EXPORT: new_fdopendir => fdopendir __fdopendir */
+/* OLD-EXPORT: new_fdopendir => fdopendir __fdopendir */
 DIR *new_fdopendir(int fd)
 {
   log_msg(MOD_MSG "fdopendir\n");
@@ -550,7 +618,11 @@ DIR *new_fdopendir(int fd)
   return NULL;
 }
 
-/* EXPORT: new_readdir => WEAK:readdir __readdir */
+
+export_weak_alias(new_readdir, readdir);
+export(new_readdir, __readdir);
+
+/* OLD-EXPORT: new_readdir => WEAK:readdir __readdir */
 /* This is a bit of a stupid interface.  It returns zero for the end of the
    directory *or* an error -- how is a caller supposed to tell the
    difference?  Set errno to zero before, I suppose. */
@@ -593,7 +665,11 @@ struct dirent *new_readdir(DIR *dir)
   }
 }
 
-/* EXPORT: new_readdir_r => WEAK:readdir_r __readdir_r */
+
+export_weak_alias(new_readdir_r, readdir_r);
+export(new_readdir_r, __readdir_r);
+
+/* OLD-EXPORT: new_readdir_r => WEAK:readdir_r __readdir_r */
 /* This is a stupid interface too.  It provides a fixed-length buffer for
    the leaf name, and no way to say how big the buffer is (we assume that
    it's fixed by "struct dirent").  It's somewhat ambiguous whether the
@@ -723,7 +799,11 @@ int new_readdir64_r(DIR *dir, struct dirent64 *ent, struct dirent64 **result)
   }
 }
 
-/* EXPORT: new_closedir => WEAK:closedir __closedir */
+
+export_weak_alias(new_closedir, closedir);
+export(new_closedir, __closedir);
+
+/* OLD-EXPORT: new_closedir => WEAK:closedir __closedir */
 int new_closedir(DIR *dir)
 {
   log_msg(MOD_MSG "closedir\n");
@@ -733,7 +813,10 @@ int new_closedir(DIR *dir)
   return 0;
 }
 
-/* EXPORT: dirfd */
+
+export(dirfd, dirfd);
+
+/* OLD-EXPORT: dirfd */
 int dirfd(DIR *dir)
 {
   log_msg(MOD_MSG "dirfd\n");
@@ -742,7 +825,10 @@ int dirfd(DIR *dir)
   return -1;
 }
 
-/* EXPORT: rewinddir */
+
+export(rewinddir, rewinddir);
+
+/* OLD-EXPORT: rewinddir */
 void rewinddir(DIR *dir)
 {
   log_msg(MOD_MSG "rewinddir\n");
@@ -750,7 +836,10 @@ void rewinddir(DIR *dir)
   dir->offset = 0;
 }
 
-/* EXPORT: telldir */
+
+export(telldir, telldir);
+
+/* OLD-EXPORT: telldir */
 off_t telldir(DIR *dir)
 {
   log_msg(MOD_MSG "telldir\n");
@@ -758,7 +847,10 @@ off_t telldir(DIR *dir)
   return dir->offset;
 }
 
-/* EXPORT: seekdir */
+
+export(seekdir, seekdir);
+
+/* OLD-EXPORT: seekdir */
 void seekdir(DIR *dir, off_t offset)
 {
   log_msg(MOD_MSG "seekdir\n");
@@ -766,14 +858,21 @@ void seekdir(DIR *dir, off_t offset)
   dir->offset = offset;
 }
 
-/* EXPORT: new_getdents => __getdents */
+
+export(new_getdents, __getdents);
+
+/* OLD-EXPORT: new_getdents => __getdents */
 int new_getdents(int fd, struct dirent *buf, unsigned count)
 {
   log_msg(MOD_MSG "getdents\n");
   __set_errno(ENOSYS);
   return -1;
 }
-/* EXPORT: new_getdents64 => __getdents64 */
+
+
+export(new_getdents64, __getdents64);
+
+/* OLD-EXPORT: new_getdents64 => __getdents64 */
 int new_getdents64(int fd, struct dirent *buf, unsigned count)
 {
   log_msg(MOD_MSG "getdents64\n");
@@ -781,7 +880,11 @@ int new_getdents64(int fd, struct dirent *buf, unsigned count)
   return -1;
 }
 
-/* EXPORT: new_xmknod => __xmknod __GI___xmknod */
+
+export(new_xmknod, __xmknod);
+export(new_xmknod, __GI___xmknod);
+
+/* OLD-EXPORT: new_xmknod => __xmknod __GI___xmknod */
 int new_xmknod(int ver, const char *path, mode_t mode, dev_t dev)
 {
   log_msg(MOD_MSG "xmknod\n");
@@ -1191,7 +1294,11 @@ int my_fstat(int type, int fd, void *buf)
   }
 }
 
-/* EXPORT: new_xstat => __xstat __GI___xstat */
+
+export(new_xstat, __xstat);
+export(new_xstat, __GI___xstat);
+
+/* OLD-EXPORT: new_xstat => __xstat __GI___xstat */
 int new_xstat(int vers, const char *pathname, void *buf)
 {
   int type;
@@ -1214,7 +1321,11 @@ int new_xstat64(int vers, const char *pathname, void *buf)
   return my_stat(0, type, pathname, buf);
 }
 
-/* EXPORT: new_lxstat => __lxstat __GI___lxstat */
+
+export(new_lxstat, __lxstat);
+export(new_lxstat, __GI___lxstat);
+
+/* OLD-EXPORT: new_lxstat => __lxstat __GI___lxstat */
 int new_lxstat(int vers, const char *pathname, void *buf)
 {
   int type;
@@ -1237,7 +1348,11 @@ int new_lxstat64(int vers, const char *pathname, void *buf)
   return my_stat(1, type, pathname, buf);
 }
 
-/* EXPORT: new_fxstat => __fxstat __GI___fxstat */
+
+export(new_fxstat, __fxstat);
+export(new_fxstat, __GI___fxstat);
+
+/* OLD-EXPORT: new_fxstat => __fxstat __GI___fxstat */
 int new_fxstat(int vers, int fd, void *buf)
 {
   int type;
@@ -1260,23 +1375,37 @@ int new_fxstat64(int vers, int fd, void *buf)
   return my_fstat(type, fd, buf);
 }
 
+
+export(new_fxstatat, __fxstatat);
+export(new_fxstatat, __GI___fxstatat);
+
 /* Added in glibc 2.4 */
-/* EXPORT: new_fxstatat => __fxstatat __GI___fxstatat */
+/* OLD-EXPORT: new_fxstatat => __fxstatat __GI___fxstatat */
 int new_fxstatat(int vers, int fd, const char *filename, void *buf, int flag)
 {
   __set_errno(ENOSYS);
   return -1;
 }
 
+
+export(new_fxstatat64, __fxstatat64);
+export(new_fxstatat64, __GI___fxstatat64);
+
 /* Added in glibc 2.4 */
-/* EXPORT: new_fxstatat64 => __fxstatat64 __GI___fxstatat64 */
+/* OLD-EXPORT: new_fxstatat64 => __fxstatat64 __GI___fxstatat64 */
 int new_fxstatat64(int vers, int fd, const char *filename, void *buf, int flag)
 {
   __set_errno(ENOSYS);
   return -1;
 }
 
-/* EXPORT: new_readlink => WEAK:readlink __readlink __GI_readlink __GI___readlink */
+
+export_weak_alias(new_readlink, readlink);
+export(new_readlink, __readlink);
+export(new_readlink, __GI_readlink);
+export(new_readlink, __GI___readlink);
+
+/* OLD-EXPORT: new_readlink => WEAK:readlink __readlink __GI_readlink __GI___readlink */
 int new_readlink(const char *pathname, char *buf, size_t buf_size)
 {
   region_t r = region_make();
@@ -1306,7 +1435,13 @@ int new_readlink(const char *pathname, char *buf, size_t buf_size)
   return -1;
 }
 
-/* EXPORT: new_access => WEAK:access __access __GI_access __GI___access */
+
+export_weak_alias(new_access, access);
+export(new_access, __access);
+export(new_access, __GI_access);
+export(new_access, __GI___access);
+
+/* OLD-EXPORT: new_access => WEAK:access __access __GI_access __GI___access */
 int new_access(const char *pathname, unsigned int mode)
 {
   region_t r = region_make();
@@ -1380,14 +1515,23 @@ int my_chmod(int nofollow, const char *pathname, unsigned int mode)
   return -1;
 }
 
-/* EXPORT: new_chmod => WEAK:chmod __chmod __GI_chmod __GI___chmod */
+
+export_weak_alias(new_chmod, chmod);
+export(new_chmod, __chmod);
+export(new_chmod, __GI_chmod);
+export(new_chmod, __GI___chmod);
+
+/* OLD-EXPORT: new_chmod => WEAK:chmod __chmod __GI_chmod __GI___chmod */
 int new_chmod(const char *pathname, unsigned int mode)
 {
   log_msg(MOD_MSG "chmod\n");
   return my_chmod(0 /* nofollow */, pathname, mode);
 }
 
-/* EXPORT: new_lchmod => lchmod */
+
+export(new_lchmod, lchmod);
+
+/* OLD-EXPORT: new_lchmod => lchmod */
 int new_lchmod(const char *pathname, unsigned int mode)
 {
   log_msg(MOD_MSG "lchmod\n");
@@ -1433,14 +1577,22 @@ int new_chown(const char *pathname, unsigned int owner, unsigned int group)
   return my_chown(0 /* nofollow */, pathname, owner, group);
 }
 
-/* EXPORT: new_lchown => lchown __lchown */
+
+export(new_lchown, lchown);
+export(new_lchown, __lchown);
+
+/* OLD-EXPORT: new_lchown => lchown __lchown */
 int new_lchown(const char *pathname, unsigned int owner, unsigned int group)
 {
   log_msg(MOD_MSG "lchown\n");
   return my_chown(1 /* nofollow */, pathname, owner, group);
 }
 
-/* EXPORT: new_rename => rename __GI_rename */
+
+export(new_rename, rename);
+export(new_rename, __GI_rename);
+
+/* OLD-EXPORT: new_rename => rename __GI_rename */
 int new_rename(const char *oldpath, const char *newpath)
 {
   region_t r = region_make();
@@ -1470,7 +1622,13 @@ int new_rename(const char *oldpath, const char *newpath)
   return -1;
 }
 
-/* EXPORT: new_link => WEAK:link __link __GI_link __GI___link */
+
+export_weak_alias(new_link, link);
+export(new_link, __link);
+export(new_link, __GI_link);
+export(new_link, __GI___link);
+
+/* OLD-EXPORT: new_link => WEAK:link __link __GI_link __GI___link */
 int new_link(const char *oldpath, const char *newpath)
 {
   region_t r = region_make();
@@ -1500,7 +1658,13 @@ int new_link(const char *oldpath, const char *newpath)
   return -1;
 }
 
-/* EXPORT: new_symlink => WEAK:symlink __symlink __GI_symlink __GI___symlink */
+
+export_weak_alias(new_symlink, symlink);
+export(new_symlink, __symlink);
+export(new_symlink, __GI_symlink);
+export(new_symlink, __GI___symlink);
+
+/* OLD-EXPORT: new_symlink => WEAK:symlink __symlink __GI_symlink __GI___symlink */
 int new_symlink(const char *oldpath, const char *newpath)
 {
   region_t r = region_make();
@@ -1530,7 +1694,13 @@ int new_symlink(const char *oldpath, const char *newpath)
   return -1;
 }
 
-/* EXPORT: new_mkdir => WEAK:mkdir __mkdir __GI_mkdir __GI___mkdir */
+
+export_weak_alias(new_mkdir, mkdir);
+export(new_mkdir, __mkdir);
+export(new_mkdir, __GI_mkdir);
+export(new_mkdir, __GI___mkdir);
+
+/* OLD-EXPORT: new_mkdir => WEAK:mkdir __mkdir __GI_mkdir __GI___mkdir */
 int new_mkdir(const char *pathname, unsigned int mode)
 {
   region_t r = region_make();
@@ -1559,7 +1729,10 @@ int new_mkdir(const char *pathname, unsigned int mode)
   return -1;
 }
 
-/* EXPORT: new_mkfifo => mkfifo */
+
+export(new_mkfifo, mkfifo);
+
+/* OLD-EXPORT: new_mkfifo => mkfifo */
 int new_mkfifo(const char *pathname, unsigned int mode)
 {
   log_msg(MOD_MSG "mkfifo\n");
@@ -1567,7 +1740,13 @@ int new_mkfifo(const char *pathname, unsigned int mode)
   return -1;
 }
 
-/* EXPORT: new_unlink => WEAK:unlink __unlink __GI_unlink __GI___unlink */
+
+export_weak_alias(new_unlink, unlink);
+export(new_unlink, __unlink);
+export(new_unlink, __GI_unlink);
+export(new_unlink, __GI___unlink);
+
+/* OLD-EXPORT: new_unlink => WEAK:unlink __unlink __GI_unlink __GI___unlink */
 int new_unlink(const char *pathname)
 {
   region_t r = region_make();
@@ -1595,7 +1774,13 @@ int new_unlink(const char *pathname)
   return -1;
 }
 
-/* EXPORT: new_rmdir => WEAK:rmdir __rmdir __GI_rmdir __GI___rmdir */
+
+export_weak_alias(new_rmdir, rmdir);
+export(new_rmdir, __rmdir);
+export(new_rmdir, __GI_rmdir);
+export(new_rmdir, __GI___rmdir);
+
+/* OLD-EXPORT: new_rmdir => WEAK:rmdir __rmdir __GI_rmdir __GI___rmdir */
 int new_rmdir(const char *pathname)
 {
   region_t r = region_make();
@@ -1623,7 +1808,13 @@ int new_rmdir(const char *pathname)
   return -1;
 }
 
-/* EXPORT: new_statfs => WEAK:statfs __statfs __GI_statfs __GI___statfs */
+
+export_weak_alias(new_statfs, statfs);
+export(new_statfs, __statfs);
+export(new_statfs, __GI_statfs);
+export(new_statfs, __GI___statfs);
+
+/* OLD-EXPORT: new_statfs => WEAK:statfs __statfs __GI_statfs __GI___statfs */
 int new_statfs(const char *path, struct statfs *buf)
 {
   char *v = getenv("PLASH_FAKE_STATFS_AVAIL");
@@ -1648,7 +1839,10 @@ int new_statfs(const char *path, struct statfs *buf)
 }
 
 
-/* EXPORT: new_setxattr => setxattr __GI_setxattr */
+export(new_setxattr, setxattr);
+export(new_setxattr, __GI_setxattr);
+
+/* OLD-EXPORT: new_setxattr => setxattr __GI_setxattr */
 int new_setxattr(const char *path, const char *name,
 		 const void *value, size_t size, int flags)
 {
@@ -1656,7 +1850,10 @@ int new_setxattr(const char *path, const char *name,
   return -1;
 }
 
-/* EXPORT: new_getxattr => getxattr __GI_getxattr */
+export(new_getxattr, getxattr);
+export(new_getxattr, __GI_getxattr);
+
+/* OLD-EXPORT: new_getxattr => getxattr __GI_getxattr */
 ssize_t new_getxattr(const char *path, const char *name,
 		     void *value, size_t size)
 {
@@ -1664,14 +1861,20 @@ ssize_t new_getxattr(const char *path, const char *name,
   return -1;
 }
 
-/* EXPORT: new_listxattr => listxattr __GI_listxattr */
+export(new_listxattr, listxattr);
+export(new_listxattr, __GI_listxattr);
+
+/* OLD-EXPORT: new_listxattr => listxattr __GI_listxattr */
 ssize_t new_listxattr(const char *path, char *list, size_t size)
 {
   __set_errno(ENOSYS);
   return -1;
 }
 
-/* EXPORT: new_removexattr => removexattr __GI_removexattr */
+export(new_removexattr, removexattr);
+export(new_removexattr, __GI_removexattr);
+
+/* OLD-EXPORT: new_removexattr => removexattr __GI_removexattr */
 int new_removexattr(const char *path, const char *name)
 {
   __set_errno(ENOSYS);
@@ -1679,7 +1882,10 @@ int new_removexattr(const char *path, const char *name)
 }
 
 
-/* EXPORT: new_lsetxattr => lsetxattr __GI_lsetxattr */
+export(new_lsetxattr, lsetxattr);
+export(new_lsetxattr, __GI_lsetxattr);
+
+/* OLD-EXPORT: new_lsetxattr => lsetxattr __GI_lsetxattr */
 int new_lsetxattr(const char *path, const char *name,
 		  const void *value, size_t size, int flags)
 {
@@ -1687,7 +1893,10 @@ int new_lsetxattr(const char *path, const char *name,
   return -1;
 }
 
-/* EXPORT: new_lgetxattr => lgetxattr __GI_lgetxattr */
+export(new_lgetxattr, lgetxattr);
+export(new_lgetxattr, __GI_lgetxattr);
+
+/* OLD-EXPORT: new_lgetxattr => lgetxattr __GI_lgetxattr */
 ssize_t new_lgetxattr(const char *path, const char *name,
 		      void *value, size_t size)
 {
@@ -1695,14 +1904,20 @@ ssize_t new_lgetxattr(const char *path, const char *name,
   return -1;
 }
 
-/* EXPORT: new_llistxattr => llistxattr __GI_llistxattr */
+export(new_llistxattr, llistxattr);
+export(new_llistxattr, __GI_llistxattr);
+
+/* OLD-EXPORT: new_llistxattr => llistxattr __GI_llistxattr */
 ssize_t new_llistxattr(const char *path, char *list, size_t size)
 {
   __set_errno(ENOSYS);
   return -1;
 }
 
-/* EXPORT: new_lremovexattr => lremovexattr __GI_lremovexattr */
+export(new_lremovexattr, lremovexattr);
+export(new_lremovexattr, __GI_lremovexattr);
+
+/* OLD-EXPORT: new_lremovexattr => lremovexattr __GI_lremovexattr */
 int new_lremovexattr(const char *path, const char *name)
 {
   __set_errno(ENOSYS);

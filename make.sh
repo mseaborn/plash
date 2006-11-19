@@ -208,10 +208,16 @@ build_libc_ldso_extras () {
 
   # These scripts rename symbols and hide symbols.
   # They are built by ./src/make-link-def.pl.
+  
   echo Hiding and renaming symbols in $OUT/combined-libc.os
+  ./src/get-export-syms.pl $OUT/combined-libc.os >$OUT/symbol-list-libc
   sh gensrc/out-link_main.sh $OUT/combined-libc.os
+  objcopy `./src/export-renames.pl <$OUT/symbol-list-libc` $OUT/combined-libc.os
+  
   echo Hiding and renaming symbols in $OUT/combined-rtld.os
+  ./src/get-export-syms.pl $OUT/combined-rtld.os >$OUT/symbol-list-rtld
   sh gensrc/out-link_rtld.sh $OUT/combined-rtld.os
+  objcopy `./src/export-renames.pl <$OUT/symbol-list-rtld` $OUT/combined-rtld.os
 }
 
 

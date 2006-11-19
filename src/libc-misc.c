@@ -712,9 +712,14 @@ int new_readdir_r(DIR *dir, struct dirent *ent, struct dirent **result)
   }
 }
 
+export(new_readdir64, __readdir64);
+export_versioned_symbol(libc, new_readdir64, readdir64, GLIBC_2_2);
+export_compat_symbol(libc, new_readdir64, readdir64, GLIBC_2_1);
+export(new_readdir64, __old_readdir64);
+
 /* The GLIBC_2.1 version / __old_readdir64 is included although I don't
    know how it's supposed to be different. */
-/* EXPORT: new_readdir64 => __readdir64 DEFVER:readdir64,GLIBC_2.2 VER:readdir64,GLIBC_2.1 __old_readdir64 */
+/* OLD-EXPORT: new_readdir64 => __readdir64 DEFVER:readdir64,GLIBC_2.2 VER:readdir64,GLIBC_2.1 __old_readdir64 */
 struct dirent64 *new_readdir64(DIR *dir)
 {
   seqf_t buf;
@@ -754,9 +759,15 @@ struct dirent64 *new_readdir64(DIR *dir)
   }
 }
 
+
+export(new_readdir64_r, __readdir64_r);
+export_versioned_symbol(libc, new_readdir64_r, readdir64_r, GLIBC_2_2);
+export_compat_symbol(libc, new_readdir64_r, readdir64_r, GLIBC_2_1);
+export(new_readdir64_r, __old_readdir64_r);
+
 /* The GLIBC_2.1 version / __old_readdir64_r is included although I don't
    know how it's supposed to be different. */
-/* EXPORT: new_readdir64_r => __readdir64_r DEFVER:readdir64_r,GLIBC_2.2 VER:readdir64_r,GLIBC_2.1 __old_readdir64_r */
+/* OLD-EXPORT: new_readdir64_r => __readdir64_r DEFVER:readdir64_r,GLIBC_2.2 VER:readdir64_r,GLIBC_2.1 __old_readdir64_r */
 /* This is a stupid interface too.  It provides a fixed-length buffer for
    the leaf name, and no way to say how big the buffer is (we assume that
    it's fixed by "struct dirent").  It's somewhat ambiguous whether the
@@ -1309,7 +1320,14 @@ int new_xstat(int vers, const char *pathname, void *buf)
   }
   return my_stat(0, type, pathname, buf);
 }
-/* EXPORT: new_xstat64 => ___xstat64 DEFVER:__xstat64,GLIBC_2.2 VER:__xstat64,GLIBC_2.1 __GI___xstat64 */
+
+
+export(new_xstat64, ___xstat64);
+export_versioned_symbol(libc, new_xstat64, __xstat64, GLIBC_2_2);
+export_compat_symbol(libc, new_xstat64, __xstat64, GLIBC_2_1);
+export(new_xstat64, __GI___xstat64);
+
+/* OLD-EXPORT: new_xstat64 => ___xstat64 DEFVER:__xstat64,GLIBC_2.2 VER:__xstat64,GLIBC_2.1 __GI___xstat64 */
 int new_xstat64(int vers, const char *pathname, void *buf)
 {
   int type;
@@ -1336,7 +1354,14 @@ int new_lxstat(int vers, const char *pathname, void *buf)
   }
   return my_stat(1, type, pathname, buf);
 }
-/* EXPORT: new_lxstat64 => ___lxstat64 DEFVER:__lxstat64,GLIBC_2.2 VER:__lxstat64,GLIBC_2.1 __GI___lxstat64 */
+
+
+export(new_lxstat64, ___lxstat64);
+export_versioned_symbol(libc, new_lxstat64, __lxstat64, GLIBC_2_2);
+export_compat_symbol(libc, new_lxstat64, __lxstat64, GLIBC_2_1);
+export(new_lxstat64, __GI___lxstat64);
+
+/* OLD-EXPORT: new_lxstat64 => ___lxstat64 DEFVER:__lxstat64,GLIBC_2.2 VER:__lxstat64,GLIBC_2.1 __GI___lxstat64 */
 int new_lxstat64(int vers, const char *pathname, void *buf)
 {
   int type;
@@ -1363,7 +1388,14 @@ int new_fxstat(int vers, int fd, void *buf)
   }
   return my_fstat(type, fd, buf);
 }
-/* EXPORT: new_fxstat64 => ___fxstat64 DEFVER:__fxstat64,GLIBC_2.2 VER:__fxstat64,GLIBC_2.1 __GI___fxstat64 */
+
+
+export(new_fxstat64, ___fxstat64);
+export_versioned_symbol(libc, new_fxstat64, __fxstat64, GLIBC_2_2);
+export_compat_symbol(libc, new_fxstat64, __fxstat64, GLIBC_2_1);
+export(new_fxstat64, __GI___fxstat64);
+
+/* OLD-EXPORT: new_fxstat64 => ___fxstat64 DEFVER:__fxstat64,GLIBC_2.2 VER:__fxstat64,GLIBC_2.1 __GI___fxstat64 */
 int new_fxstat64(int vers, int fd, void *buf)
 {
   int type;
@@ -1570,7 +1602,13 @@ static int my_chown(int nofollow, const char *pathname,
   return -1;
 }
 
-/* EXPORT: new_chown => DEFVER:chown,GLIBC_2.1 VER:chown,GLIBC_2.0 __chown __GI___chown */
+
+export_versioned_symbol(libc, new_chown, chown, GLIBC_2_1);
+export_compat_symbol(libc, new_chown, chown, GLIBC_2_0);
+export(new_chown, __chown);
+export(new_chown, __GI___chown);
+
+/* OLD-EXPORT: new_chown => DEFVER:chown,GLIBC_2.1 VER:chown,GLIBC_2.0 __chown __GI___chown */
 int new_chown(const char *pathname, unsigned int owner, unsigned int group)
 {
   log_msg(MOD_MSG "chown\n");

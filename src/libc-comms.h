@@ -56,13 +56,38 @@ void libc_log(const char *msg);
   extern int aliasname() __attribute ((weak, alias (#name)));
 
 
+/* Symbol export declarations */
+
 /* NB. Semicolons not necessary */
-/* export(new_open, __open) */
-/* export_weak_alias(new_open, open) */
+
+/* export_weak_alias() corresponds to weak_alias(),
+   export_versioned_symbol() corresponds to versioned_symbol(), and
+   export_compat_symbol() corresponds to compat_symbol()
+   from glibc's include/shlib-compat.h. */
+
+/* e.g. export(new_open, __open) */
 #define export(name, aliasname) \
   extern int export_##aliasname() __attribute ((alias (#name)));
+
+/* e.g. export_weak_alias(new_open, open) */
 #define export_weak_alias(name, aliasname) \
   extern int export_##aliasname() __attribute ((weak, alias (#name)));
+
+/* This declares the default version of a symbol.
+   e.g. export_versioned_symbol(libc, new_readdir64, readdir64, GLIBC_2_2) */
+#define export_versioned_symbol(lib, local, symbol, version) \
+  pl_versioned_symbol_1(local, symbol, VERSION_##lib##_##version)
+#define pl_versioned_symbol_1(local, symbol, version) \
+  extern int exportver_##symbol##__defaultversion__##version() \
+    __attribute ((alias (#local)));
+
+/* This declares a non-default version of a symbol.
+   e.g. export_compat_symbol(libc, new_readdir64, readdir64, GLIBC_2_1) */
+#define export_compat_symbol(lib, local, symbol, version) \
+  pl_compat_symbol_1(local, symbol, VERSION_##lib##_##version)
+#define pl_compat_symbol_1(local, symbol, version) \
+  extern int exportver_##symbol##__version__##version() \
+    __attribute ((alias (#local)));
 
 
 #define offsetof(s, f) ((int) &((s *) 0)->f)

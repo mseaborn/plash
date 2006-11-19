@@ -184,7 +184,7 @@ sub obj_copy_cmds {
   'if [ "$#" -ne 1 ]; then echo Expect 1 argument; exit 1; fi'.
   "\n\n".
   "objcopy \\\n".join('', map { "  -G $_ \\\n" } @$keep).
-    ' --wildcard -G "export_*"'.
+    ' --wildcard -G "export_*" -G "exportver_*"'.
     #'  `for SYM in $(cat shobj/symbol-list); do echo -G $SYM; done` '.
     "  \$1\n".
   "objcopy \\\n".

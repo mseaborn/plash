@@ -217,7 +217,7 @@ build_libc_ldso_extras () {
   echo Hiding and renaming symbols in $OUT/combined-rtld.os
   ./src/get-export-syms.pl $OUT/combined-rtld.os >$OUT/symbol-list-rtld
   sh gensrc/out-link_rtld.sh $OUT/combined-rtld.os
-  objcopy `./src/export-renames.pl <$OUT/symbol-list-rtld` $OUT/combined-rtld.os
+  objcopy `./src/export-renames.pl --rtld <$OUT/symbol-list-rtld` $OUT/combined-rtld.os
 }
 
 

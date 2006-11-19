@@ -27,7 +27,6 @@
 export_weak_alias(new_getsockopt, getsockopt);
 export(new_getsockopt, __getsockopt);
 
-/* OLD-EXPORT: new_getsockopt => WEAK:getsockopt __getsockopt */
 int new_getsockopt(int sock_fd, int level, int opt_name,
 		   void *opt_val, socklen_t *opt_len)
 {

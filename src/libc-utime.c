@@ -77,7 +77,6 @@ export_weak_alias(new_utime, utime);
 export(new_utime, __utime);
 export(new_utime, __GI_utime);
 
-/* OLD-EXPORT: new_utime => WEAK:utime __utime __GI_utime */
 int new_utime(const char *path, struct utimbuf *buf)
 {
   if(buf) {
@@ -99,7 +98,6 @@ int new_utime(const char *path, struct utimbuf *buf)
 export_weak_alias(new_utimes, utimes);
 export(new_utimes, __utimes);
 
-/* OLD-EXPORT: new_utimes => WEAK:utimes __utimes */
 int new_utimes(const char *path, struct timeval times[2])
 {
   if(times) {
@@ -116,7 +114,6 @@ int new_utimes(const char *path, struct timeval times[2])
 export_weak_alias(new_lutimes, lutimes);
 export(new_lutimes, __lutimes);
 
-/* OLD-EXPORT: new_lutimes => WEAK:lutimes __lutimes */
 int new_lutimes(const char *path, struct timeval times[2])
 {
   if(times) {

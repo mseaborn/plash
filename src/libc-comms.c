@@ -156,7 +156,6 @@ export(plash_libc_reset_connection, plash_libc_reset_connection);
 
 /* Calling this will force the code to look at PLASH_COMM_FD and
    PLASH_CAPS again. */
-/* OLD-EXPORT: plash_libc_reset_connection */
 void plash_libc_reset_connection()
 {
   if(initialised) {
@@ -237,7 +236,6 @@ void libc_log(const char *msg)
 
 export(plash_libc_duplicate_connection, plash_libc_duplicate_connection);
 
-/* OLD-EXPORT: plash_libc_duplicate_connection */
 int plash_libc_duplicate_connection()
 {
   region_t r;

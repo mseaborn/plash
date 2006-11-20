@@ -53,10 +53,6 @@ void cap_handle_select_result(fd_set *read_fds,
 			      fd_set *write_fds,
 			      fd_set *except_fds);
 
-#if 0
-int cap_relocate_fd(int old_fd);
-#endif
-
 
 /* For cap-call-return.c: */
 

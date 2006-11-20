@@ -1017,44 +1017,6 @@ void cap_handle_select_result(fd_set *read_fds,
 }
 
 
-/* This has turned out not to be a good idea. */
-#if 0
-/* This is used by libc when it gets a close() or dup2() call that it
-   notices will clobber the existing connection.  This function
-   attempts to relocate the connection that uses old_fd to a different
-   file descriptor number. */
-/* Returns the new file descriptor number, or -1 if no connection used
-   old_fd. */
-int cap_relocate_fd(int old_fd)
-{
-  struct connection *conn;
-  for(conn = server_state.list.next;
-      !conn->l.head;
-      conn = conn->l.next) {
-    if(conn->comm && conn->sock_fd == old_fd) {
-      /* If the socket currently uses a low-numbered FD, try a
-	 high-numbered FD.  If it uses a high-numbered FD, try a
-	 low-numbered FD. */
-      int new_fd = fcntl(old_fd, F_DUPFD,
-			 old_fd < 100 ? 100 : 0);
-      if(new_fd < 0) {
-	/* Give up.  There's no way of signalling an error at the moment. */
-	shut_down_connection(conn);
-	return -1;
-      }
-      else {
-	close(old_fd);
-	conn->sock_fd = new_fd;
-	conn->comm->sock = new_fd;
-	return new_fd;
-      }
-    }
-  }
-  return -1;
-}
-#endif
-
-
 #ifdef GC_DEBUG
 void cap_mark_exported_objects(void)
 {

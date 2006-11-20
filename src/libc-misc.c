@@ -214,37 +214,6 @@ int new_open(const char *filename, int flags, ...)
 }
 
 
-/* This has turned out not to be a good idea. */
-#if 0
-static void relocate_comm_fd()
-{
-  /* This may set comm_sock to -1 on failure. */
-  comm_sock = cap_relocate_fd(comm_sock);
-
-  /* Note that resetting the environment like this often doesn't work,
-     eg. for XEmacs.
-     The application may have taken its own copy of the environment
-     which it then passes to execve().  We should insert our own changes
-     at the point of execve(), not here. */
-#if !defined(IN_RTLD)
-  if(comm_sock < 0) {
-    unsetenv("PLASH_COMM_FD");
-  }
-  else {
-    char buf[40];
-    snprintf(buf, sizeof(buf), "%i", comm_sock);
-    setenv("PLASH_COMM_FD", buf, 1);
-  }
-#endif
-
-  if(0) {
-    char *msg = "warning: comm socket clobbered!\n";
-    write(2, msg, strlen(msg));
-  }
-}
-#endif
-
-
 export_weak_alias(new_close, close);
 export_weak_alias(new_close, __close);
 export(new_close, __libc_close);
@@ -273,13 +242,6 @@ int new_close(int fd)
 #endif
     __set_errno(EBADF);
     return -1;
-
-#if 0
-    relocate_comm_fd();
-    /* Note that now we have relocated fd, fd has been closed, and the
-       call to close() below will fail and return an error.  But that's
-       okay: an error is what the caller should get. */
-#endif
   }
   fds_slot_clear(fd);
   return close(fd);
@@ -311,10 +273,6 @@ int new_dup2(int source_fd, int dest_fd)
 #endif
     __set_errno(EINVAL);
     return -1;
-
-#if 0
-    relocate_comm_fd();
-#endif
   }
   
   rc = dup2(source_fd, dest_fd);

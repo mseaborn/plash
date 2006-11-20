@@ -132,6 +132,9 @@ if [ ! -d "$GLIBC" ]; then
   echo "Warning: glibc object files directory \"$GLIBC\" does not exist"
 fi
 
+# Used by the SHLIB_COMPAT macro
+cp -av $GLIBC/abi-versions.h gensrc/
+
 
 
 # This links the plash-libc code that is to be linked into libc.so and

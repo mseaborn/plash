@@ -89,6 +89,14 @@ void libc_log(const char *msg);
   extern int exportver_##symbol##__version__##version() \
     __attribute ((alias (#local)));
 
+#include "abi-versions.h"
+
+/* Copied from glibc's shlib-compat.h.
+   Test for IS_IN_##lib was removed. */
+#define SHLIB_COMPAT(lib, introduced, obsoleted) \
+   (!(ABI_##lib##_##obsoleted - 0) \
+    || ((ABI_##lib##_##introduced - 0) < (ABI_##lib##_##obsoleted - 0)))
+
 
 #define offsetof(s, f) ((int) &((s *) 0)->f)
 

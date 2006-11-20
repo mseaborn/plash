@@ -131,6 +131,8 @@ gcc('src/libc-misc.c', 'obj/libc-misc.os', @opts_c,
     '-DIN_LIBC');
 gcc('src/libc-misc.c', 'obj/rtld-libc-misc.os', @opts_c,
     '-DIN_RTLD');
+gcc('src/libc-stat.c', 'obj/libc-stat.os', @opts_c, '-DIN_LIBC');
+gcc('src/libc-stat.c', 'obj/rtld-libc-stat.os', @opts_c, '-DIN_RTLD');
 gcc('src/libc-comms.c', 'obj/libc-comms.os', @opts_c, '-DIN_LIBC');
 gcc('src/libc-comms.c', 'obj/rtld-libc-comms.os', @opts_c, '-DIN_RTLD');
 gcc('src/libc-fork-exec.c', 'obj/libc-fork-exec.os', @opts_c);

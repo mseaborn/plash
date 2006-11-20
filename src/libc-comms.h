@@ -26,6 +26,8 @@
 #include "libc-errno.h"
 
 
+void set_errno_from_reply(seqf_t msg);
+
 int new_open(const char *filename, int flags, ...);
 
 

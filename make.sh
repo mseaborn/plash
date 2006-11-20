@@ -168,6 +168,7 @@ build_libc_ldso_extras () {
   OBJS_FOR_LIBC2=`for F in $OBJS_FOR_LIBC; do echo $GLIBC/$F; done`
   echo Linking $OUT/combined-libc.os
   ld -r obj/libc-misc.os \
+	obj/libc-stat.os \
 	obj/libc-fork-exec.os \
 	obj/libc-connect.os \
 	obj/libc-getuid.os \
@@ -187,7 +188,9 @@ build_libc_ldso_extras () {
 	-o $OUT/combined-libc.os
 
   echo Linking $OUT/combined-rtld.os
-  ld -r obj/rtld-libc-misc.os obj/libc-getuid.os \
+  ld -r obj/rtld-libc-misc.os \
+	obj/rtld-libc-stat.os \
+	obj/libc-getuid.os \
 	obj/rtld-libc-comms.os \
 	obj/cap-utils.os \
 	obj/cap-call-return.os \

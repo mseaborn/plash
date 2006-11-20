@@ -21,6 +21,10 @@
 #define INC_PLASH_LIBC_ERRNO_H
 
 
+/* This must come before we redefine errno. */
+#include <errno.h>
+
+
 #ifdef IN_RTLD
 #  undef errno
 #  define errno rtld_errno

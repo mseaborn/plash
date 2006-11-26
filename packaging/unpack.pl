@@ -2,14 +2,16 @@
 
 use IO::File;
 
+my $server = 'http://localhost:9999/debian'; # approx proxy
 my $packages = "$ENV{'HOME'}/fetched/ftp.uk.debian.org/debian/dists/testing/main/binary-i386/Packages.gz";
 
-my $package = 'gnumeric';
+my $package = 'leafpad';
 
+my $verbose = 1;
 my $do_unpack = 0;
-my $dest_dir = 'unpacked-gnumeric';
+my $dest_dir = "unpacked-$package";
 
-my $do_download = 0;
+my $do_download = 1;
 
 my @base = ('bash',
 	    'coreutils', # for /usr/bin/id
@@ -67,7 +69,7 @@ sub search_deps {
   # Check whether package is available
   my $package = $name_idx->{$name};
   if(!defined $package) {
-    print $indent."$name NOT AVAILABLE\n";
+    if($verbose) { print $indent."$name NOT AVAILABLE\n"; }
     push(@{$deplist->{Lacking}}, $name);
     return;
   }
@@ -138,15 +140,19 @@ sub try_get {
     $size += $d->{size};
     
     $d->{filename} =~ /\/([^\/]+)$/ || die;
-    my $f = $1;
+    my $leafname = $1;
 
-    $d->{local_file} = "/var/cache/apt/archives/$f";
+    $d->{local_file} = "/var/cache/apt/archives/$leafname";
     if(!-e $d->{local_file}) {
-      $d->{local_file} = "ftp.uk.debian.org/debian/$d->{filename}";
+      $d->{local_file} = "cache/$leafname";
       if(!-e $d->{local_file}) {
 	$size_to_get += $d->{size};
+	
 	if($do_download) {
-	  run_cmd('wget', "http://ftp.uk.debian.org/debian/$d->{filename}");
+	  print "getting $leafname...\n";
+	  mkdir('cache');
+	  run_cmd('curl', "$server/$d->{filename}",
+		  '-o', $d->{local_file});
 	}
       }
     }
@@ -164,18 +170,22 @@ if($do_download) {
 if($do_unpack) {
   print "unpacking...\n";
   mkdir($dest_dir);
-  if(1) {
-    # unpack in single dir
-    foreach my $p (@{$deplist->{List}}) {
-      run_cmd('dpkg-deb', '-x', $p->{local_file},
-	      $dest_dir);
+
+  my $p_dest_dir = 'out-packages';
+  mkdir($p_dest_dir);
+  # unpack in separate dirs
+  foreach my $p (@{$deplist->{List}}) {
+    my $dest = "$p_dest_dir/$p->{package}_$p->{version}";
+    if(!-e $dest) {
+      run_cmd('dpkg-deb', '-x', $p->{local_file}, "$dest.tmp");
+      rename("$dest.tmp", $dest) || die "Can't rename $dest into place";
     }
   }
-  else {
-    # unpack in separate dirs
-    foreach my $p (@{$deplist->{List}}) {
-      run_cmd('dpkg-deb', '-x', $p->{local_file},
-	      "$dest_dir/$p->{package}_$p->{version}");
+  
+  # unpack in single dir
+  foreach my $p (@{$deplist->{List}}) {
+    foreach my $f (glob("$p_dest_dir/$p->{package}_$p->{version}/*")) {
+      run_cmd('cp', '-lr', $f, $dest_dir);
     }
   }
 }

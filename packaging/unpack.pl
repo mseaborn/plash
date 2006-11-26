@@ -18,9 +18,11 @@ my @base = ('bash',
 	    );
 
 my $remove = { 'libc6' => 1, # need to replace to provide /usr/lib/gconv...
+	       'base-files' => 1,
 	     };
 
 
+print "reading package list...\n";
 my @parts;
 foreach my $y (grep { $_ !~ /^\s*$/ }
 	       split(/\n\s*\n/,
@@ -36,94 +38,96 @@ foreach my $y (grep { $_ !~ /^\s*$/ }
 
 my $name_idx = { map { ($_->{package} => $_) } @parts };
 
-sub get_deps {
-  my ($p) = @_;
-  my @deps;
-  if(defined $p->{depends}) {
-    foreach my $d (map { trim($_) } split(/,/, $p->{depends})) {
-      my @or = map { trim($_) } split(/\|/, $d);
+
+sub split_dep_list {
+  my ($d) = @_;
+  map { trim($_) } split(/,/, $d);
+}
+sub split_disjunction {
+  my ($d) = @_;
+  map { trim($_) } split(/\|/, $d)
+}
+sub parse_dep {
+  my ($d) = @_;
+  $d =~ /^(\S+)(\s*\([^\)]*\))?$/
+    || die "Unrecognised dependency format: $d";
+  { Name => $1 }
+}
+
+sub search_deps {
+  my ($deplist, $degree, $name) = @_;
+  my $indent = '  ' x $degree;
+
+  # Special case packages
+  if($remove->{$name}) {
+    if($verbose) { print $indent."$name SKIPPED\n"; }
+    return;
+  }
+
+  # Check whether package is available
+  my $package = $name_idx->{$name};
+  if(!defined $package) {
+    print $indent."$name NOT AVAILABLE\n";
+    push(@{$deplist->{Lacking}}, $name);
+    return;
+  }
+
+  if($deplist->{Hash}{$name}) {
+    # Already added
+    if($verbose) { print $indent."($name $package->{version})\n"; }
+    if($deplist->{Degree}{$name} > $degree) {
+      $deplist->{Degree}{$name} = $degree;
+    }
+    return;
+  }
+  if($verbose) { print $indent."$name $package->{version}\n"; }
+  
+  # Add to list
+  $deplist->{Hash}{$name} = 1;
+  $deplist->{Degree}{$name} = $degree;
+  push(@{$deplist->{List}}, $package);
+
+  # Process further dependencies
+  if(defined($package->{depends})) {
+    foreach my $dep (split_dep_list($package->{depends})) {
+      my @or = split_disjunction($dep);
+
+      # Only look at first dependency in disjunction
       foreach my $d ($or[0]) {
-	if($d =~ /^(\S+)(\s*\([^\)]*\))?$/) {
-	  push(@deps, $1);
-	}
-      }
-    }
-  }
-  @deps
-}
-
-sub all_deps {
-  my ($p) = @_;
-  my $seen = {};
-  my @q = ($p);
-  while(@q) {
-    my $p = pop(@q);
-    foreach my $d (get_deps($p)) {
-      if(!$seen->{$d}) {
-	$seen->{$d} = 1;
-	my $x = $name_idx->{$d};
-	if(defined $x) {
-	  push(@q, $x);
-	}
-      }
-    }
-  }
-  keys(%$seen)
-}
-
-sub add_deps {
-  my ($p) = @_;
-  #print "$p->{package}\n";
-  
-  if(defined $p->{deps}) { return }
-  $p->{deps} = {};
-  
-  if(defined $p->{depends}) {
-    foreach my $d (map { trim($_) } split(/,/, $p->{depends})) {
-      my @or = map { trim($_) } split(/\|/, $d);
-      
-      #if(scalar(@or) > 1) { print "$d\n"; }
-      
-      foreach my $d ($or[0]) {
-	if($d =~ /^(\S+)(\s*\([^\)]*\))?$/) {
-	  my $name = $1;
-	  my $p2 = $name_idx->{$1};
-	  if(!defined $p2) { print "$name\n" }
-	  add_deps($p2);
-	}
-	else { die "Bad dep: $d" }
+	my $dep = parse_dep($d);
+	search_deps($deplist, $degree + 1, $dep->{Name});
       }
     }
   }
 }
 
-if(0) {
-  foreach my $p (@parts) {
-    $p->{deps} = [all_deps($p)];
-  }
-  foreach my $p (sort { scalar(@{$a->{deps}}) <=>
-			  scalar(@{$b->{deps}}) } @parts) {
-    printf "%s\n%i\n%s\n\n",
-      $p->{package},
-	scalar(@{$p->{deps}}),
-	  join(', ', @{$p->{deps}});
+
+my $deplist =
+  { List => [],
+    Hash => {},
+    Degree => {},
+    Lacking => [],
+  };
+
+foreach my $p (@base) {
+  search_deps($deplist, 0, $p);
+}
+search_deps($deplist, 0, $package);
+
+# Print dependencies, ordered by degree of separation
+foreach my $dep (sort { $deplist->{Degree}{$a->{package}} <=>
+			$deplist->{Degree}{$b->{package}} }
+		 @{$deplist->{List}}) {
+  print "$deplist->{Degree}{$dep->{package}} $dep->{package}\n";
+}
+
+if(scalar(@{$deplist->{Lacking}}) > 0) {
+  print "Missing packages:\n";
+  foreach my $p (@{$deplist->{Lacking}}) {
+    print "$p\n";
   }
 }
 
-my @deps;
-
-foreach my $name ($package, @base, all_deps($name_idx->{$package})) {
-  # skip special case
-  if($remove->{$name}) { next }
-  
-  my $d = $name_idx->{$name};
-  if(defined $d) {
-    push(@deps, $d);
-  }
-  else {
-    print "missing: $name\n";
-  }
-}
 
 sub try_get {
   my ($do_download, $list) = @_;
@@ -152,9 +156,9 @@ sub try_get {
     $size / (1024 * 1024);
 }
 
-try_get(0, \@deps);
+try_get(0, $deplist->{List});
 if($do_download) {
-  try_get(1, \@deps);
+  try_get(1, $deplist->{List});
 }
 
 if($do_unpack) {
@@ -162,14 +166,14 @@ if($do_unpack) {
   mkdir($dest_dir);
   if(1) {
     # unpack in single dir
-    foreach my $p (@deps) {
+    foreach my $p (@{$deplist->{List}}) {
       run_cmd('dpkg-deb', '-x', $p->{local_file},
 	      $dest_dir);
     }
   }
   else {
     # unpack in separate dirs
-    foreach my $p (@deps) {
+    foreach my $p (@{$deplist->{List}}) {
       run_cmd('dpkg-deb', '-x', $p->{local_file},
 	      "$dest_dir/$p->{package}_$p->{version}");
     }

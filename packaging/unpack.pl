@@ -6,6 +6,7 @@ my $packages = "$ENV{'HOME'}/fetched/ftp.uk.debian.org/debian/dists/testing/main
 
 my $package = 'gnumeric';
 
+my $do_unpack = 0;
 my $dest_dir = 'unpacked-gnumeric';
 
 my $do_download = 0;
@@ -156,19 +157,22 @@ if($do_download) {
   try_get(1, \@deps);
 }
 
-mkdir($dest_dir);
-if(1) {
-  # unpack in single dir
-  foreach my $p (@deps) {
-    run_cmd('dpkg-deb', '-x', $p->{local_file},
-	    $dest_dir);
+if($do_unpack) {
+  print "unpacking...\n";
+  mkdir($dest_dir);
+  if(1) {
+    # unpack in single dir
+    foreach my $p (@deps) {
+      run_cmd('dpkg-deb', '-x', $p->{local_file},
+	      $dest_dir);
+    }
   }
-}
-else {
-  # unpack in separate dirs
-  foreach my $p (@deps) {
-    run_cmd('dpkg-deb', '-x', $p->{local_file},
-	    "$dest_dir/$p->{package}_$p->{version}");
+  else {
+    # unpack in separate dirs
+    foreach my $p (@deps) {
+      run_cmd('dpkg-deb', '-x', $p->{local_file},
+	      "$dest_dir/$p->{package}_$p->{version}");
+    }
   }
 }
 

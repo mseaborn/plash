@@ -8,10 +8,11 @@ my $packages = "$ENV{'HOME'}/fetched/ftp.uk.debian.org/debian/dists/testing/main
 my $package = 'leafpad';
 
 my $verbose = 1;
-my $do_unpack = 0;
-my $dest_dir = "unpacked-$package";
+my $do_unpack = 1;
+my $dest_dir = "$package/unpacked";
 
-my $do_download = 1;
+my $do_download = 0;
+my $skip_not_found = 1;
 
 my @base = ('bash',
 	    'coreutils', # for /usr/bin/id
@@ -90,15 +91,20 @@ sub search_deps {
   push(@{$deplist->{List}}, $package);
 
   # Process further dependencies
+  my @deps;
   if(defined($package->{depends})) {
-    foreach my $dep (split_dep_list($package->{depends})) {
-      my @or = split_disjunction($dep);
-
-      # Only look at first dependency in disjunction
-      foreach my $d ($or[0]) {
-	my $dep = parse_dep($d);
-	search_deps($deplist, $degree + 1, $dep->{Name});
-      }
+    push(@deps, split_dep_list($package->{depends}));
+  }
+  if(defined($package->{'pre-depends'})) {
+    push(@deps, split_dep_list($package->{'pre-depends'}));
+  }
+  foreach my $dep (@deps) {
+    my @or = split_disjunction($dep);
+    
+    # Only look at first dependency in disjunction
+    foreach my $d ($or[0]) {
+      my $dep = parse_dep($d);
+      search_deps($deplist, $degree + 1, $dep->{Name});
     }
   }
 }
@@ -175,16 +181,30 @@ if($do_unpack) {
   mkdir($p_dest_dir);
   # unpack in separate dirs
   foreach my $p (@{$deplist->{List}}) {
+    if($skip_not_found && !-e $p->{local_file}) { next }
+
+    # Extract main files
     my $dest = "$p_dest_dir/$p->{package}_$p->{version}";
     if(!-e $dest) {
       run_cmd('dpkg-deb', '-x', $p->{local_file}, "$dest.tmp");
+      rename("$dest.tmp", $dest) || die "Can't rename $dest into place";
+    }
+
+    # Extract control files
+    $dest = "out-control/$p->{package}_$p->{version}";
+    if(!-e $dest) {
+      run_cmd('dpkg-deb', '-e', $p->{local_file}, "$dest.tmp");
       rename("$dest.tmp", $dest) || die "Can't rename $dest into place";
     }
   }
   
   # unpack in single dir
   foreach my $p (@{$deplist->{List}}) {
-    foreach my $f (glob("$p_dest_dir/$p->{package}_$p->{version}/*")) {
+    my $src = "$p_dest_dir/$p->{package}_$p->{version}";
+    
+    if($skip_not_found && !-e $src) { next }
+    
+    foreach my $f (glob("$src/*")) {
       run_cmd('cp', '-lr', $f, $dest_dir);
     }
   }

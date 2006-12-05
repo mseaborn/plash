@@ -1,5 +1,7 @@
 #!/usr/bin/perl -w
 
+# Usage: run-tests.pl [-n]
+
 use IO::File;
 
 # This is a workaround for running on an autobuild machine that
@@ -13,6 +15,19 @@ sub gettimeofday {
 }
 
 $|=1; # switch off output buffering
+
+
+# Read arguments
+my $use_plash = 1;
+foreach my $arg (@ARGV) {
+  # "-n" for "use native environment"
+  if($arg eq '-n') {
+    $use_plash = 0;
+  }
+  else {
+    die "Unrecognised argument: $arg";
+  }
+}
 
 
 sub read_test_list {
@@ -88,7 +103,15 @@ foreach my $test (sort(keys(%$tests))) {
     
     print $out "$cmd\n";
     my $time0 = gettimeofday();
-    my $rc = system($cmd);
+    my $rc;
+    if($use_plash) {
+      # my @grant = ('-B', '-fw', '.', '-flw', '/tmp', '-fl', '/etc');
+      my @grant = ('-fw', '/');
+      $rc = system('pola-run', @grant, '-e', '/bin/sh', '-c', $cmd);
+    }
+    else {
+      $rc = system($cmd);
+    }
     my $time1 = gettimeofday();
     if($rc == 0) { $result = 'ok' }
     else { $result = 'failed' }

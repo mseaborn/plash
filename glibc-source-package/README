@@ -1,0 +1,13 @@
+
+This is for creating a Debian package to contain the glibc source
+code, so that the Plash source package does not have to include the
+glibc source directory.
+
+Unfortunately, the Debian packaging system does not provide a way for
+one source package to use data from another unless it is built into a
+binary (*.deb) package.
+
+So what we do is rather round-the-houses:
+The source here builds a Debian source package...
+which builds a Debian binary package (containing only the glibc source)...
+which is used by the Plash source package to build the Plash binary package.

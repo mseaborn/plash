@@ -18,18 +18,33 @@ GLIBC_ARCHIVE=glibc-$GLIBC_VERSION.tar.bz2
 # Only needed for glibc <2.4
 LINUXTHREADS_ARCHIVE=glibc-linuxthreads-$GLIBC_VERSION.tar.bz2
 
+SEARCH=". /usr/src"
+
+
+search () {
+  FILE=$1
+  shift
+  for DIR in $SEARCH; do
+    if [ -e "$DIR/$FILE" ]; then
+      echo $DIR/$FILE
+      return 0
+    fi
+  done
+  return 1 # Not found
+}
+
 
 unpack () {
   # Check that files are present
   FAIL=0
-  if [ ! -e $GLIBC_ARCHIVE ]; then
-    echo "$0: File $GLIBC_ARCHIVE not present"
+  if ! search $GLIBC_ARCHIVE >/dev/null; then
+    echo "$0: File $GLIBC_ARCHIVE not found (looked in: $SEARCH)"
     echo "$0: Try downloading ftp://ftp.gnu.org/gnu/glibc/$GLIBC_ARCHIVE"
     FAIL=1
   fi
   if [ $GLIBC_VERSION = 2.3.6 ] &&
-     [ ! -e $LINUXTHREADS_ARCHIVE ]; then
-    echo "$0: File $LINUXTHREADS_ARCHIVE not present"
+     ! search $LINUXTHREADS_ARCHIVE >/dev/null; then
+    echo "$0: File $LINUXTHREADS_ARCHIVE not found (looked in: $SEARCH)"
     echo "$0: Try downloading ftp://ftp.gnu.org/gnu/glibc/$LINUXTHREADS_ARCHIVE"
     FAIL=1
   fi
@@ -39,9 +54,9 @@ unpack () {
 
   # Unpack
   mkdir -p tmp
-  bzip2 -cd $GLIBC_ARCHIVE | tar -C tmp -xf -
+  bzip2 -cd `search $GLIBC_ARCHIVE` | tar -C tmp -xf -
   if [ $GLIBC_VERSION = 2.3.6 ]; then
-    bzip2 -cd $LINUXTHREADS_ARCHIVE | tar -C tmp/$GLIBC_DIR -xf -
+    bzip2 -cd `search $LINUXTHREADS_ARCHIVE` | tar -C tmp/$GLIBC_DIR -xf -
     # Apply patch
     patch -p1 -d tmp/$GLIBC_DIR <patches/glibc-2005-10-04.diff
   fi

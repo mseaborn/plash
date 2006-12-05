@@ -3,7 +3,7 @@ Section: misc
 Priority: optional
 Maintainer: Mark Seaborn <mrs@mythic-beasts.com>
 Standards-Version: 3.7.2
-Build-Depends: make (>= 3.80-1), tar (>= 1.13.11), linux-kernel-headers (>= 2.5.999-test7-bk-9), binutils (>= 2.14.90.0.7-5), gcc-3.3, sed (>= 4.0.5-4), gawk, debhelper, perl, dietlibc, libgtk2.0-dev (>= 2.8.0), libreadline5-dev, python-all-dev, python-support (>= 0.3), bzip2, docbook2x, docbook-xml
+Build-Depends: glibc-source-2.3.6, make (>= 3.80-1), tar (>= 1.13.11), linux-kernel-headers (>= 2.5.999-test7-bk-9), binutils (>= 2.14.90.0.7-5), gcc-3.3, sed (>= 4.0.5-4), gawk, debhelper, perl, dietlibc, libgtk2.0-dev (>= 2.8.0), libreadline5-dev, python-all-dev, python-support (>= 0.3), bzip2, docbook2x, docbook-xml
 
 Package: plash
 Architecture: any

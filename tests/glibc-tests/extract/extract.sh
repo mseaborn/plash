@@ -7,9 +7,9 @@
 set -e
 
 DIR=/tmp/glibc
-GLIBC=glibc-2.3.5
+GLIBC=glibc-2.4
 SOURCE=$DIR/$GLIBC
-GLIBC_ARCHIVE=glibc-2.3.5.tar.bz2
+GLIBC_ARCHIVE=$GLIBC.tar.bz2
 DEST=dest
 
 
@@ -81,7 +81,13 @@ action_copy ()
 }
 
 
-for ACTION in $@; do
+if [ $# -eq 0 ]; then
+  ACTIONS="unpack patch get_list copy"
+else
+  ACTIONS=$@
+fi
+
+for ACTION in $ACTIONS; do
   case $ACTION in
     unpack|patch|get_list|copy)
       action_$ACTION

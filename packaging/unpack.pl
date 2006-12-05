@@ -2,26 +2,36 @@
 
 use IO::File;
 
-my $server = 'http://localhost:9999/debian'; # approx proxy
-my $packages = "$ENV{'HOME'}/fetched/ftp.uk.debian.org/debian/dists/testing/main/binary-i386/Packages.gz";
 
-my $package = 'leafpad';
+if(scalar(@ARGV) != 1) {
+  print "Usage: $0 <package-name>\n";
+  exit(1);
+}
+my $package = $ARGV[0];
+
+
+my $server = 'http://localhost:9999/debian'; # approx proxy
+
+# curl http://localhost:9999/debian/dists/testing/main/binary-i386/Packages.gz -o Packages.gz
+my $packages = 'Packages.gz';
+#my $packages = "$ENV{'HOME'}/fetched/ftp.uk.debian.org/debian/dists/testing/main/binary-i386/Packages.gz";
 
 my $verbose = 1;
 my $do_unpack = 1;
 my $dest_dir = "$package/unpacked";
 
-my $do_download = 0;
+my $do_download = 1;
 my $skip_not_found = 1;
 
+# To be removed:
 my @base = ('bash',
 	    'coreutils', # for /usr/bin/id
 	    'sed',
 	    # 'xlibs-data',
 	    );
 
-my $remove = { 'libc6' => 1, # need to replace to provide /usr/lib/gconv...
-	       'base-files' => 1,
+my $remove = { #'libc6' => 1, # need to replace to provide /usr/lib/gconv...
+	       #'base-files' => 1,
 	     };
 
 
@@ -85,10 +95,10 @@ sub search_deps {
   }
   if($verbose) { print $indent."$name $package->{version}\n"; }
   
-  # Add to list
+  # Mark the package as visited
+  # It gets added to the list later
   $deplist->{Hash}{$name} = 1;
   $deplist->{Degree}{$name} = $degree;
-  push(@{$deplist->{List}}, $package);
 
   # Process further dependencies
   my @deps;
@@ -107,6 +117,11 @@ sub search_deps {
       search_deps($deplist, $degree + 1, $dep->{Name});
     }
   }
+
+  # Add package to list
+  # We do this last so that the list is topologically sorted,
+  # with dependencies first
+  push(@{$deplist->{List}}, $package);
 }
 
 
@@ -117,7 +132,16 @@ my $deplist =
     Lacking => [],
   };
 
+# Add packages marked as Essential, since other packages are not
+# required to declare dependencies on them
+foreach my $p (@parts) {
+  if(defined $p->{essential} && $p->{essential} eq 'yes') {
+    print "essential package: $p->{package}\n";
+    search_deps($deplist, 0, $p->{package});
+  }
+}
 foreach my $p (@base) {
+  # can be removed now:
   search_deps($deplist, 0, $p);
 }
 search_deps($deplist, 0, $package);
@@ -135,6 +159,14 @@ if(scalar(@{$deplist->{Lacking}}) > 0) {
     print "$p\n";
   }
 }
+
+# Output topologically-sorted list of packages
+run_cmd('mkdir', '-p', $package);
+my $f = IO::File->new("$package/package-list", 'w') || die;
+foreach my $p (@{$deplist->{List}}) {
+  print $f "$p->{package}_$p->{version}\n";
+}
+$f->close();
 
 
 sub try_get {
@@ -202,11 +234,23 @@ if($do_unpack) {
   foreach my $p (@{$deplist->{List}}) {
     my $src = "$p_dest_dir/$p->{package}_$p->{version}";
     
-    if($skip_not_found && !-e $src) { next }
+    if($skip_not_found && !-e $src) {
+      print "skipping $p->{package}\n";
+      next;
+    }
     
     foreach my $f (glob("$src/*")) {
       run_cmd('cp', '-lr', $f, $dest_dir);
     }
+  }
+
+  run_cmd('mkdir', '-p', "$dest_dir/var/lib/dpkg");
+  my $f = IO::File->new("$dest_dir/var/lib/dpkg/status", 'w') || die;
+  foreach my $p (@{$deplist->{List}}) {
+    print $f
+      "Package: $p->{package}\n".
+      "Version: $p->{version}\n".
+      "Status: install ok installed\n\n";
   }
 }
 

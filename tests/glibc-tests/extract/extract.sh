@@ -7,7 +7,7 @@
 set -e
 
 DIR=/tmp/glibc
-GLIBC=glibc-2.4
+GLIBC=glibc-2.3.5
 SOURCE=$DIR/$GLIBC
 GLIBC_ARCHIVE=$GLIBC.tar.bz2
 DEST=dest
@@ -68,6 +68,11 @@ action_copy ()
           for SUFFIX in args cflags env; do
             filter < build/$SUBDIR/$TEST.$SUFFIX > $DEST/$SUBDIR/$TEST.$SUFFIX
           done
+	  for FILE in $TEST.input $TEST.exp; do
+	    if [ -e $SOURCE/$SUBDIR/$FILE ]; then
+	      cp -av $SOURCE/$SUBDIR/$FILE $DEST/$SUBDIR
+	    fi
+	  done
 
           # Add test to list
           echo $SUBDIR/$TEST >>$DEST/test-list

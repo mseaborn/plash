@@ -15,9 +15,37 @@ foreach my $test (split(/\s+/, slurp('test-list-slow'))) {
 }
 
 
+# Print progress on a single line if using a terminal
+my $is_tty = -t STDOUT;
+my $last_msg = '';
+
+sub log_msg {
+  my ($x) = @_;
+  if($is_tty) {
+    print (("\b \b" x length($last_msg))."\r".$x);
+    $last_msg = $x;
+  }
+}
+
+
+my $out_file = "results.log";
+my $out = IO::File->new($out_file, 'w')
+  || die "Can't open \"$out_file\"";
+
+my $i = 0;
+my $no_tests = scalar(keys(%$tests));
+my $time_start = gettimeofday();
+
 foreach my $test (sort(keys(%$tests))) {
   my $result;
-  print "\n--- running $test\n";
+  print $out "\n--- running $test\n";
+
+  # Print progress info
+  my $taken = gettimeofday() - $time_start;
+  log_msg("done $i/$no_tests tests; ".
+	  sprintf("taken %.1fs; ", $taken).
+	  "running $test");
+  $i++;
 
   my $input = "$test.input";
   if(!-e $input) { $input = '/dev/null' }
@@ -40,17 +68,31 @@ foreach my $test (sort(keys(%$tests))) {
     if(system("mkdir -p `dirname out/$test`") != 0) { die }
     my $cmd = "env LC_ALL=C `cat tmp-env` bin/$test `cat tmp-args` <$input >out/$test.out 2>&1";
     
-    print "$cmd\n";
+    print $out "$cmd\n";
     my $time0 = gettimeofday();
     my $rc = system($cmd);
     my $time1 = gettimeofday();
     if($rc == 0) { $result = 'ok' }
     else { $result = 'failed' }
-    printf "-- %s took %fs\n", $test, $time1 - $time0;
+    printf $out "-- %s took %fs\n", $test, $time1 - $time0;
   }
 
-  print "** $test $result\n";
+  if($result eq 'failed') {
+    log_msg('');
+    print "failed: $test\n";
+  }
+
+  print $out "** $test $result\n";
 }
+
+log_msg('');
+my $took = gettimeofday() - $time_start;
+if($no_tests > 0) {
+  printf "ran %i tests, took %.2fs; %.2fs per test\n",
+    $no_tests, $took, $took / $no_tests;
+}
+
+$out->close();
 
 
 

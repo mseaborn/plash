@@ -90,9 +90,9 @@ foreach my $test (sort(keys(%$tests))) {
     my $env = slurp("$test.env");
     my $args = slurp("$test.args");
     
-    my $dir = "../../glibc-2.3.6-objs";
-    $env =~ s/GLIBC_BUILD_DIR/$dir/g;
-    $args =~ s/GLIBC_BUILD_DIR/$dir/g;
+    # my $dir = "../../glibc-2.3.6-objs";
+    # $env =~ s/GLIBC_BUILD_DIR/$dir/g;
+    # $args =~ s/GLIBC_BUILD_DIR/$dir/g;
     write_file('tmp-env', $env);
     write_file('tmp-args', $args);
     
@@ -122,7 +122,7 @@ foreach my $test (sort(keys(%$tests))) {
   if($ignore_tests->{$test}) {
     $result .= '[ignore]';
   }
-  if($ignore_plash_tests->{$test}) {
+  if($ignore_plash_tests->{$test} && $use_plash) {
     $result .= '[ignore-plash]';
   }
 

@@ -6,13 +6,20 @@ use Time::HiRes qw(gettimeofday);
 $|=1; # switch off output buffering
 
 
-my $tests = {};
-foreach my $test (split(/\s+/, slurp('test-list'))) {
-  $tests->{$test} = 1;
+sub read_test_list {
+  my ($file) = @_;
+  my @list = grep { !/^#/ && /\S/ } split(/\n/, slurp($file));
+  return { map { ($_ => 1) } @list }
 }
-foreach my $test (split(/\s+/, slurp('test-list-slow'))) {
+
+my $tests = read_test_list('test-list');
+
+# Don't run slow tests
+foreach my $test (keys(%{read_test_list('test-list-slow')})) {
   delete $tests->{$test};
 }
+
+my $ignore_tests = read_test_list('ignore');
 
 
 # Print progress on a single line if using a terminal
@@ -77,6 +84,11 @@ foreach my $test (sort(keys(%$tests))) {
     printf $out "-- %s took %fs\n", $test, $time1 - $time0;
   }
 
+  # If we're ignoring the test, tag the result
+  if($ignore_tests->{$test}) {
+    $result .= '[ignore]';
+  }
+  
   if($result eq 'failed') {
     log_msg('');
     print "failed: $test\n";
@@ -87,10 +99,9 @@ foreach my $test (sort(keys(%$tests))) {
 
 log_msg('');
 my $took = gettimeofday() - $time_start;
-if($no_tests > 0) {
-  printf "ran %i tests, took %.2fs; %.2fs per test\n",
-    $no_tests, $took, $took / $no_tests;
-}
+printf "ran %i tests, took %.2fs; %.2fs per test\n",
+  $no_tests, $took,
+  ($no_tests == 0 ? 0 : $took / $no_tests);
 
 $out->close();
 

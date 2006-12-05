@@ -1,7 +1,16 @@
 #!/usr/bin/perl -w
 
 use IO::File;
-use Time::HiRes qw(gettimeofday);
+
+# This is a workaround for running on an autobuild machine that
+# doesn't have Time::HiRes.  This should eventually be removed.
+eval {
+  require Time::HiRes;
+  $got_gettimeofday = 1;
+};
+sub gettimeofday {
+  $got_gettimeofday ? Time::HiRes::gettimeofday() : 0
+}
 
 $|=1; # switch off output buffering
 

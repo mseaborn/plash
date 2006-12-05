@@ -42,8 +42,6 @@ io/bug-ftw2
 io/test-stat
 libio/tst-fopenloc
 libio/tst-widetext
-libio/tst_getwc
-libio/tst_wscanf
 math/test-tgmath
 nptl/tst-atfork2
 nptl/tst-cancel7
@@ -54,12 +52,7 @@ posix/tst-dir
 posix/tst-exec
 posix/tst-pcre
 posix/tst-spawn
-stdio-common/bug6
-stdio-common/scanf12
-stdio-common/tst-ferror
-stdio-common/tst-gets
 stdio-common/tstdiomisc
-stdio-common/tstscanf
 stdlib/tst-putenv
 time/tst-getdate
 timezone/test-tz

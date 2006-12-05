@@ -1,0 +1,13 @@
+Source: glibc-source-2.3.6
+Section: misc
+Priority: optional
+Maintainer: Mark Seaborn <mrs@mythic-beasts.com>
+Standards-Version: 3.7.2
+Build-Depends: debhelper
+
+Package: glibc-source-2.3.6
+Architecture: all
+Description: Source for glibc (GNU C Library) version 2.3.6
+ This package provides the source code for glibc (the GNU C Library)
+ version 2.3.6.  This is used by the source package for Plash to build a
+ customised version of glibc.

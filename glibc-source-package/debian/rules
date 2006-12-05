@@ -1,0 +1,42 @@
+#!/usr/bin/make -f
+
+# Copyright (C) 2006 Mark Seaborn
+#
+# This file is part of Plash.
+#
+# Plash is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Lesser General Public License as
+# published by the Free Software Foundation; either version 2.1 of
+# the License, or (at your option) any later version.
+#
+# Plash is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with Plash; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
+# USA.
+
+
+binary: binary-indep
+
+clean:
+
+build:
+
+binary-arch:
+
+binary-indep:
+	install -d debian/tmp/usr/src
+	cp -pv glibc-2.3.6.tar.bz2 debian/tmp/usr/src
+	cp -pv glibc-linuxthreads-2.3.6.tar.bz2 debian/tmp/usr/src
+	dh_installdocs
+	dh_installchangelogs
+	dh_fixperms
+	dh_compress
+	dh_gencontrol
+	dh_installdeb
+	dh_md5sums
+	dh_builddeb

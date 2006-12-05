@@ -29,9 +29,8 @@ build:
 binary-arch:
 
 binary-indep:
-	install -d debian/tmp/usr/src
-	cp -pv glibc-2.3.6.tar.bz2 debian/tmp/usr/src
-	cp -pv glibc-linuxthreads-2.3.6.tar.bz2 debian/tmp/usr/src
+	dh_install glibc-2.3.6.tar.bz2 usr/src
+	dh_install glibc-linuxthreads-2.3.6.tar.bz2 usr/src
 	dh_installdocs
 	dh_installchangelogs
 	dh_fixperms

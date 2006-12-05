@@ -20,6 +20,7 @@ foreach my $test (keys(%{read_test_list('test-list-slow')})) {
 }
 
 my $ignore_tests = read_test_list('ignore');
+my $ignore_plash_tests = read_test_list('ignore-plash');
 
 
 # Print progress on a single line if using a terminal
@@ -42,6 +43,7 @@ my $out = IO::File->new($out_file, 'w')
 my $i = 0;
 my $no_tests = scalar(keys(%$tests));
 my $time_start = gettimeofday();
+my $counts = {};
 
 foreach my $test (sort(keys(%$tests))) {
   my $result;
@@ -88,6 +90,11 @@ foreach my $test (sort(keys(%$tests))) {
   if($ignore_tests->{$test}) {
     $result .= '[ignore]';
   }
+  if($ignore_plash_tests->{$test}) {
+    $result .= '[ignore-plash]';
+  }
+
+  $counts->{$result}++;
   
   if($result eq 'failed') {
     log_msg('');
@@ -102,6 +109,11 @@ my $took = gettimeofday() - $time_start;
 printf "ran %i tests, took %.2fs; %.2fs per test\n",
   $no_tests, $took,
   ($no_tests == 0 ? 0 : $took / $no_tests);
+
+print "counts:\n";
+foreach my $result (sort(keys(%$counts))) {
+  print "  $result: $counts->{$result}\n";
+}
 
 $out->close();
 

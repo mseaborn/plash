@@ -1,0 +1,40 @@
+# Tests that fail under Plash, eg. because they make unusual
+# assumptions that Plash breaks.  These failures will be ignored.  If
+# the test fails because of a bug in Plash, the test should be removed
+# from this list.
+
+dlfcn/tststatic
+iconvdata/bug-iconv1
+io/bug-ftw4
+libio/bug-ftell
+libio/bug-ungetwc2
+libio/tst-fgetws
+libio/tst-swscanf
+libio/tst-ungetwc1
+libio/tst-ungetwc2
+localedata/bug-iconv-trans
+localedata/tst-digits
+localedata/tst-mbswcs6
+localedata/tst-xlocale1
+localedata/tst-xlocale2
+nptl/tst-exec1
+posix/bug-regex17
+posix/bug-regex18
+posix/bug-regex19
+posix/bug-regex22
+posix/bug-regex6
+posix/tst-execl2
+posix/tst-execle2
+posix/tst-execlp2
+posix/tst-execv2
+posix/tst-execve2
+posix/tst-execvp2
+stdio-common/bug14
+stdio-common/bug5
+stdio-common/test-popen
+stdio-common/tst-swprintf
+stdlib/tst-strtod
+string/tst-strxfrm
+time/tst-ftime_l
+time/tst-strptime
+wcsmbs/tst-btowc

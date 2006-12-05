@@ -87,8 +87,8 @@ foreach my $test (sort(keys(%$tests))) {
     $result = 'missing';
   }
   else {
-    my $env = slurp("$test.env");
-    my $args = slurp("$test.args");
+    my $env = -e "$test.env" ? slurp("$test.env") : '';
+    my $args = -e "$test.args" ? slurp("$test.args") : '';
     
     # my $dir = "../../glibc-2.3.6-objs";
     # $env =~ s/GLIBC_BUILD_DIR/$dir/g;

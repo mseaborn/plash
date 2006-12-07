@@ -1,0 +1,5 @@
+glibc-source-2.4 (2.4-1) unstable; urgency=low
+
+  * Initial version of source package.
+
+ -- Mark Seaborn <mrs@mythic-beasts.com>  Sat, 28 Oct 2006 17:22:57 +0100

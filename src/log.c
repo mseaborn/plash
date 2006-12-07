@@ -113,7 +113,7 @@ struct filesys_obj *make_log(FILE *fp)
 struct filesys_obj *make_log_from_fd(int fd)
 {
   FILE *log_fp;
-  int fd_copy = dup(STDERR_FILENO);
+  int fd_copy = dup(fd);
   if(fd_copy < 0) {
     return NULL;
   }

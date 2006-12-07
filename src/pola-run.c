@@ -101,7 +101,7 @@ struct state {
   struct arg_list *args;
   int args_count;
   const char *executable_filename;
-  int log_summary;
+  struct filesys_obj *log;
   int debug;
   const char *pet_name;
   int powerbox;
@@ -116,7 +116,7 @@ void init_state(struct state *state)
   state->args = NULL;
   state->args_count = 0;
   state->executable_filename = NULL;
-  state->log_summary = FALSE;
+  state->log = NULL;
   state->debug = FALSE;
   state->pet_name = NULL;
   state->powerbox = FALSE;
@@ -430,7 +430,8 @@ int handle_arguments(region_t r, struct state *state,
     }
 
     if(!strcmp(arg, "--log")) {
-      state->log_summary = TRUE;
+      if(state->log) { filesys_obj_free(state->log); }
+      state->log = make_log_from_fd(STDERR_FILENO);
       goto arg_handled;
     }
 
@@ -670,7 +671,6 @@ int main(int argc, char **argv)
     {
       cap_t child_root;
       struct dir_stack *child_cwd = NULL;
-      cap_t log;
       int cap_count;
       cap_t *caps;
       const char *cap_names;
@@ -718,22 +718,6 @@ int main(int argc, char **argv)
 	return 1;
       }
 
-      if(state.log_summary) {
-	FILE *log_fp;
-	int fd = dup(STDERR_FILENO);
-	if(fcntl(fd, F_SETFD, FD_CLOEXEC) < 0) {
-	  perror("fcntl");
-	  return -1;
-	}
-	log_fp = fdopen(fd, "w");
-	setvbuf(log_fp, 0, _IONBF, 0);
-	
-	log = make_log(log_fp);
-      }
-      else {
-	log = NULL;
-      }
-
       // "fs_op;conn_maker;fs_op_maker;union_dir_maker"
       if(state.powerbox) {
 	cap_names = "fs_op;fs_op_maker;conn_maker;powerbox_req_filename";
@@ -744,10 +728,11 @@ int main(int argc, char **argv)
 	cap_count = 3;
       }
       caps = region_alloc(r, cap_count * sizeof(cap_t));
-      if(log) inc_ref(log);
-      caps[0] = make_fs_op_server(log, child_root, child_cwd);
-      caps[1] = fs_op_maker_make(log);
+      if(state.log) inc_ref(state.log);
+      caps[0] = make_fs_op_server(state.log, child_root, child_cwd);
+      caps[1] = fs_op_maker_make(state.log);
       caps[2] = conn_maker_make();
+      state.log = NULL;
       if(state.powerbox) {
 #ifdef USE_GTK
 	caps[3] = powerbox_make(state.pet_name,

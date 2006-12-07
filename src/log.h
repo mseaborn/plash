@@ -25,6 +25,7 @@
 #include "filesysobj.h"
 
 struct filesys_obj *make_log(FILE *fp);
+struct filesys_obj *make_log_from_fd(int fd);
 
 
 #endif

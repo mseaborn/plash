@@ -17,6 +17,9 @@
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
    USA.  */
 
+#include <unistd.h>
+#include <fcntl.h>
+
 #include "log.h"
 
 
@@ -103,6 +106,29 @@ struct filesys_obj *make_log(FILE *fp)
   log->id = shared->next_id++;
 
   return (struct filesys_obj *) log;
+}
+
+/* Creates a log object that outputs to the given file descriptor.
+   Does not take ownership of "fd".  Returns NULL for error. */
+struct filesys_obj *make_log_from_fd(int fd)
+{
+  FILE *log_fp;
+  int fd_copy = dup(STDERR_FILENO);
+  if(fd_copy < 0) {
+    return NULL;
+  }
+  if(fcntl(fd_copy, F_SETFD, FD_CLOEXEC) < 0) {
+    close(fd_copy);
+    return NULL;
+  }
+  log_fp = fdopen(fd_copy, "w");
+  if(!log_fp) {
+    close(fd_copy);
+    return NULL;
+  }
+  setvbuf(log_fp, 0, _IONBF, 0);
+  
+  return make_log(log_fp);
 }
 
 

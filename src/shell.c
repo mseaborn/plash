@@ -1928,7 +1928,8 @@ int pipeline_invocation
 cap_t make_server_shared(struct shell_state *state)
 {
   if(state->log_summary) {
-    FILE *fp;
+    int fd;
+    struct filesys_obj *log;
 
     if(state->log_into_xterm) {
       int pipe_fd[2];
@@ -1949,15 +1950,15 @@ cap_t make_server_shared(struct shell_state *state)
       }
       if(pid < 0) perror("fork");
       close(pipe_fd[0]);
-      fp = fdopen(pipe_fd[1], "w");
+      fd = pipe_fd[1];
     }
     else {
-      fp = fdopen(dup(STDERR_FILENO), "w");
+      fd = dup(STDERR_FILENO);
     }
-    assert(fp);
-    setvbuf(fp, 0, _IONBF, 0);
 
-    return make_log(fp);
+    log = make_log_from_fd(fd);
+    close(fd);
+    return log;
   }
   else {
     return NULL;

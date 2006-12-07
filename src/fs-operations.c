@@ -568,8 +568,8 @@ int handle_fs_op_message(region_t r, struct process *proc,
 
       log->op_name = "open";
       *log_msg =
-	cat2(r, mk_printf(r, "flags=0o%o, mode=0o%o, ", flags, mode),
-	     mk_leaf(r, pathname));
+	cat2(r, mk_leaf(r, pathname),
+	     mk_printf(r, ", flags=0o%o, mode=0o%o", flags, mode));
       if((flags & O_ACCMODE) == O_RDONLY) {
 	log->read_only = TRUE;
       }

@@ -89,6 +89,35 @@ struct dir_stack *copy_cwd(struct filesys_obj *root_dir)
 }
 
 
+/* Saves the current working directory so that we can restore it
+   later, because filesysobj-real.c will change the cwd arbitrarily.
+   This will not be necessary once we change filesysobj-real.c to
+   restore the cwd for us. */
+
+static int saved_cwd = -1; /* File descriptor, or -1 */
+
+static int cwd_save()
+{
+  assert(saved_cwd == -1);
+  saved_cwd = open(".", O_RDONLY | O_DIRECTORY);
+  if(saved_cwd < 0) { return -1; }
+  return 0;
+}
+
+static int cwd_restore()
+{
+  assert(saved_cwd >= 0);
+  return fchdir(saved_cwd);
+}
+
+static void cwd_discard()
+{
+  assert(saved_cwd >= 0);
+  close(saved_cwd);
+  saved_cwd = -1;
+}
+
+
 struct arg_list {
   const char *str;
   struct arg_list *prev;
@@ -143,6 +172,7 @@ void usage(FILE *fp)
 	  "  [--x11]         Grant access to X11 Window System\n"
 	  "  [--net]         Grant access to network config files\n"
 	  "  [--log]         Print method calls client makes to file server\n"
+	  "  [--log-file <file>]\n"
 	  "  [--server-as-parent]  Server runs as the parent process, not the child\n"
 	  "  [--pet-name <name>]\n"
 	  "  [--powerbox]\n"
@@ -435,6 +465,30 @@ int handle_arguments(region_t r, struct state *state,
       goto arg_handled;
     }
 
+    if(!strcmp(arg, "--log-file")) {
+      char *filename;
+      int log_fd;
+      if(i + 1 > argc) {
+	fprintf(stderr, NAME_MSG _("--log-file expects 1 parameter\n"));
+	return 1;
+      }
+      filename = argv[i++];
+      if(cwd_restore() < 0) {
+	perror(NAME_MSG "cwd_restore");
+	return 1;
+      }
+      log_fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC);
+      if(log_fd < 0) {
+	fprintf(stderr, NAME_MSG _("Error opening \"%s\": %s\n"),
+		filename, strerror(errno));
+	return 1;
+      }
+      if(state->log) { filesys_obj_free(state->log); }
+      state->log = make_log_from_fd(log_fd);
+      close(log_fd);
+      goto arg_handled;
+    }
+
     if(!strcmp(arg, "--debug")) {
       state->debug = TRUE;
       goto arg_handled;
@@ -581,6 +635,11 @@ int main(int argc, char **argv)
   
   struct state state;
   init_state(&state);
+
+  if(cwd_save() < 0) {
+    perror(NAME_MSG "cwd_save");
+    return 1;
+  }
 
   /* Don't call gtk_init(): don't open an X11 connection at this stage,
      because we don't know if we'll need one and X11 might not be
@@ -747,6 +806,8 @@ int main(int argc, char **argv)
       if(state.cwd) { dir_stack_free(state.cwd); }
       
       free_node(state.root_node);
+
+      cwd_discard();
 
       /* Do I want to do a double fork so that the server process is no
 	 longer a child of the client process?  The client process might

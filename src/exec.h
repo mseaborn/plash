@@ -31,5 +31,10 @@ int exec_for_scripts
    int *argc_out, const char ***argv_out,
    int *err);
 
+int resolve_executable_name(region_t r,
+			    struct filesys_obj *root, struct dir_stack *cwd,
+			    const char *filename,
+			    const char **result);
+
 
 #endif

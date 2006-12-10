@@ -185,3 +185,67 @@ int exec_for_scripts
     return 0;
   }
 }
+
+/* Parses PATH.  If it contains any elements, returns TRUE and sets
+   pathname to the first element, and rest to the rest. */
+static int parse_path(seqf_t path, seqf_t *pathname, seqf_t *rest)
+{
+  if(path.size > 0) {
+    int i = 0;
+    while(i < path.size) {
+      if(path.data[i] == ':') {
+	pathname->data = path.data;
+	pathname->size = i;
+	rest->data = path.data + i + 1;
+	rest->size = path.size - i - 1;
+	return 1;
+      }
+      i++;
+    }
+    pathname->data = path.data;
+    pathname->size = i;
+    rest->data = 0;
+    rest->size = 0;
+    return TRUE;
+  }
+  else return FALSE;
+}
+
+/* Look up executable name in PATH if it doesn't contain '/'.
+   Returns -1 if executable was not found. */
+int resolve_executable_name(region_t r,
+			    struct filesys_obj *root, struct dir_stack *cwd,
+			    const char *filename,
+			    const char **result)
+{
+  if(strchr(filename, '/')) {
+    *result = filename;
+    return 0; /* OK */
+  }
+  else {
+    /* Search PATH for the command. */
+    const char *path1;
+    seqf_t path, path_entry;
+    
+    path1 = getenv("PATH");
+    if(!path1) { return -1; }
+    path = seqf_string(path1);
+    
+    while(parse_path(path, &path_entry, &path) >= 0) {
+      seqf_t full_pathname =
+	flatten0(r, cat3(r, mk_leaf(r, path_entry),
+			 mk_string(r, "/"),
+			 mk_string(r, filename)));
+      int err;
+      struct filesys_obj *obj =
+	resolve_file(r, root, cwd, full_pathname, SYMLINK_LIMIT,
+		     FALSE /* nofollow */, &err);
+      if(obj) {
+	filesys_obj_free(obj);
+	*result = full_pathname.data;
+	return 0; /* OK */
+      }
+    }
+    return -1; /* Not found */
+  }
+}

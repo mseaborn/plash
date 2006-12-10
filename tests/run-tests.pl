@@ -157,6 +157,23 @@ test('hello',
        assert_equal($data, "Hello world\n", 'output');
      });
 
+# Expects pola-run to look up the executable name in PATH.
+test('hello_path',
+     sub {
+       my $data = cmd_capture(@pola_run, qw(-B --prog echo),
+			      '-a', 'Hello world');
+       assert_equal($data, "Hello world\n", 'output');
+     });
+
+# Expects pola-run *not* to look up the executable name in PATH.
+# Expects pola-run to fail.
+test('hello_nopath',
+     sub {
+       my $rc = system(@pola_run, qw(-B --no-path-search --prog echo),
+		       '-a', 'Hello world');
+       die unless $rc != 0;
+     });
+
 # Tests execve but not fork, because bash does a tail call
 test('bash_exec',
      sub {

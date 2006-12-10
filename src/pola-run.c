@@ -135,6 +135,7 @@ struct state {
   const char *pet_name;
   int powerbox;
   int server_as_parent;
+  int search_path; /* Whether to search PATH for executable name */
 };
 
 void init_state(struct state *state)
@@ -150,6 +151,7 @@ void init_state(struct state *state)
   state->pet_name = NULL;
   state->powerbox = FALSE;
   state->server_as_parent = FALSE;
+  state->search_path = TRUE;
 }
 
 void usage(FILE *fp)
@@ -176,6 +178,7 @@ void usage(FILE *fp)
 	  "  [--server-as-parent]  Server runs as the parent process, not the child\n"
 	  "  [--pet-name <name>]\n"
 	  "  [--powerbox]\n"
+	  "  [--no-path-search]  Don't look up executable name in PATH\n"
 	  "  [-e <command> <arg>...]\n"
 	  ));
 }
@@ -518,6 +521,11 @@ int handle_arguments(region_t r, struct state *state,
       goto arg_handled;
     }
 
+    if(!strcmp(arg, "--no-path-search")) {
+      state->search_path = FALSE;
+      goto arg_handled;
+    }
+
     if(!strcmp(arg, "--help")) { usage(stdout); return 1; }
 
   unknown:
@@ -746,7 +754,18 @@ int main(int argc, char **argv)
 	child_cwd = resolve_dir(r, child_root, NULL /* cwd */, cwd_path,
 				SYMLINK_LIMIT, &err);
       }
-    
+
+      if(state.search_path) {
+	/* Look up executable name in PATH. */
+	if(resolve_executable_name(r, child_root, child_cwd,
+				   state.executable_filename,
+				   &state.executable_filename) < 0) {
+	  fprintf(stderr, NAME_MSG _("executable not found: %s\n"),
+		  state.executable_filename);
+	  return 1;
+	}
+      }
+      
       obj = resolve_file(r, child_root, child_cwd,
 			 seqf_string(state.executable_filename),
 			 SYMLINK_LIMIT, 0 /* nofollow */, &err);

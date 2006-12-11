@@ -199,6 +199,39 @@ test('strace',
        if($data !~ /Hello world/) { die "Got: \"$data\"" }
      });
 
+# Check that stat() gives the same result under Plash.
+sub stat_test {
+  my ($flags) = @_;
+  
+  printf "- test with flags \"%s\"\n", join(' ', @$flags);
+  run_cmd('gcc', @$flags, "$start_dir/test-stat.c", '-o', 'test-stat');
+  my $file = 'test-stat'; # file to stat
+  run_cmd("./test-stat $file 3>buf1");
+  run_cmd(@pola_run, qw(-B -fw .), '-e', 'sh', '-c',
+	  "./test-stat $file 3>buf2");
+  my $buf1 = read_file('buf1');
+  my $buf2 = read_file('buf2');
+  printf "  buffer size = %i\n", length($buf1);
+  if($buf1 ne $buf2 && length($buf1) == length($buf2)) {
+    for($i = 0; $i < length($buf1); $i++) {
+      if(substr($buf1, $i, 1) ne substr($buf2, $i, 1)) {
+	printf "mismatch at index %i: %i, %i\n", $i,
+	  ord(substr($buf1, $i, 1)),
+	  ord(substr($buf2, $i, 1));
+      }
+    }
+  }
+  assert_equal($buf2, $buf1, 'stat-buffer');
+}
+test('stat_match',
+     sub {
+       stat_test([]);
+     });
+test('stat64_match',
+     sub {
+       stat_test(['-D_FILE_OFFSET_BITS=64']);
+     });
+
 test('chmod_x',
      sub {
        my $f = IO::File->new('file', O_CREAT | O_EXCL | O_WRONLY) || die;

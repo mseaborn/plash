@@ -368,6 +368,13 @@ if(scalar(@ARGV) == 0) {
 }
 else {
   foreach my $arg (@ARGV) {
+    if($arg eq '--list') {
+      foreach my $t (@tests) {
+	print "$t->{T_name}\n";
+      }
+      exit(0);
+    }
+    
     my $test = $tests_by_name->{$arg};
     if(!defined $test) { die "Test \"$arg\" not known" }
     push(@tests_to_run, $test);

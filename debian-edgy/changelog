@@ -1,4 +1,4 @@
-plash (1.16.99-1) unstable; urgency=low
+plash (1.16.99-1ubuntu1) unstable; urgency=low
 
   * Debian packaging changes:
      * Improve Debian build scripts for building with pbuilder under etch.

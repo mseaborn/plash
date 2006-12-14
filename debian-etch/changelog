@@ -1,16 +1,36 @@
 plash (1.16.1) unstable; urgency=low
 
+  * Debian packaging changes:
+     * Improve Debian build scripts for building with pbuilder under etch.
+     * Use debhelper more.
+     * Add branches of "debian" for building under Debian sarge and
+       Ubuntu edgy.
+     * Put glibc source in a separate package, so that glibc tarball is
+       put under /usr/src.
   * Add Python bindings.  Add Python implementation of pola-run.
+  * glibc version:
+     * Switch to using glibc 2.3.6 for Debian etch.
+     * Also allow building with glibc 2.4 and 2.5.  This is only partial
+       support.  The *at() functions are not properly implemented yet.
+  * Refactored libc linking trickery.  Use macros instead of special
+    EXPORT comments to declare functions to export from libc.
   * Implement lchmod() in libc and fs_op.
   * Add partial implementation of chown()/lchown():
     Succeeds when no owner/group change is requested.
-  * Improve Debian build scripts for building with pbuilder under etch.
   * Intercept getsockopt() so that uid/gids can be faked for SO_PEERCRED
     case.
   * Fix getcwd() to pass glibc's io/tst-getcwd test case.
     getcwd(NULL, size) when size>0 now returns an error if size is not
     large enough.
   * libpthread.so's close() function is now intercepted correctly.
+  * pola-run:  Logging:
+     * Add --log-file option.
+     * Changes to logging format.
+     * Bug fix:  change mk_printf() to use vasprintf() instead of
+       vsnprintf() (fixes segfault on long filenames to exec).
+  * pola-run:  Add --server-as-parent option.
+  * pola-run:  Now looks up executable name in PATH, unless
+    --no-search-path (a new option) is given.
   * pola-run, pola-shell:  Add environment variables for changing the
     jail program from run-as-anonymous.  This is used for running the
     test suite without installing Plash.
@@ -28,8 +48,9 @@ plash (1.16.1) unstable; urgency=low
   * exec-object.c:  Sets cwd instead of leaving it undefined.
   * shell.c:  For executable objects, use debug message "sending cwd
     argument" instead of "cwd set successfully".
+  * Add cow_dir object.  Only usable via Python bindings so far.
 
- -- Mark Seaborn <mrs@mythic-beasts.com>  Sat, 30 Sep 2006 12:57:55 +0100
+ -- Mark Seaborn <mrs@mythic-beasts.com>  Thu, 14 Dec 2006 12:54:52 +0000
 
 plash (1.16) unstable; urgency=low
 

@@ -1,19 +1,18 @@
 #!/bin/sh
 
 # Create Debian source package.
-# Usage:  make-source-pkg.sh <debian-variant>
+# Usage:  make-source-pkg.sh <version> <debian-variant>
 # <debian-variant> is the name of the "debian" directory to use.
 
 set -e
 
-if [ $# -ne 1 ]; then
-  echo "Usage: $0 <debian-variant>"
+if [ $# -ne 2 ]; then
+  echo "Usage: $0 <version> <debian-variant>"
   exit 1
 fi
 
-DEBIAN=$1
-
-VERSION=1.16.1
+VERSION=$1
+DEBIAN=$2
 
 
 mkdir source-pkg

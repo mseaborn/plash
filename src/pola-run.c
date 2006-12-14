@@ -480,7 +480,7 @@ int handle_arguments(region_t r, struct state *state,
 	perror(NAME_MSG "cwd_restore");
 	return 1;
       }
-      log_fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC);
+      log_fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0666);
       if(log_fd < 0) {
 	fprintf(stderr, NAME_MSG _("Error opening \"%s\": %s\n"),
 		filename, strerror(errno));

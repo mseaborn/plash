@@ -57,7 +57,7 @@ build:	stamp-dir/build-glibc configure
 	(cd web-site && ./make.pl)
 
 binary-arch:	checkroot build
-	./debian/make-package.sh
+	sh ./debian/make-package.sh
 
 binary-indep:
 	# nothing

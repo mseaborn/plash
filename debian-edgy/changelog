@@ -1,4 +1,4 @@
-plash (1.16.99-1ubuntu1) unstable; urgency=low
+plash (1.17-1ubuntu1) unstable; urgency=low
 
   * Debian packaging changes:
      * Improve Debian build scripts for building with pbuilder under etch.
@@ -50,7 +50,7 @@ plash (1.16.99-1ubuntu1) unstable; urgency=low
     argument" instead of "cwd set successfully".
   * Add cow_dir object.  Only usable via Python bindings so far.
 
- -- Mark Seaborn <mrs@mythic-beasts.com>  Thu, 14 Dec 2006 12:54:52 +0000
+ -- Mark Seaborn <mrs@mythic-beasts.com>  Fri, 22 Dec 2006 11:39:57 +0000
 
 plash (1.16) unstable; urgency=low
 

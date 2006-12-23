@@ -329,7 +329,7 @@ sub write_file {
     qw(html
        head title link
        body
-       h1 h2 h3
+       h1 h2 h3 h4 h5 h6
        p div pre
        hr br
        img

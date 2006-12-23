@@ -156,6 +156,25 @@ gna.org}.
 }
 
 {\tr:
+ \td- Version 1.17 \br; (23rd December 2006)
+ {\td\ul:
+   {\li: Source:
+     \a href={http://plash.beasts.org/packages/common/plash_1.17.orig.tar.gz}:
+       plash_1.17.orig.tar.gz}
+   {\li\a href={http://svn.gna.org/viewcvs/plash/trunk/?rev=402}:
+     Browse SVN}
+ }
+ {\td:
+
+    Add Python bindings for Plash object interface.  Add cow_dir
+    (layered/copy-on-write directories).  Add -e option to pola-run.
+    Update to build with glibc 2.3.6, 2.4 and 2.5.  Improved Debian
+    packaging.
+
+ }
+}
+
+{\tr:
  \td- Version 1.16 \br; (15th March 2006)
  {\td\ul:
    {\li: Debian package:

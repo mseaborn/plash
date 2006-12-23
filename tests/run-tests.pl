@@ -205,7 +205,8 @@ sub stat_test {
   
   printf "- test with flags \"%s\"\n", join(' ', @$flags);
   run_cmd('gcc', @$flags, "$start_dir/test-stat.c", '-o', 'test-stat');
-  my $file = 'test-stat'; # file to stat
+  my $file = 'test-file'; # file to stat
+  write_file($file, "Test file to stat");
   run_cmd("./test-stat $file 3>buf1");
   run_cmd(@pola_run, qw(-B -fw .), '-e', 'sh', '-c',
 	  "./test-stat $file 3>buf2");

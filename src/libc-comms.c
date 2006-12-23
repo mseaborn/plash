@@ -32,9 +32,6 @@
 #include "marshal.h"
 
 
-char *glibc_getenv(const char *name);
-
-
 /* Read a non-negative integer from a string.
    If str is NULL, returns -1.
    If str does not contain a non-negative integer, returns -1. */
@@ -80,10 +77,10 @@ int plash_init()
     int count, i;
     seqf_t cap_list, elt, list;
 
-    var = glibc_getenv("PLASH_LIBC_DEBUG");
+    var = getenv("PLASH_LIBC_DEBUG");
     if(var) { libc_debug = TRUE; }
     
-    var = glibc_getenv("PLASH_COMM_FD");
+    var = getenv("PLASH_COMM_FD");
     if(!var) {
 #ifndef IN_RTLD
       if(libc_debug) fprintf(stderr, "libc: PLASH_COMM_FD not set\n");
@@ -96,7 +93,7 @@ int plash_init()
     if(libc_debug) fprintf(stderr, "libc: init: comm_sock=%i\n", comm_sock);
 #endif
 
-    var = glibc_getenv("PLASH_CAPS");
+    var = getenv("PLASH_CAPS");
     if(!var) {
 #ifndef IN_RTLD
       if(libc_debug) fprintf(stderr, "libc: PLASH_CAPS not set\n");

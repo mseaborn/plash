@@ -233,19 +233,16 @@ build_libc_ldso_extras () {
       -G __libc_missing_32bit_uids \
       $1
   }
-
-  # TO BE REMOVED:
-  REDEFINES="--redefine-sym glibc_getenv=getenv"
   
   echo Hiding and renaming symbols in $OUT/combined-libc.os
   ./src/get-export-syms.pl $OUT/combined-libc.os >$OUT/symbol-list-libc
   prepare_combined_obj $OUT/combined-libc.os
-  objcopy $REDEFINES `./src/export-renames.pl <$OUT/symbol-list-libc` $OUT/combined-libc.os
+  objcopy `./src/export-renames.pl <$OUT/symbol-list-libc` $OUT/combined-libc.os
   
   echo Hiding and renaming symbols in $OUT/combined-rtld.os
   ./src/get-export-syms.pl $OUT/combined-rtld.os >$OUT/symbol-list-rtld
   prepare_combined_obj $OUT/combined-rtld.os
-  objcopy $REDEFINES `./src/export-renames.pl --rtld <$OUT/symbol-list-rtld` $OUT/combined-rtld.os
+  objcopy `./src/export-renames.pl --rtld <$OUT/symbol-list-rtld` $OUT/combined-rtld.os
 }
 
 

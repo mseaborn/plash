@@ -1,6 +1,124 @@
 
 \paras:
 
+\h2- Version 1.17 (2006-12-23)
+
+New facilities:
+
+\ul{
+  \li{
+    Python bindings for the Plash object interface.  A Python
+    implementation of pola-run is available in the source package.
+  }
+  \li{
+    cow_dir: Provides layered directories, with which reads come from
+    one directory tree while writes go to another.  Eventually this
+    will provide a copy-on-write directory facility (currently it does
+    not allow writing to files that are in the read layer at all).
+    This is usable via the Python bindings but not through pola-run
+    (see python/examples/cow-runner.py).
+  }
+}
+
+pola-run:
+
+\ul{
+  \li{
+    Now looks up executable names in PATH, unless --no-search-path (a
+    new option) is given.
+  }
+  \li{
+    Security bug fix: Ensure that "-t" grants read-only access when
+    "w" flag is not given.  (Previously, "-t" would always grant
+    read-write access, ignoring the "w" flag.)
+  }
+  \li\paras{
+    New option: "-e".  This gives a way to specify the executable name
+    and its arguments without prefixing each one with "--prog" and
+    "-a".  It is more in line with the interfaces of other Unix
+    commands that invoke executables, such as "chroot" and "xterm".
+
+    Usage:  -e <executable-name> <arg>...
+
+    Equivalent to:  --prog <executable-name> -a <arg1> -a <arg2> ...
+
+    "-e" swallows the remaining arguments, so it must appear last in
+    the argument list.
+  }
+  \li{
+    Improvements to logging facilities.  New option: "--log-file
+    <file>", sends log output to a file.  The logging format has been
+    changed slightly: two characters summarise whether the operation
+    was a read or a write, and whether it succeeded or failed.
+  }
+}
+
+glibc:
+
+\ul{
+  \li{
+    Now uses glibc 2.3.6 for Debian (rather than glibc 2.3.5).
+  }
+  \li{
+    Supports building glibc 2.4 and 2.5.  glibc 2.4 is used for the
+    Ubuntu package.  This is only partial support -- the new *at()
+    functions are not properly implemented yet.
+  }
+}
+
+
+glibc functions:
+
+\ul{
+  \li{
+    lchmod() now implemented.
+  }
+  \li{
+    Add partial implementation of chown()/lchown(): succeeds when no
+    owner/group change is requested.
+  }
+  \li{
+    getsockopt() is now intercepted so that UID/GIDs can be faked for
+    the SO_PEERCRED case.
+  }
+  \li{
+    Fixed getcwd() to pass glibc's io/tst-getcwd test case.
+    getcwd(NULL, size) when size>0 now returns an error if size is not
+    large enough.
+  }
+  \li{
+    libpthread.so's close() function is now intercepted correctly.
+  }
+}
+
+exec-object:
+
+\ul{
+  \li{
+    Will now set the current working directory where possible instead
+    of leaving it undefined.
+  }
+}
+
+
+Packaging:
+
+\ul{
+  \li{
+    Branches of the packaging scripts are included for building under
+    Debian sarge (excluding Python and Gtk support), and Ubuntu edgy
+    (using glibc 2.4 instead of 2.3.6).
+  }
+  \li{
+    The Plash source package no longer includes the glibc source.
+    Instead, glibc source tarballs are in a separate binary package
+    which puts them under /usr/src.  Plash Build-Depends on the glibc
+    source package.
+  }
+}
+
+
+
 \h2- Version 1.16
 
 The powerbox/Gtk integration code has been rewritten so that the

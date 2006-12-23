@@ -6,20 +6,30 @@
 
 \h3- Pre-built packages
 
-Debian and RPM packages are available, for i386:
+Packages are available for three distributions on i386.  To install
+using APT, add one of the following lines to your
+/etc/apt/sources.list file:
 
-\ul{
-  \li{
-    Debian package:
-    {\a href={http://plash.beasts.org/releases/plash_1.16_i386.deb}:
-     plash_1.16_i386.deb}
-  }
-  \li{
-    RPM package:
-    {\a href={http://plash.beasts.org/releases/plash-1.16-1.i386.rpm}:
-     plash-1.16-1.i386.rpm}
-  }
-}
+For Debian Etch (will also work with Debian unstable (sid)):
+
+\pre
+>>deb http://plash.beasts.org/packages/debian-etch ./
+
+For Debian Sarge:
+
+\pre
+>>deb http://plash.beasts.org/packages/debian-sarge ./
+
+For Ubuntu Edgy Eft:
+
+\pre
+>>deb http://plash.beasts.org/packages/ubuntu-edgy ./
+
+And then do:
+
+\pre
+>>apt-get install plash
+
 
 
 \h3- Build Plash and glibc from source

@@ -10,17 +10,17 @@ Packages are available for three distributions on i386.  To install
 using APT, add one of the following lines to your
 /etc/apt/sources.list file:
 
-For Debian Etch (will also work with Debian unstable (sid)):
+For Debian Etch and Debian unstable/sid (using glibc 2.3.6):
 
 \pre
 >>deb http://plash.beasts.org/packages/debian-etch ./
 
-For Debian Sarge:
+For Debian Sarge (using glibc 2.3.6; Python and Gtk support not included):
 
 \pre
 >>deb http://plash.beasts.org/packages/debian-sarge ./
 
-For Ubuntu Edgy Eft:
+For Ubuntu Edgy Eft (using glibc 2.4):
 
 \pre
 >>deb http://plash.beasts.org/packages/ubuntu-edgy ./
@@ -32,46 +32,107 @@ And then do:
 
 
 
-\h3- Build Plash and glibc from source
+\h3- Building Plash from source
 
-Download these files:
+\h4- Using Debian source packages
+
+Debian source packages can be downloaded using APT, by adding one of
+the lines above to sources.list along with the corresponding deb-src
+line.  For example:
+
+\pre
+>>deb http://plash.beasts.org/packages/ubuntu-edgy ./
+>>deb-src http://plash.beasts.org/packages/ubuntu-edgy ./
+
+Since Plash builds a modified version of glibc, it requires a copy of
+the glibc source.  The glibc source tarball is not included in the
+Plash source package, but in a separate binary package such as
+glibc-source-2.5.  This and other build dependencies will be installed
+by doing:
+
+\pre
+>>apt-get build-dep plash
+
+Get the source package with:
+
+\pre
+>>apt-get source plash
+
+and build with:
+
+\pre
+>>dpkg-buildpackage -rfakeroot -b -D
+
+
+\h4- Building without using Debian scripts
+
+Build glibc:
+
+\pre
+>>./build-glibc.sh 2.5 unpack configure build build_extra
+
+Plash can be built against glibc 2.5, 2.4 or 2.3.6.  Replace "2.5"
+above with the glibc version you want.  Note: glibc 2.4 dropped
+support for Linux 2.4 and earlier, hence Plash's support for glibc
+2.3.6.
+
+The glibc source tarballs must be present.  The script looks for them
+in the current directory and in /usr/src, and will suggest files to
+download if it does not find them.  You will probably need one of the
+following:
 
 \ul{
   \li{
-    {\a href={http://plash.beasts.org/releases/plash-1.16.tar.gz}:
-     plash-1.16.tar.gz}, the Plash source
+    {\a href={ftp://ftp.gnu.org/gnu/glibc/glibc-2.5.tar.bz2}:
+     glibc-2.5.tar.bz2} (13Mb)
   }
   \li{
-    {\a href={ftp://ftp.gnu.org/gnu/glibc/glibc-2.3.5.tar.bz2}:
-     glibc-2.3.5.tar.bz2} (13Mb)
+    {\a href={ftp://ftp.gnu.org/gnu/glibc/glibc-2.4.tar.bz2}:
+     glibc-2.4.tar.bz2} (13Mb)
   }
   \li{
-    {\a href={ftp://ftp.gnu.org/gnu/glibc/glibc-linuxthreads-2.3.5.tar.bz2}:
-     glibc-linuxthreads-2.3.5.tar.bz2} (~300k)
+    {\a href={ftp://ftp.gnu.org/gnu/glibc/glibc-2.3.6.tar.bz2}:
+     glibc-2.3.6.tar.bz2} (13Mb)
+    and
+    {\a href={ftp://ftp.gnu.org/gnu/glibc/glibc-linuxthreads-2.3.6.tar.bz2}:
+     glibc-linuxthreads-2.3.6.tar.bz2} (~300k)
   }
 }
 
-Unpack Plash, and copy or link the glibc source tar.bz2/tar.gz files
-inside Plash's build directory.
+Building glibc is the most resource-intensive step.  It uses about 100
+Mb of disc space, and takes 13 minutes on an Athlon XP 3200 machine.
+Note that if you are getting a new revision of Plash by doing "svn
+update", glibc usually does not need to be re-built.
 
-Build glibc with the following command.  This will unpack glibc, apply
-patches, configure and build it.  This uses the Debian package build
-script, but this part is not Debian-specific.  It takes about 100 Mb
-of disc space, and takes 13 minutes on my Athlon XP 3200 machine.
-
-\pre
->>./debian/rules stamp-dir/build-glibc
-
-Now configure and build Plash:
+If you have checked out the source from Subversion (rather than
+downloading a tarball), the "configure" script will not be present.
+You will need to install autoconf and run:
 
 \pre
->>./configure GLIBC_DIR=glibc-objs
+>>autoconf
+
+Build Plash itself:
+
+\pre
+>>./configure GLIBC_DIR=glibc-2.5-objs
 >>./make.sh
 
-As before, you can do the following, as root, to install Plash:
+(again, replace "2.5" with your desired glibc version).
+
+To install Plash, run the following command as root:
 
 \pre
 >>./install.sh /
+
+
+\h4- Creating Debian packages from SVN
+
+The Subversion repository contains multiple versions of the debian
+packaging scripts.  By default, "debian" is a symlink pointing to
+"debian-etch", but it can be changed to point to "debian-sarge" or
+"debian-edgy".  The script "make-deb-src-pkg.sh" can create source
+packages for all three variants in one go.
+
 
 
 \h3- Requirements

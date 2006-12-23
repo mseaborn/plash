@@ -3,9 +3,6 @@
 
 \h2- Installing Plash
 
-There are three ways in which you might install Plash, depending on
-how much you want to build from scratch.
-
 
 \h3- Pre-built packages
 
@@ -23,41 +20,6 @@ Debian and RPM packages are available, for i386:
      plash-1.16-1.i386.rpm}
   }
 }
-
-
-\h3- Build Plash using pre-built glibc object files
-
-Download these files:
-
-\ul{
-  \li{
-    {\a href={http://plash.beasts.org/releases/plash-1.16.tar.gz}:
-     plash-1.16.tar.gz}, the Plash source
-  }
-  \li{
-    {\a href={http://plash.beasts.org/releases/glibc-i386-objs-2.3.5_2.tar.gz}:
-     glibc-i386-objs-2.3.5_2.tar.gz}, the pre-built glibc object files
-  }
-}
-
-Unpack the Plash source and unpack the glibc object files inside
-Plash's build directory:
-
-\pre
->>tar -xvzf plash-1.16.tar.gz
->>cd plash-1.16
->>tar -xvzf ../glibc-i386-objs-2.3.5_2.tar.gz
-
-Configure and build Plash:
-
-\pre
->>./configure
->>./make.sh
-
-Then do the following as root to install Plash:
-
-\pre
->>./install.sh /
 
 
 \h3- Build Plash and glibc from source

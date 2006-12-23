@@ -141,6 +141,8 @@ gcc('src/libc-getsockopt.c', 'obj/libc-getsockopt.os', @opts_c);
 gcc('src/libc-getuid.c', 'obj/libc-getuid.os', @opts_c);
 gcc('src/libc-utime.c', 'obj/libc-utime.os', @opts_c);
 gcc('src/libc-truncate.c', 'obj/libc-truncate.os', @opts_c);
+gcc('src/libc-at-calls.c', 'obj/libc-at-calls.os', @opts_c);
+gcc('src/libc-inotify.c', 'obj/libc-inotify.os', @opts_c);
 
 
 

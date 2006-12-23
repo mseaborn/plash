@@ -125,7 +125,22 @@ if [ $GLIBC_VERSION -ge 240 ]; then
   EXCLUDE="$EXCLUDE
 	dirent/fdopendir.os
 	io/fxstatat.os
-	io/fxstatat64.os"
+	io/fxstatat64.os
+	io/faccessat.os
+	io/fchmodat.os
+	io/fchownat.os
+	misc/futimesat.os
+	io/linkat.os
+	io/mkdirat.os
+	io/mkfifoat.os
+	io/xmknodat.os
+	io/openat.os
+	io/openat64.os
+	io/readlinkat.os
+	stdio-common/renameat.os
+	io/symlinkat.os
+	io/unlinkat.os
+	misc/inotify_add_watch.os"
 fi
 
 if [ ! -d "$GLIBC" ]; then
@@ -176,6 +191,8 @@ build_libc_ldso_extras () {
 	obj/libc-utime.os \
 	obj/libc-truncate.os \
 	obj/libc-comms.os \
+	obj/libc-at-calls.os \
+	obj/libc-inotify.os \
 	obj/cap-utils.os \
 	obj/cap-call-return.os \
 	obj/libc-cap-protocol.os \

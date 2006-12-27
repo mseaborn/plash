@@ -28,11 +28,6 @@
 #define log_fd(fd, msg) /* nothing */
 
 
-/* From sysdeps/unix/sysv/linux/bits/stat.h */
-#define _STAT_VER_KERNEL        1 // mrs: indicates `struct kernel_stat'
-#define _STAT_VER_SVR4          2
-#define _STAT_VER_LINUX         3 // mrs: indicates `struct stat'
-
 /* My codes: */
 #define TYPE_STAT 1   /* struct stat */
 #define TYPE_STAT64 2 /* struct stat64 */
@@ -308,7 +303,7 @@ export(new_xstat, __GI___xstat);
 int new_xstat(int vers, const char *pathname, void *buf)
 {
   int type;
-  if(vers == _STAT_VER_LINUX) type = TYPE_STAT;
+  if(vers == _STAT_VER) type = TYPE_STAT;
   else {
 #ifndef IN_RTLD
     plash_init();
@@ -331,7 +326,7 @@ export(new_xstat64, __GI___xstat64);
 int new_xstat64(int vers, const char *pathname, void *buf)
 {
   int type;
-  if(vers == _STAT_VER_LINUX) type = TYPE_STAT64;
+  if(vers == _STAT_VER) type = TYPE_STAT64;
   else {
 #ifndef IN_RTLD
     plash_init();
@@ -350,7 +345,7 @@ export(new_lxstat, __GI___lxstat);
 int new_lxstat(int vers, const char *pathname, void *buf)
 {
   int type;
-  if(vers == _STAT_VER_LINUX) type = TYPE_STAT;
+  if(vers == _STAT_VER) type = TYPE_STAT;
   else {
 #ifndef IN_RTLD
     plash_init();
@@ -373,7 +368,7 @@ export(new_lxstat64, __GI___lxstat64);
 int new_lxstat64(int vers, const char *pathname, void *buf)
 {
   int type;
-  if(vers == _STAT_VER_LINUX) type = TYPE_STAT64;
+  if(vers == _STAT_VER) type = TYPE_STAT64;
   else {
 #ifndef IN_RTLD
     plash_init();
@@ -392,7 +387,7 @@ export(new_fxstat, __GI___fxstat);
 int new_fxstat(int vers, int fd, void *buf)
 {
   int type;
-  if(vers == _STAT_VER_LINUX) type = TYPE_STAT;
+  if(vers == _STAT_VER) type = TYPE_STAT;
   else {
 #ifndef IN_RTLD
     plash_init();
@@ -415,7 +410,7 @@ export(new_fxstat64, __GI___fxstat64);
 int new_fxstat64(int vers, int fd, void *buf)
 {
   int type;
-  if(vers == _STAT_VER_LINUX) type = TYPE_STAT64;
+  if(vers == _STAT_VER) type = TYPE_STAT64;
   else {
 #ifndef IN_RTLD
     plash_init();

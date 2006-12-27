@@ -174,6 +174,15 @@ test('hello_nopath',
        die unless $rc != 0;
      });
 
+# Tests opening a file.
+test('cat',
+     sub {
+       my $data = "Hello world!\nThis is test data.";
+       write_file('file', $data);
+       my $data2 = cmd_capture(@pola_run, '-B', '--prog', 'cat', '-fa=file');
+       assert_equal($data, $data2, 'output');
+     });
+
 # Tests execve but not fork, because bash does a tail call
 test('bash_exec',
      sub {

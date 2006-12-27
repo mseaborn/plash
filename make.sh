@@ -181,8 +181,7 @@ build_libc_ldso_extras () {
   # newer versions this was renamed to "--relocatable".
 
   OBJS_FOR_LIBC2=`for F in $OBJS_FOR_LIBC; do echo $GLIBC/$F; done`
-  echo Linking $OUT/combined-libc.os
-  ld -r obj/libc-misc.os \
+  LIBC_OBJS="obj/libc-misc.os \
 	obj/libc-stat.os \
 	obj/libc-fork-exec.os \
 	obj/libc-connect.os \
@@ -200,9 +199,16 @@ build_libc_ldso_extras () {
 	obj/filesysobj.os \
 	obj/comms.os \
 	obj/serialise.os \
-	obj/region.os \
+	obj/region.os"
+  echo Linking $OUT/combined-libc.os
+  ld -r $LIBC_OBJS \
 	$OBJS_FOR_LIBC2 \
 	-o $OUT/combined-libc.os
+
+  echo Linking $OUT/preload-libc.os
+  ld -r $LIBC_OBJS \
+	obj/libc-preload-import.os \
+	-o $OUT/preload-libc.os
 
   echo Linking $OUT/combined-rtld.os
   ld -r obj/rtld-libc-misc.os \
@@ -260,6 +266,12 @@ build_libc_ldso_extras () {
   ./src/get-export-syms.pl $OUT/combined-rtld.os >$OUT/symbol-list-rtld
   prepare_combined_obj $OUT/combined-rtld.os
   objcopy `./src/export-renames.pl --rtld <$OUT/symbol-list-rtld` $OUT/combined-rtld.os
+
+  echo Building $OUT/preload-libc.so
+  ./src/get-export-syms.pl $OUT/preload-libc.os >$OUT/symbol-list-libc-preload
+  prepare_combined_obj $OUT/preload-libc.os
+  objcopy `./src/export-renames.pl --rtld <$OUT/symbol-list-libc-preload` $OUT/preload-libc.os
+  gcc -shared -Wl,-z,defs $OUT/preload-libc.os -ldl -o $OUT/preload-libc.so
 }
 
 

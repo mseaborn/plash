@@ -127,6 +127,7 @@ gcc('src/cap-utils.c', 'obj/cap-utils.os', @opts_c);
 gcc('src/marshal-pack.c', 'obj/marshal-pack.os', @opts_c);
 gcc('src/dont-free.c', 'obj/dont-free.os', @opts_c);
 gcc('src/filesysobj.c', 'obj/filesysobj.os', @opts_c);
+gcc('src/libc-preload-import.c', 'obj/libc-preload-import.os', @opts_c);
 gcc('src/libc-misc.c', 'obj/libc-misc.os', @opts_c,
     '-DIN_LIBC');
 gcc('src/libc-misc.c', 'obj/rtld-libc-misc.os', @opts_c,

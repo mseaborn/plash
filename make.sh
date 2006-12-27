@@ -52,6 +52,7 @@ OBJS_FOR_LIBC="
 	io/close.os
 	io/dup2.os
 	io/fstat.oS io/fxstat.os
+	io/fstat64.oS io/fxstat64.os
 	io/xstat64.os io/xstatconv.os"
 OBJS_FOR_RTLD="
 	socket/rtld-recvmsg.os
@@ -64,6 +65,7 @@ OBJS_FOR_RTLD="
 	posix/getegid.os
 	io/rtld-close.os
 	io/rtld-fstat.os io/rtld-fxstat.os
+	io/rtld-fstat64.os io/rtld-fxstat64.os
 	io/rtld-xstat64.os io/rtld-xstatconv.os"
 
 # These are object files that are removed from the normal glibc (from

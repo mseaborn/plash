@@ -17,6 +17,10 @@
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
    USA.  */
 
+/* To get "struct stat64" defined */
+#define _LARGEFILE64_SOURCE
+#include <sys/stat.h>
+
 #include "libc-errno.h"
 #include "libc-comms.h"
 #include "libc-fds.h"
@@ -32,72 +36,6 @@
 #define TYPE_STAT 1   /* struct stat */
 #define TYPE_STAT64 2 /* struct stat64 */
 
-
-/* This is the ABI for glibc 2.2.5's "struct stat".  I arrived at it by
-   looking at the preprocessed output for #include <sys/stat.h>, and
-   expanding out any typedef'd types.  I have made all the members
-   unsigned even though glibc declares some of them as signed; I don't
-   think the sign is really needed. */
-/* There are so many different definitions of "struct stat(64)", and
-   not all of them are self-contained: some refer to types like __dev_t.
-   So it is getting really difficult to work out what glibc's ABIs are.
-   It's easy to work out for an ABI we can compile to, but I'm not sure
-   about the older ABIs that glibc supports but that code compiled for
-   glibc won't use.
-   I'm most confused about the rationale and history behind all these
-   different versions. */
-/* glibc does the following in bits/stat.h:
-    # define st_atime st_atim.tv_sec
-    # define st_mtime st_mtim.tv_sec
-    # define st_ctime st_ctim.tv_sec
-   Truly horrible!  So I'll use the prefix `myst_` instead of `st_'
-   to avoid clashing with glibc's macros. */
-struct abi_stat {
-  unsigned long long myst_dev;     /*  0: 8 bytes */
-  unsigned int       __pad1;     /*  8: 4 bytes, but written as `short' in glibc */
-  unsigned int	     myst_ino;     /* 12: 4 bytes */
-  unsigned int	     myst_mode;    /* 16: 4 bytes */
-  unsigned int	     myst_nlink;   /* 20: 4 bytes */
-  unsigned int       myst_uid;     /* 24: 4 bytes */
-  unsigned int       myst_gid;     /* 28: 4 bytes */
-  unsigned long long myst_rdev;    /* 32: 8 bytes */
-  unsigned int       __pad2;     /* 40: 4 bytes, but written as `short' in glibc */
-  unsigned int       myst_size;    /* 44: 4 bytes */
-  unsigned int       myst_blksize; /* 48: 4 bytes */
-  unsigned int       myst_blocks;  /* 52: 4 bytes */
-  unsigned int       myst_atime;   /* 56: 4 bytes */
-  unsigned int       __unused1;  /* 60: 4 bytes */
-  unsigned int       myst_mtime;   /* 64: 4 bytes */
-  unsigned int       __unused2;  /* 68: 4 bytes */
-  unsigned int       myst_ctime;   /* 72: 4 bytes */
-  unsigned int       __unused3;  /* 76: 4 bytes */
-  unsigned int       __unused4;  /* 80: 4 bytes */
-  unsigned int       __unused5;  /* 84: 4 bytes */
-                                 /* 88 */
-};
-/* ino field is duplicated: */
-struct abi_stat64 {
-  unsigned long long myst_dev;     /*  0: 8 bytes */
-  unsigned int       __pad1;     /*  8: 4 bytes */
-  unsigned int	     __myst_ino;   /* 12: 4 bytes */
-  unsigned int	     myst_mode;    /* 16: 4 bytes */
-  unsigned int	     myst_nlink;   /* 20: 4 bytes */
-  unsigned int       myst_uid;     /* 24: 4 bytes */
-  unsigned int       myst_gid;     /* 28: 4 bytes */
-  unsigned long long myst_rdev;    /* 32: 8 bytes */
-  unsigned int       __pad2;     /* 40: 4 bytes */
-  unsigned long long myst_size;    /* 44: 8 bytes */
-  unsigned int       myst_blksize; /* 52: 4 bytes */
-  unsigned long long myst_blocks;  /* 56: 8 bytes */
-  unsigned int       myst_atime;   /* 64: 4 bytes */
-  unsigned int       __unused1;  /* 68: 4 bytes */
-  unsigned int       myst_mtime;   /* 72: 4 bytes */
-  unsigned int       __unused2;  /* 76: 4 bytes */
-  unsigned int       myst_ctime;   /* 80: 4 bytes */
-  unsigned int       __unused3;  /* 84: 4 bytes */
-  unsigned long long myst_ino;     /* 88: 8 bytes */
-                                 /* 96 */
-};
 
 static void m_stat_info(int *ok, seqf_t *msg, int type, void *buf)
 {
@@ -117,50 +55,60 @@ static void m_stat_info(int *ok, seqf_t *msg, int type, void *buf)
   m_int(ok, msg, &myst_mtime);
   m_int(ok, msg, &myst_ctime);
   if(*ok) {
+    /* The __pad*, __unused* and __st_ino fields are defined on i386
+       but not x86-64.  The kernel_stat.h headers in glibc declare
+       their presence via macros such as _HAVE_STAT___UNUSED4.
+       However, it's difficult to get at that header, so we use
+       memset() to clear those fields instead. */
+    
     if(type == TYPE_STAT) {
-      struct abi_stat *stat = buf;
-      stat->myst_dev = myst_dev;
-      stat->__pad1 = 0;
-      stat->myst_ino = myst_ino;
-      stat->myst_mode = myst_mode;
-      stat->myst_nlink = myst_nlink;
-      stat->myst_uid = myst_uid;
-      stat->myst_gid = myst_gid;
-      stat->myst_rdev = myst_rdev;
-      stat->__pad2 = 0;
-      stat->myst_size = myst_size;
-      stat->myst_blksize = myst_blksize;
-      stat->myst_blocks = myst_blocks;
-      stat->myst_atime = myst_atime;
-      stat->__unused1 = 0;
-      stat->myst_mtime = myst_mtime;
-      stat->__unused2 = 0;
-      stat->myst_ctime = myst_ctime;
-      stat->__unused3 = 0;
-      stat->__unused4 = 0;
-      stat->__unused5 = 0;
+      struct stat *stat = buf;
+      memset(stat, 0, sizeof(struct stat));
+      
+      stat->st_dev = myst_dev;
+      // stat->__pad1 = 0;
+      stat->st_ino = myst_ino;
+      stat->st_mode = myst_mode;
+      stat->st_nlink = myst_nlink;
+      stat->st_uid = myst_uid;
+      stat->st_gid = myst_gid;
+      stat->st_rdev = myst_rdev;
+      // stat->__pad2 = 0;
+      stat->st_size = myst_size;
+      stat->st_blksize = myst_blksize;
+      stat->st_blocks = myst_blocks;
+      stat->st_atim.tv_sec = myst_atime;
+      stat->st_atim.tv_nsec = 0; /* FIXME */
+      stat->st_mtim.tv_sec = myst_mtime;
+      stat->st_mtim.tv_nsec = 0; /* FIXME */
+      stat->st_ctim.tv_sec = myst_ctime;
+      stat->st_ctim.tv_nsec = 0; /* FIXME */
+      // stat->__unused4 = 0;
+      // stat->__unused5 = 0;
     }
     else if(type == TYPE_STAT64) {
-      struct abi_stat64 *stat = buf;
-      stat->myst_dev = myst_dev;
-      stat->__pad1 = 0;
-      stat->__myst_ino = myst_ino;
-      stat->myst_mode = myst_mode;
-      stat->myst_nlink = myst_nlink;
-      stat->myst_uid = myst_uid;
-      stat->myst_gid = myst_gid;
-      stat->myst_rdev = myst_rdev;
-      stat->__pad2 = 0;
-      stat->myst_size = myst_size;
-      stat->myst_blksize = myst_blksize;
-      stat->myst_blocks = myst_blocks;
-      stat->myst_atime = myst_atime;
-      stat->__unused1 = 0;
-      stat->myst_mtime = myst_mtime;
-      stat->__unused2 = 0;
-      stat->myst_ctime = myst_ctime;
-      stat->__unused3 = 0;
-      stat->myst_ino = myst_ino;
+      struct stat64 *stat = buf;
+      memset(stat, 0, sizeof(struct stat64));
+      
+      stat->st_dev = myst_dev;
+      // stat->__pad1 = 0;
+      stat->__st_ino = myst_ino;
+      stat->st_mode = myst_mode;
+      stat->st_nlink = myst_nlink;
+      stat->st_uid = myst_uid;
+      stat->st_gid = myst_gid;
+      stat->st_rdev = myst_rdev;
+      // stat->__pad2 = 0;
+      stat->st_size = myst_size;
+      stat->st_blksize = myst_blksize;
+      stat->st_blocks = myst_blocks;
+      stat->st_atim.tv_sec = myst_atime;
+      stat->st_atim.tv_nsec = 0; /* FIXME */
+      stat->st_mtim.tv_sec = myst_mtime;
+      stat->st_mtim.tv_nsec = 0; /* FIXME */
+      stat->st_ctim.tv_sec = myst_ctime;
+      stat->st_ctim.tv_nsec = 0; /* FIXME */
+      stat->st_ino = myst_ino;
     }
     else {
       *ok = 0;
@@ -200,7 +148,6 @@ int my_stat(int nofollow, int type, const char *pathname, void *buf)
 
 int my_fstat(int type, int fd, void *buf)
 {
-  struct stat st;
   log_msg(MOD_MSG "fstat\n");
 
   if(0 <= fd && fd < g_fds_size && g_fds[fd].fd_dir_obj) {
@@ -240,53 +187,11 @@ int my_fstat(int type, int fd, void *buf)
   else {
     /* Use the normal fstat system call. */
     log_fd(fd, "normal fstat");
-    if(fstat(fd, &st) < 0) { return -1; }
     if(type == TYPE_STAT) {
-      struct abi_stat *stat = buf;
-      stat->myst_dev = st.st_dev;
-      stat->__pad1 = 0;
-      stat->myst_ino = st.st_ino;
-      stat->myst_mode = st.st_mode;
-      stat->myst_nlink = st.st_nlink;
-      stat->myst_uid = st.st_uid;
-      stat->myst_gid = st.st_gid;
-      stat->myst_rdev = st.st_rdev;
-      stat->__pad2 = 0;
-      stat->myst_size = st.st_size;
-      stat->myst_blksize = st.st_blksize;
-      stat->myst_blocks = st.st_blocks;
-      stat->myst_atime = st.st_atime;
-      stat->__unused1 = 0;
-      stat->myst_mtime = st.st_mtime;
-      stat->__unused2 = 0;
-      stat->myst_ctime = st.st_ctime;
-      stat->__unused3 = 0;
-      stat->__unused4 = 0;
-      stat->__unused5 = 0;
-      return 0;
+      return fstat(fd, (struct stat *) buf);
     }
     else if(type == TYPE_STAT64) {
-      struct abi_stat64 *stat = buf;
-      stat->myst_dev = st.st_dev;
-      stat->__pad1 = 0;
-      stat->__myst_ino = st.st_ino;
-      stat->myst_mode = st.st_mode;
-      stat->myst_nlink = st.st_nlink;
-      stat->myst_uid = st.st_uid;
-      stat->myst_gid = st.st_gid;
-      stat->myst_rdev = st.st_rdev;
-      stat->__pad2 = 0;
-      stat->myst_size = st.st_size;
-      stat->myst_blksize = st.st_blksize;
-      stat->myst_blocks = st.st_blocks;
-      stat->myst_atime = st.st_atime;
-      stat->__unused1 = 0;
-      stat->myst_mtime = st.st_mtime;
-      stat->__unused2 = 0;
-      stat->myst_ctime = st.st_ctime;
-      stat->__unused3 = 0;
-      stat->myst_ino = st.st_ino;
-      return 0;
+      return fstat64(fd, (struct stat64 *) buf);
     }
     else {
       /* Don't recognise ABI version requested. */

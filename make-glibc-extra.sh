@@ -39,7 +39,9 @@ PLASH_RTLD_EXTRA_OBJS="
         socket/rtld-send.os
         socket/rtld-cmsg_nxthdr.os
         io/rtld-fstat.os
+        io/rtld-fstat64.os
         io/rtld-fxstat.os
+        io/rtld-fxstat64.os
         io/rtld-xstat64.os
         io/rtld-xstatconv.os
         io/rtld-dup.os

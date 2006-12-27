@@ -310,7 +310,11 @@ int new_xstat(int vers, const char *pathname, void *buf)
   int type;
   if(vers == _STAT_VER_LINUX) type = TYPE_STAT;
   else {
-    /* fprintf(stderr, "__xstat version %i, `%s'\n", vers, pathname); */
+#ifndef IN_RTLD
+    plash_init();
+    if(libc_debug)
+      fprintf(stderr, "libc: __xstat version %i, `%s'\n", vers, pathname);
+#endif
     __set_errno(ENOSYS); return -1;
   }
   return my_stat(0, type, pathname, buf);
@@ -329,7 +333,11 @@ int new_xstat64(int vers, const char *pathname, void *buf)
   int type;
   if(vers == _STAT_VER_LINUX) type = TYPE_STAT64;
   else {
-    /* fprintf(stderr, "__xstat64 version %i, `%s'\n", vers, pathname); */
+#ifndef IN_RTLD
+    plash_init();
+    if(libc_debug)
+      fprintf(stderr, "libc: __xstat64 version %i, `%s'\n", vers, pathname);
+#endif
     __set_errno(ENOSYS); return -1;
   }
   return my_stat(0, type, pathname, buf);
@@ -344,7 +352,11 @@ int new_lxstat(int vers, const char *pathname, void *buf)
   int type;
   if(vers == _STAT_VER_LINUX) type = TYPE_STAT;
   else {
-    /* fprintf(stderr, "__lxstat version %i, `%s'\n", vers, pathname); */
+#ifndef IN_RTLD
+    plash_init();
+    if(libc_debug)
+      fprintf(stderr, "libc: __lxstat version %i, `%s'\n", vers, pathname);
+#endif
     __set_errno(ENOSYS); return -1;
   }
   return my_stat(1, type, pathname, buf);
@@ -363,7 +375,11 @@ int new_lxstat64(int vers, const char *pathname, void *buf)
   int type;
   if(vers == _STAT_VER_LINUX) type = TYPE_STAT64;
   else {
-    /* fprintf(stderr, "__lxstat64 version %i, `%s'\n", vers, pathname); */
+#ifndef IN_RTLD
+    plash_init();
+    if(libc_debug)
+      fprintf(stderr, "libc: __lxstat64 version %i, `%s'\n", vers, pathname);
+#endif
     __set_errno(ENOSYS); return -1;
   }
   return my_stat(1, type, pathname, buf);
@@ -378,7 +394,11 @@ int new_fxstat(int vers, int fd, void *buf)
   int type;
   if(vers == _STAT_VER_LINUX) type = TYPE_STAT;
   else {
-    /* fprintf(stderr, "__fxstat version %i, fd %i\n", vers, fd); */
+#ifndef IN_RTLD
+    plash_init();
+    if(libc_debug)
+      fprintf(stderr, "libc: __fxstat version %i, fd %i\n", vers, fd);
+#endif
     __set_errno(ENOSYS); return -1;
   }
   return my_fstat(type, fd, buf);
@@ -397,7 +417,11 @@ int new_fxstat64(int vers, int fd, void *buf)
   int type;
   if(vers == _STAT_VER_LINUX) type = TYPE_STAT64;
   else {
-    /* fprintf(stderr, "__fxstat64 version %i, fd %i\n", vers, fd); */
+#ifndef IN_RTLD
+    plash_init();
+    if(libc_debug)
+      fprintf(stderr, "libc: __fxstat64 version %i, fd %i\n", vers, fd);
+#endif
     __set_errno(ENOSYS); return -1;
   }
   return my_fstat(type, fd, buf);

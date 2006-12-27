@@ -570,6 +570,13 @@ build_shell_etc() {
   $CC $OPTS_S obj/socket-connect.o $LIBC_LINK obj/libplash.a -o bin/plash-socket-connect
 
   $CC $OPTS_S obj/test-caps.o $LIBC_LINK obj/libplash.a -o bin/test-caps
+
+  echo Linking bin/kernel-exec
+  if which diet >/dev/null; then
+    diet $CC src/kernel-exec.c -o bin/kernel-exec
+  else
+    $CC -static src/kernel-exec.c -o bin/kernel-exec
+  fi
 }
 
 build_gtk_powerbox () {

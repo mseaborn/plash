@@ -17,6 +17,7 @@ chmod +x lib/pola-run
 
 export PLASH_SANDBOX_PROG=$DIR/tests/wrapper-preload.sh
 export PLASH_P_SANDBOX_PROG=$DIR/tests/wrapper-preload.sh
+export PLASH_LDSO_PATH=$DIR/bin/kernel-exec
 export PLASH_DIR=$DIR
 
 export PATH=$DIR/lib:$DIR/bin:$PATH

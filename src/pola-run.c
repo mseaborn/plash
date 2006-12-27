@@ -826,8 +826,6 @@ int main(int argc, char **argv)
       
       free_node(state.root_node);
 
-      cwd_discard();
-
       /* Do I want to do a double fork so that the server process is no
 	 longer a child of the client process?  The client process might
 	 not be expecting to handle SIGCHILD signals.  Or perhaps these
@@ -839,6 +837,8 @@ int main(int argc, char **argv)
       }
       if(state.server_as_parent ? pid > 0 : pid == 0) {
 	close(socks[0]);
+
+	cwd_discard();
 	
 	cap_make_connection(r, socks[1], cap_seq_make(caps, cap_count),
 			    0, "to-client");
@@ -868,6 +868,12 @@ int main(int argc, char **argv)
 				 args_count2, args_array2,
 				 &cmd, &args_count2, &args_array2,
 				 state.debug);
+
+	/* Restoring the cwd here is only needed for test cases using
+	   the LD_PRELOADed library.  Otherwise, the cwd gets reset by
+	   run-as-anonymous or is ignored. */
+	cwd_restore();
+	cwd_discard();
 
 	if(under_plash) {
 	  assert(plash_libc_kernel_execve);

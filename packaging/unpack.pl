@@ -1,20 +1,18 @@
 #!/usr/bin/perl -w
 
 use IO::File;
+use Unpack;
 
 
-if(scalar(@ARGV) != 1) {
-  print "Usage: $0 <package-name>\n";
+if(scalar(@ARGV) != 2) {
+  print "Usage: $0 <package-list> <package-name>\n";
   exit(1);
 }
-my $package = $ARGV[0];
+my $package_list = $ARGV[0];
+my $package = $ARGV[1];
 
 
 my $server = 'http://localhost:9999/debian'; # approx proxy
-
-# curl http://localhost:9999/debian/dists/testing/main/binary-i386/Packages.gz -o Packages.gz
-my $packages = 'Packages.gz';
-#my $packages = "$ENV{'HOME'}/fetched/ftp.uk.debian.org/debian/dists/testing/main/binary-i386/Packages.gz";
 
 my $verbose = 1;
 my $do_unpack = 1;
@@ -35,21 +33,43 @@ my $remove = { #'libc6' => 1, # need to replace to provide /usr/lib/gconv...
 	     };
 
 
-print "reading package list...\n";
-my @parts;
-foreach my $y (grep { $_ !~ /^\s*$/ }
-	       split(/\n\s*\n/,
-		     `gzip -cd $packages`)) {
-  my $x = $y."\n";
-  my $p = {};
-  while($x ne '') {
-    $x =~ s/^(\S+?):\s*(.*(\n\s+.*)*)(\n|\Z)// || die "Bad data: $y";
-    $p->{lc($1)} = $2;
+sub read_packages_list {
+  my ($file) = @_;
+  
+  # List of fields to keep from Packages file
+  my @fields = qw(package version
+		  filename size md5sum sha1
+		  depends pre-depends essential);
+  my $fields = { map { ($_ => 1) } @fields };
+  
+  my $list = [];
+  my $f = IO::File->new($file, 'r')
+    || die "Can't open \"$file\"";
+  while(1) {
+    my $block = Unpack::get_block($f);
+    if($block eq '') { last }
+    
+    my $x = $block."\n";
+    my $package = {};
+    while($x ne '') {
+      $x =~ s/^(\S+?):\s*(.*(\n\s+.*)*)(\n|\Z)// || die "Bad data: $block";
+      my $key = lc($1);
+      my $data = $2;
+      if($fields->{$key}) {
+	$package->{$key} = $data;
+      }
+    }
+    push(@$list, $package);
   }
-  push(@parts, $p);
+  $f->close();
+  return $list;
 }
 
-my $name_idx = { map { ($_->{package} => $_) } @parts };
+
+print "reading package list...\n";
+my $packages = read_packages_list($package_list);
+
+my $name_idx = { map { ($_->{package} => $_) } @$packages };
 
 
 sub split_dep_list {
@@ -134,7 +154,7 @@ my $deplist =
 
 # Add packages marked as Essential, since other packages are not
 # required to declare dependencies on them
-foreach my $p (@parts) {
+foreach my $p (@$packages) {
   if(defined $p->{essential} && $p->{essential} eq 'yes') {
     print "essential package: $p->{package}\n";
     search_deps($deplist, 0, $p->{package});

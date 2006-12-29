@@ -45,9 +45,6 @@ install -d $DEST/DEBIAN
 install -d $DEST/usr/share/doc/$PACKAGE/html
 install -d $DEST/usr/share/man/man1
 
-cp -pv debian/copyright $DEST/usr/share/doc/$PACKAGE/
-cp -pv debian/changelog $DEST/usr/share/doc/$PACKAGE/changelog
-
 # Behave nicely if the documentation has not been built.
 for FILE in web-site/out/*; do if [ -e $FILE ]; then
   cp -prv $FILE $DEST/usr/share/doc/$PACKAGE/html/
@@ -80,7 +77,10 @@ mkdir -p $DEST/usr/share/lintian/overrides
 cp -av debian/lintian-overrides $DEST/usr/share/lintian/overrides/plash
 
 dh_shlibdeps
+dh_installdocs
+dh_installchangelogs
 dh_compress
+dh_strip
 dh_gencontrol
 
 chown -R root.root debian/plash

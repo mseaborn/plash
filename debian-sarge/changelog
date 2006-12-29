@@ -17,6 +17,11 @@ plash (1.17-1sarge1) unstable; urgency=low
   * Implement lchmod() in libc and fs_op.
   * Add partial implementation of chown()/lchown():
     Succeeds when no owner/group change is requested.
+  * Don't allow real_file_chmod() or real_dir_create_file() to set the
+    setuid/setgid bits.  This fixes a security hole that allowed
+    sandboxed code to grant the authority of the invoking user to
+    unsandboxed programs being run by another user by creating setuid
+    executables in a shared directory.
   * Intercept getsockopt() so that uid/gids can be faked for SO_PEERCRED
     case.
   * Fix getcwd() to pass glibc's io/tst-getcwd test case.

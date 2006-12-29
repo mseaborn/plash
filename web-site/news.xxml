@@ -100,7 +100,6 @@ exec-object:
   }
 }
 
-
 Packaging:
 
 \ul{
@@ -117,6 +116,17 @@ Packaging:
   }
 }
 
+Security bug fixes:
+
+\ul{
+  \li{
+    Don't allow real_file_chmod() or real_dir_create_file() to set the
+    setuid/setgid bits.  This fixes a security hole that allowed
+    sandboxed code to grant the authority of the invoking user to
+    unsandboxed programs being run by another user by creating setuid
+    executables in a shared directory.
+  }
+}
 
 
 \h2- Version 1.16

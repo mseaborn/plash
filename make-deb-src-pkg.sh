@@ -30,6 +30,7 @@ mkdir $OUT
 
 DEST=$OUT/plash-$VERSION
 svn export . $DEST.first-orig
+./get-svn-revision.pl > $DEST.first-orig/svn-revision
 
 (cd $DEST.first-orig
 

@@ -106,6 +106,49 @@ sub get_block {
   return $data;
 }
 
+# Parses a block into fields
+sub block_fields {
+  my ($block, $fields) = @_;
+  
+  my $x = $block;
+  my $record = {};
+  while($x ne '') {
+    $x =~ s/^(\S+?):\s*(.*(\n\s+.*)*)(\n|\Z)// || die "Bad data: $block";
+    my $key = lc($1);
+    my $data = $2;
+    if($fields->{$key}) {
+      $record->{$key} = $data;
+    }
+  }
+  return $record;
+}
+
+
+# Functions for parsing dependencies
+
+sub split_dep_list {
+  my ($d) = @_;
+  map { trim($_) } split(/,/, $d);
+}
+
+sub split_disjunction {
+  my ($d) = @_;
+  map { trim($_) } split(/\|/, $d)
+}
+
+sub parse_dep {
+  my ($d) = @_;
+  $d =~ /^(\S+)(\s*\([^\)]*\))?$/
+    || die "Unrecognised dependency format: $d";
+  { Name => $1 }
+}
+
+sub trim {
+  my ($x) = @_;
+  $x =~ /^\s*(.*?)\s*$/ || die;
+  $1
+}
+
 
 sub run_cmd {
   print join(' ', @_)."\n";

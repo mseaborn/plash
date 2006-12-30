@@ -15,10 +15,9 @@ my $package = $ARGV[1];
 my $server = 'http://localhost:9999/debian'; # approx proxy
 
 my $verbose = 1;
-my $do_unpack = 1;
+my $do_unpack = 0;
 my $dest_dir = "$package/unpacked";
 
-my $do_download = 1;
 my $skip_not_found = 1;
 
 # To be removed:
@@ -38,7 +37,7 @@ sub read_packages_list {
   
   # List of fields to keep from Packages file
   my @fields = qw(package version
-		  filename size md5sum sha1
+		  filename size md5sum sha1 base-url
 		  depends pre-depends essential);
   my $fields = { map { ($_ => 1) } @fields };
   
@@ -49,43 +48,12 @@ sub read_packages_list {
     my $block = Unpack::get_block($f);
     if($block eq '') { last }
     
-    my $x = $block."\n";
-    my $package = {};
-    while($x ne '') {
-      $x =~ s/^(\S+?):\s*(.*(\n\s+.*)*)(\n|\Z)// || die "Bad data: $block";
-      my $key = lc($1);
-      my $data = $2;
-      if($fields->{$key}) {
-	$package->{$key} = $data;
-      }
-    }
-    push(@$list, $package);
+    push(@$list, Unpack::block_fields($block, $fields));
   }
   $f->close();
   return $list;
 }
 
-
-print "reading package list...\n";
-my $packages = read_packages_list($package_list);
-
-my $name_idx = { map { ($_->{package} => $_) } @$packages };
-
-
-sub split_dep_list {
-  my ($d) = @_;
-  map { trim($_) } split(/,/, $d);
-}
-sub split_disjunction {
-  my ($d) = @_;
-  map { trim($_) } split(/\|/, $d)
-}
-sub parse_dep {
-  my ($d) = @_;
-  $d =~ /^(\S+)(\s*\([^\)]*\))?$/
-    || die "Unrecognised dependency format: $d";
-  { Name => $1 }
-}
 
 sub search_deps {
   my ($deplist, $degree, $name) = @_;
@@ -98,7 +66,7 @@ sub search_deps {
   }
 
   # Check whether package is available
-  my $package = $name_idx->{$name};
+  my $package = $deplist->{Packages}{$name};
   if(!defined $package) {
     if($verbose) { print $indent."$name NOT AVAILABLE\n"; }
     push(@{$deplist->{Lacking}}, $name);
@@ -123,17 +91,17 @@ sub search_deps {
   # Process further dependencies
   my @deps;
   if(defined($package->{depends})) {
-    push(@deps, split_dep_list($package->{depends}));
+    push(@deps, Unpack::split_dep_list($package->{depends}));
   }
   if(defined($package->{'pre-depends'})) {
-    push(@deps, split_dep_list($package->{'pre-depends'}));
+    push(@deps, Unpack::split_dep_list($package->{'pre-depends'}));
   }
   foreach my $dep (@deps) {
-    my @or = split_disjunction($dep);
+    my @or = Unpack::split_disjunction($dep);
     
     # Only look at first dependency in disjunction
     foreach my $d ($or[0]) {
-      my $dep = parse_dep($d);
+      my $dep = Unpack::parse_dep($d);
       search_deps($deplist, $degree + 1, $dep->{Name});
     }
   }
@@ -145,8 +113,18 @@ sub search_deps {
 }
 
 
+print "reading package list...\n";
+my $packages = read_packages_list($package_list);
+
+my $name_idx = { map { ($_->{package} => $_) } @$packages };
+
+
 my $deplist =
-  { List => [],
+  { # Input:
+    # packages indexes by name:
+    Packages => $name_idx,
+    # Output:
+    List => [],
     Hash => {},
     Degree => {},
     Lacking => [],
@@ -166,12 +144,16 @@ foreach my $p (@base) {
 }
 search_deps($deplist, 0, $package);
 
+run_cmd('mkdir', '-p', $package);
+
 # Print dependencies, ordered by degree of separation
+my $f = IO::File->new("$package/degrees", 'w') || die;
 foreach my $dep (sort { $deplist->{Degree}{$a->{package}} <=>
 			$deplist->{Degree}{$b->{package}} }
 		 @{$deplist->{List}}) {
-  print "$deplist->{Degree}{$dep->{package}} $dep->{package}\n";
+  print $f "$deplist->{Degree}{$dep->{package}} $dep->{package}\n";
 }
+$f->close();
 
 if(scalar(@{$deplist->{Lacking}}) > 0) {
   print "Missing packages:\n";
@@ -181,49 +163,22 @@ if(scalar(@{$deplist->{Lacking}}) > 0) {
 }
 
 # Output topologically-sorted list of packages
-run_cmd('mkdir', '-p', $package);
-my $f = IO::File->new("$package/package-list", 'w') || die;
+#$f = IO::File->new("$package/package-list", 'w') || die;
+#foreach my $p (@{$deplist->{List}}) {
+#  print $f "$p->{package}_$p->{version}\n";
+#}
+#$f->close();
+
+$f = IO::File->new("$package/package-list", 'w') || die;
 foreach my $p (@{$deplist->{List}}) {
-  print $f "$p->{package}_$p->{version}\n";
+  foreach my $field (qw(package version size md5sum filename base-url)) {
+    die "Field $field missing" if !defined $p->{$field};
+    printf $f "%s: %s\n", ucfirst($field), $p->{$field};
+  }
+  print $f "\n";
 }
 $f->close();
 
-
-sub try_get {
-  my ($do_download, $list) = @_;
-  
-  my $size = 0;
-  my $size_to_get = 0;
-  foreach my $d (@$list) {
-    $size += $d->{size};
-    
-    $d->{filename} =~ /\/([^\/]+)$/ || die;
-    my $leafname = $1;
-
-    $d->{local_file} = "/var/cache/apt/archives/$leafname";
-    if(!-e $d->{local_file}) {
-      $d->{local_file} = "cache/$leafname";
-      if(!-e $d->{local_file}) {
-	$size_to_get += $d->{size};
-	
-	if($do_download) {
-	  print "getting $leafname...\n";
-	  mkdir('cache');
-	  run_cmd('curl', "$server/$d->{filename}",
-		  '-o', $d->{local_file});
-	}
-      }
-    }
-  }
-  printf "to get: %iMb of %iMb\n",
-    $size_to_get / (1024 * 1024),
-    $size / (1024 * 1024);
-}
-
-try_get(0, $deplist->{List});
-if($do_download) {
-  try_get(1, $deplist->{List});
-}
 
 if($do_unpack) {
   print "unpacking...\n";
@@ -274,12 +229,6 @@ if($do_unpack) {
   }
 }
 
-
-sub trim {
-  my ($x) = @_;
-  $x =~ /^\s*(.*?)\s*$/ || die;
-  $1
-}
 
 sub run_cmd {
   print join(' ', @_)."\n";

@@ -1,4 +1,5 @@
 
+import string
 import sys
 import os
 import plash.namespace as ns
@@ -8,10 +9,14 @@ class BadArgException(Exception):
     pass
 
 
-def handle_flags(str):
+def split_flags(flag_str):
+    lst = string.split(flag_str, ",")
+    return list(lst[0]) + lst[1:]
+
+def handle_flags(flag_str):
     x = { 'build_fs': 0,
           'a': False }
-    for c in str:
+    for c in split_flags(flag_str):
         if c == 'a':
             x['a'] = True
         elif c == 'l':
@@ -93,8 +98,8 @@ def handle_arg(state, proc, args):
                     ["-fl", "/usr",
                      "-fl", "/bin",
                      "-fl", "/lib",
-                     #"-fl,objrw", "/dev/null",
-                     #"-fl,objrw", "/dev/tty"
+                     "-fl,objrw", "/dev/null",
+                     "-fl,objrw", "/dev/tty"
                      ])
 
     # -h: Help

@@ -167,3 +167,10 @@ def handle_arg(state, proc, args):
 
     else:
         raise BadArgException, "Unrecognised argument: %s" % arg
+
+
+def set_fake_uids(proc):
+    proc.env['PLASH_FAKE_UID'] = str(os.getuid())
+    proc.env['PLASH_FAKE_GID'] = str(os.getgid())
+    proc.env['PLASH_FAKE_EUID'] = str(os.getuid())
+    proc.env['PLASH_FAKE_EGID'] = str(os.getgid())

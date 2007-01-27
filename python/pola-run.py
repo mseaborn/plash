@@ -76,6 +76,8 @@ except BadArgException, msg:
 if state.namespace_empty:
     print "pola-run: warning: namespace empty, try -B for default namespace"
 
+plash.pola_run_args.set_fake_uids(proc)
+
 # If the chosen cwd is present in the callee's namespace, set the cwd.
 # Otherwise, leave it undefined.
 if state.cwd != None:

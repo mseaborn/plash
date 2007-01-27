@@ -64,10 +64,6 @@ state.powerbox = False
 try:
     plash.pola_run_args.handle_args(state, proc, sys.argv[1:])
 
-    # REMOVE
-    ns.resolve_populate(state.caller_root, proc.root_node, "/usr")
-    ns.resolve_populate(state.caller_root, proc.root_node, "/dev/null", flags=ns.FS_OBJECT_RW)
-
     # The zeroth argument defaults to being the same as the command pathname
     proc.arg0 = proc.cmd
 

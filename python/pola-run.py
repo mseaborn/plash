@@ -4,6 +4,7 @@ import sys
 import os
 import plash_core
 import plash.env
+import plash.mainloop
 import plash.namespace as ns
 from plash.process import Process_spec
 import plash.pola_run_args
@@ -97,14 +98,10 @@ if state.powerbox:
         plash.powerbox.Powerbox(user_namespace = state.caller_root,
                                 app_namespace = proc.root_node,
                                 pet_name = state.pet_name)
+    plash.mainloop.use_gtk_mainloop()
 
 pid = proc.spawn()
-# FIXME: don't want to have this special case
-if state.powerbox:
-    import gtk
-    gtk.main()
-else:
-    plash_core.run_server()
+plash.mainloop.run_server()
 
 # Wait for the subprocess to exit and check the exit code.
 (pid2, status) = os.waitpid(pid, 0)

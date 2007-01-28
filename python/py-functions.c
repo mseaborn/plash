@@ -75,6 +75,11 @@ static PyObject *plpy_run_server(PyObject *self, PyObject *args)
   return Py_None;
 }
 
+static PyObject *plpy_cap_server_exporting(PyObject *self, PyObject *args)
+{
+  return PyBool_FromLong(cap_server_exporting());
+}
+
 static PyObject *plpy_cap_close_all_connections(PyObject *self, PyObject *args)
 {
   cap_close_all_connections();
@@ -452,6 +457,10 @@ static PyMethodDef module_methods[] = {
     "Returns an object that creates connections." },
   { "run_server", plpy_run_server, METH_NOARGS,
     "Enter event loop, handling incoming object invocations as a server." },
+  { "cap_server_exporting", plpy_cap_server_exporting, METH_NOARGS,
+    "Returns whether this process is currently exporting any object "
+    "references and hence acting as a server.  This is used for determining "
+    "whether the process can exit." },
   
   { "cap_close_all_connections", plpy_cap_close_all_connections, METH_NOARGS,
     "Drop all the obj-cap-protocol connections that are currently open\n"

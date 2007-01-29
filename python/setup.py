@@ -8,6 +8,7 @@ setup(name="plash", version="1.0",
       py_modules=['plash.env',
                   'plash.logger',
                   'plash.marshal',
+                  'plash.mainloop',
                   'plash.methods', # auto-generated
                   'plash.namespace',
                   'plash.process',

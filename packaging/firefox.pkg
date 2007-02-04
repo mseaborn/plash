@@ -1,0 +1,5 @@
+Depends: firefox
+Pet-name: Firefox Web browser (sandboxed)
+Pet-id: firefox
+Icon: firefox.png
+Exec: firefox

@@ -1,0 +1,6 @@
+Depends: leafpad
+Pet-name: Leafpad text editor (sandboxed)
+Pet-id: leafpad
+Icon: leafpad.png
+Exec: LD_PRELOAD=/usr/lib/plash/lib/powerbox-for-gtk.so leafpad "$@"
+MimeType: text/plain;

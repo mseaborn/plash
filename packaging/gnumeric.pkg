@@ -1,0 +1,6 @@
+Depends: gnumeric
+Pet-name: Gnumeric spreadsheet (sandboxed)
+Pet-id: gnumeric
+Icon: gnome-gnumeric.png
+Exec: gnumeric "$@"
+MimeType: text/comma-separated-values;text/csv;

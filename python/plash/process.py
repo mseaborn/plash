@@ -30,7 +30,13 @@ def add_to_path(dir, path):
 # caps: dict mapping cap names (e.g. "fs_op") to objects
 # conn_maker: object to use for creating new connection
 class Process_spec:
+    
     def __init__(self):
+        self.env = {}
+        self.cmd = None
+        self.arg0 = None
+        self.args = []
+        self.caps = {}
         self.conn_maker = ns.conn_maker
 
     def setcmd(self, cmd, *args):
@@ -77,12 +83,20 @@ class Process_spec:
         # This is a hack to ensure that the FD doesn't get GC'd and closed
         self.fd = fd
 
+    def set_post_defaults(self):
+        if self.arg0 is None:
+            self.arg0 = self.cmd
+
     def spawn(self):
+        self.set_post_defaults()
         self.plash_setup()
         if plash.env.under_plash:
             my_execve = kernel_execve
         else:
             my_execve = os.execve
+        assert isinstance(self.cmd, str)
+        for arg in [self.arg0] + self.args:
+            assert isinstance(arg, str)
         # Doing this in Python is a little risky.  We must ensure that
         # no freeing of Plash objects occurs before the call to
         # cap_close_all_connections() in the newly-forked process,

@@ -12,6 +12,7 @@ setup(name="plash", version="1.0",
                   'plash.methods', # auto-generated
                   'plash.namespace',
                   'plash.process',
+                  'plash.pola_run_args',
                   'plash.powerbox'],
       ext_modules=[Extension("plash_core",
                              include_dirs = ["../src", "../gensrc"],

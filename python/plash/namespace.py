@@ -22,6 +22,10 @@ import plash.marshal
 import plash.marshal as m
 
 
+class ReturnUnmarshalError(Exception):
+    pass
+
+
 def call(obj, result, method, *args):
     (m, r) = plash.marshal.unpack(
         obj.cap_call(
@@ -32,8 +36,7 @@ def call(obj, result, method, *args):
         else:
             return r
     else:
-        # FIXME
-        fail()
+        raise ReturnUnmarshalError("Failed to unmarshal: %r, %r" % (m, r))
 
 
 m.add_format('resolve_dir', 'cdiS')

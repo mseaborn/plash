@@ -22,13 +22,23 @@ import struct
 import string
 
 
+class FormatStringError:
+    pass
+
+class UnpackError:
+    pass
+
+class UnmarshalError:
+    pass
+
+
 methods_by_name = {}
 methods_by_code = {}
 
 def method_id(name, code):
     x = { 'code': code, 'name': name }
-    assert not (name in methods_by_name)
-    assert not (code in methods_by_code)
+    assert not (name in methods_by_name), name
+    assert not (code in methods_by_code), code
     methods_by_name[name] = x
     methods_by_code[code] = x
 
@@ -46,7 +56,7 @@ class Format_str:
 
 class Format_str1:
     def __init__(self, code, fmt):
-        assert len(fmt) == 1
+        assert len(fmt) == 1, fmt
         self.code = code
         self.fmt = fmt
     def pack_a(self, x): return format_pack(self.code, self.fmt, x)
@@ -309,12 +319,14 @@ def format_pack(method, pattern, *args):
         p = pattern[i]
         arg = args[i]
         if p == 'i':
+            assert isinstance(arg, int), arg
             data.append(struct.pack('i', arg))
         elif p == 's':
+            assert isinstance(arg, str), arg
             data.append(struct.pack('i', len(arg)))
             data.append(arg)
         elif p == 'S':
-            assert isinstance(arg, str)
+            assert isinstance(arg, str), arg
             data.append(arg)
         elif p == 'c':
             caps.append(arg)
@@ -335,7 +347,8 @@ def format_pack(method, pattern, *args):
             data.append(data2)
             caps.extend(caps2)
             fds.extend(fds2)
-        else: raise "Unknown format string char"
+        else:
+            raise FormatStringError("Unknown format string char: %s" % p)
     return (string.join(data, ''), tuple(caps), tuple(fds))
 
 def get_message_code(args):
@@ -392,7 +405,8 @@ def format_unpack(pattern, msg):
             data_pos = len(data)
             caps_pos = len(caps)
             fds_pos = len(fds)
-        else: raise "Unknown format string char"
+        else:
+            raise FormatStringError("Unknown format string char: %s" % f)
         args.append(v)
 
     # Ensure that all the data has been matched
@@ -428,7 +442,7 @@ def tree_unpack(ref, args):
     elif type == 4:
         return fds[addr]
     else:
-        raise "Bad type code in reference", type
+        raise UnpackError("Bad type code in reference: %i" % type)
 
 
 def pack(name, *args):
@@ -473,13 +487,13 @@ class Pyobj_demarshal(plash_core.Pyobj):
         elif method in methods_by_code:
             print "cap_call received message with no handler; name:", \
                   methods_by_code[method]['name']
-            raise "No match"
+            raise UnmarshalError("No match")
         else:
             # NB. The exception will not actually get reported.
             # Need to add a logging/warning mechanism.
             # Need to convert (selected?) exceptions to error return values.
             print "cap_call received message with no handler; code:", method
-            raise "No match"
+            raise UnmarshalError("No match")
 
 def add_marshaller(name, f):
     setattr(plash_core.Wrapper, name, f)
@@ -497,7 +511,7 @@ def add_method(name, result):
             else:
                 return r
         else:
-            raise "No match, got '%s' wanted '%s'" % (m, result)
+            raise UnmarshalError("No match, got '%s' wanted '%s'" % (m, result))
 
     add_marshaller(name, outgoing)
 

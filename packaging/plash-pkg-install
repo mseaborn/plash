@@ -64,15 +64,15 @@ sub get_field {
 sub choose_and_unpack {
   my ($output_dir, $config) = @_;
   
-  run_cmd("./choose.pl", $output_dir, get_field($config, 'depends'));
-  run_cmd("./fetch.pl", "$output_dir/package-list");
+  run_cmd("plash-pkg-choose", $output_dir, get_field($config, 'depends'));
+  run_cmd("plash-pkg-fetch", "$output_dir/package-list");
   
   my $unpack_dir = "$output_dir/unpacked";
   # Delete any existing unpacked tree
   if(-d $unpack_dir) {
     run_cmd("rm", "-rf", $unpack_dir);
   }
-  run_cmd("./unpack.pl", "$output_dir/package-list", $unpack_dir);
+  run_cmd("plash-pkg-unpack", "$output_dir/package-list", $unpack_dir);
 }
 
 sub init_write_layer {
@@ -118,7 +118,7 @@ sub desktop_file {
     push(@fields, ['Icon', $spec->{icon}]);
   }
 
-  my $launcher = abs_path("launch-pet-app.py");
+  my $launcher = abs_path(look_up_in_path("plash-pkg-launch"));
   my $abs_output_dir = abs_path($output_dir);  
   # FIXME: should quote unusual chars in substituted strings
   push(@fields, ['Exec', "$launcher --app-dir $abs_output_dir --open-files %f"]);
@@ -158,4 +158,16 @@ sub write_file {
   if(!defined $f) { die "Can't open `$file' for writing" }
   print $f $data;
   $f->close();
+}
+
+sub look_up_in_path {
+  my ($name) = @_;
+
+  foreach my $dir (split(/:/, $ENV{'PATH'})) {
+    my $path = "$dir/$name";
+    if(-e $path) {
+      return $path;
+    }
+  }
+  die "Not found in PATH: $name";
 }

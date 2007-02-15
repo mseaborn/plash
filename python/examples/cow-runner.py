@@ -1,8 +1,8 @@
 
 import os
 import sys
-import plash_core
 import plash.env
+import plash.mainloop
 import plash.namespace as ns
 from plash.process import Process_spec
 
@@ -32,7 +32,7 @@ ns.attach_at_path(root_node, "/tmp",
 ns.attach_at_path(root_node, "/dev",
                   ns.resolve_obj(caller_root, "/dev"))
 
-fs_op = plash_core.make_fs_op(ns.dir_of_node(root_node))
+fs_op = ns.make_fs_op(ns.dir_of_node(root_node))
 fs_op.fsop_chdir(caller_cwd_path)
 p = Process_spec()
 p.setcmd(*args[2:])
@@ -44,7 +44,7 @@ p.env['PLASH_FAKE_EGID'] = str(os.getgid())
 p.caps = { 'fs_op': fs_op,
            'conn_maker': ns.conn_maker }
 pid = p.spawn()
-plash_core.run_server()
+plash.mainloop.run_server()
 
 # Wait for the subprocess to exit and check the exit code.
 (pid2, status) = os.waitpid(pid, 0)

@@ -198,7 +198,7 @@ static int parse_path(seqf_t path, seqf_t *pathname, seqf_t *rest)
 	pathname->size = i;
 	rest->data = path.data + i + 1;
 	rest->size = path.size - i - 1;
-	return 1;
+	return TRUE;
       }
       i++;
     }
@@ -231,7 +231,7 @@ int resolve_executable_name(region_t r,
     if(!path1) { return -1; }
     path = seqf_string(path1);
     
-    while(parse_path(path, &path_entry, &path) >= 0) {
+    while(parse_path(path, &path_entry, &path)) {
       seqf_t full_pathname =
 	flatten0(r, cat3(r, mk_leaf(r, path_entry),
 			 mk_string(r, "/"),

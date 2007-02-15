@@ -11,19 +11,26 @@ from plash.pola_run_args import BadArgException
 
 
 class Proc_spec(Process_spec):
+    
     def __init__(self):
         Process_spec.__init__(self)
-        
+        self.caps["conn_maker"] = self.conn_maker
         self.root_node = ns.make_node()
-        root = ns.dir_of_node(self.root_node)
-        fs_op = ns.make_fs_op(root)
-        self.caps = { 'fs_op': fs_op,
-                      'conn_maker': ns.conn_maker }
+        self.cwd_path = None
+        self.logger = None
 
-        self.cmd = None
-        self.arg0 = None
-        self.args = []
-        self.cwd = None
+    def plash_setup(self):
+        root_dir = ns.dir_of_node(self.root_node)
+        fs_op = ns.make_fs_op(root_dir, self.logger)
+        self.caps["fs_op"] = fs_op
+        # If the chosen cwd is present in the callee's namespace, set the cwd.
+        # Otherwise, leave it undefined.
+        if self.cwd_path is not None:
+            try:
+                fs_op.fsop_chdir(self.cwd_path)
+            except plash.marshal.UnmarshalError:
+                pass
+        Process_spec.plash_setup(self)
 
 
 def usage():
@@ -78,15 +85,8 @@ if state.namespace_empty:
 
 plash.pola_run_args.set_fake_uids(proc)
 
-# If the chosen cwd is present in the callee's namespace, set the cwd.
-# Otherwise, leave it undefined.
 if state.cwd != None:
-    fs_op = proc.caps['fs_op']
-    cwd_path = ns.dirstack_get_path(state.cwd)
-    try:
-        fs_op.fsop_chdir(cwd_path)
-    except:
-        pass
+    proc.cwd_path = ns.dirstack_get_path(state.cwd)
 
 if state.powerbox:
     import plash.powerbox

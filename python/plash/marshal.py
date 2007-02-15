@@ -22,13 +22,13 @@ import struct
 import string
 
 
-class FormatStringError:
+class FormatStringError(Exception):
     pass
 
-class UnpackError:
+class UnpackError(Exception):
     pass
 
-class UnmarshalError:
+class UnmarshalError(Exception):
     pass
 
 

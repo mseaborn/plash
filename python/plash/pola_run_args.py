@@ -2,6 +2,7 @@
 import string
 import sys
 import os
+import plash_core
 import plash.namespace as ns
 
 
@@ -150,7 +151,14 @@ def handle_arg(state, proc, args):
                      "-fl", "/etc/services"])
 
     elif arg == '--log':
-        raise BadArgException, "not implemented"
+        fd = plash_core.wrap_fd(os.dup(2))
+        proc.logger = ns.make_log_from_fd(fd)
+
+    elif arg == '--log-file':
+        log_filename = args.pop(0)
+        fd = plash_core.wrap_fd(
+            os.open(log_filename, os.O_WRONLY | os.O_CREAT | os.O_TRUNC))
+        proc.logger = ns.make_log_from_fd(fd)
     
     elif arg == '--debug':
         raise BadArgException, "not implemented"

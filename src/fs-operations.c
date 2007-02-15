@@ -1229,10 +1229,16 @@ void fs_op_maker_call(struct filesys_obj *obj1, region_t r,
   struct fs_op_maker *obj = (void *) obj1;
 
   cap_t root_dir;
+  cap_t log;
   if(pl_unpack(r, args, METHOD_MAKE_FS_OP, "c", &root_dir)) {
     if(obj->log) inc_ref(obj->log);
     *result = pl_pack(r, METHOD_R_CAP, "c",
 		      make_fs_op_server(obj->log, root_dir, NULL /* cwd */));
+  }
+  else if(pl_unpack(r, args, METHOD_MAKE_FS_OP_WITH_LOG, "cd",
+		    &root_dir, &log)) {
+    *result = pl_pack(r, METHOD_R_CAP, "c",
+		      make_fs_op_server(log, root_dir, NULL /* cwd */));
   }
   else {
     pl_args_free(&args);

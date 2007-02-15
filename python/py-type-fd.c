@@ -50,6 +50,15 @@ PyObject *plpy_wrap_fd(int fd)
   return (PyObject *) wrapper;
 }
 
+PyObject *plpy_wrap_fd_py(PyObject *self, PyObject *args)
+{
+  int fd;
+  if(!PyArg_ParseTuple(args, "i", &fd)) {
+    return NULL;
+  }
+  return plpy_wrap_fd(fd);
+}
+
 
 static void plpy_fd_dealloc(plpy_fd *self)
 {

@@ -132,10 +132,12 @@ my $methods =
      ['RMkc', 'r_make_conn'],
    ['Mkc2', 'make_conn2'],
      ['RMc2', 'r_make_conn2'],
-   ['Mkfs', 'make_fs_op'],
+   ['Mkfs', 'make_fs_op'], # 'c'
+   ['Mkfl', 'make_fs_op_with_log'], # 'cd'
    ['Mkud', 'make_union_dir'],
    ['Mkcd', 'make_cow_dir'],
    ['Mkro', 'make_read_only_proxy'], # 'c'
+   ['Mklg', 'make_log_from_fd'], # 'f'
 
    # Executable objects
    ['Exep', 'eo_is_executable'],

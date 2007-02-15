@@ -47,11 +47,14 @@ m.add_format('fs_attach_at_path', 'cSc')
 m.add_format('fs_resolve_populate', 'ccdiS')
 m.add_format('fs_dir_of_node', 'c')
 m.add_format('fs_print_tree', 'c')
+m.add_format('make_fs_op', 'c')
+m.add_format('make_fs_op_with_log', 'cd')
 m.add_format('make_union_dir', 'cc')
 m.add_format('make_cow_dir', 'cc')
 m.add_format('make_read_only_proxy', 'c')
 m.add_format('dirstack_get_path', 'c')
 m.add_format('r_dirstack_get_path', 'S')
+m.add_format('make_log_from_fd', 'f')
 
 
 conn_maker = plash_core.make_conn_maker()
@@ -111,6 +114,14 @@ def make_read_only_proxy(obj):
     return call(plash_core.make_read_only_proxy, 'r_cap',
                 'make_read_only_proxy', obj)
 
+def make_log_from_fd(fd):
+    return call(plash_core.make_log_from_fd, 'r_cap',
+                'make_log_from_fd', fd)
+
 def dirstack_get_path(obj):
     return call(plash_core.dirstack_get_path, 'r_dirstack_get_path',
                 'dirstack_get_path', obj)
+
+def make_fs_op(root_dir, log=None):
+    return call(plash_core.make_fs_op, 'r_cap',
+                'make_fs_op_with_log', root_dir, log)

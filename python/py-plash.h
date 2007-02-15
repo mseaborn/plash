@@ -63,4 +63,7 @@ int plpy_cap_args_from_py(region_t r, PyObject *args, struct cap_args *out);
 void plpy_init(void);
 
 
+PyObject *plpy_wrap_fd_py(PyObject *self, PyObject *args);
+
+
 #endif

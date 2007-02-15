@@ -2,7 +2,6 @@
 
 import sys
 import os
-import plash_core
 import plash.env
 import plash.mainloop
 import plash.namespace as ns
@@ -17,7 +16,7 @@ class Proc_spec(Process_spec):
         
         self.root_node = ns.make_node()
         root = ns.dir_of_node(self.root_node)
-        fs_op = plash_core.make_fs_op(root)
+        fs_op = ns.make_fs_op(root)
         self.caps = { 'fs_op': fs_op,
                       'conn_maker': ns.conn_maker }
 

@@ -33,6 +33,7 @@
 #include "marshal-pack.h"
 #include "build-fs.h"
 #include "plash-libc.h"
+#include "log.h"
 
 #include "py-plash.h"
 
@@ -51,16 +52,6 @@ static PyObject *plpy_initial_dir(PyObject *self, PyObject *args)
     errno = err;
     return PyErr_SetFromErrnoWithFilename(PyExc_Exception, pathname);
   }
-}
-
-static PyObject *plpy_make_fs_op(PyObject *self, PyObject *args)
-{
-  plpy_obj *root_dir;
-  if(!PyArg_ParseTuple(args, "O!", &plpy_obj_type, &root_dir)) { return NULL; }
-
-  /* NB. Logging is not enabled here.  Should be fixed. */
-  return plpy_obj_to_py(make_fs_op_server(NULL /* log */, inc_ref(root_dir->obj),
-					  NULL /* cwd */));
 }
 
 static PyObject *plpy_make_conn_maker(PyObject *self, PyObject *args)
@@ -412,6 +403,21 @@ plpy_make_read_only_proxy(cap_t obj1, region_t r, struct cap_args args,
 }
 
 static void
+plpy_make_log_from_fd(cap_t obj1, region_t r, struct cap_args args,
+		      struct cap_args *result)
+{
+  int fd;
+  if(pl_unpack(r, args, METHOD_MAKE_LOG_FROM_FD, "f", &fd)) {
+    cap_t log_obj = make_log_from_fd(fd);
+    *result = pl_pack(r, METHOD_R_CAP, "c", log_obj);
+  }
+  else {
+    *result = pl_pack(r, METHOD_FAIL_UNKNOWN_METHOD, "");
+    pl_args_free(&args);
+  }
+}
+
+static void
 plpy_dirstack_get_path(cap_t obj1, region_t r, struct cap_args args,
 		       struct cap_args *result)
 {
@@ -449,9 +455,10 @@ cap_t wrap_function(void (*fun)(cap_t obj, region_t r, struct cap_args args,
 }
 
 static PyMethodDef module_methods[] = {
+  { "wrap_fd", plpy_wrap_fd_py, METH_VARARGS,
+    "Create a Plash/Python FD object given an FD number." },
+
   { "initial_dir", plpy_initial_dir, METH_VARARGS,
-    "Get an initial real_dir object." },
-  { "make_fs_op", plpy_make_fs_op, METH_VARARGS,
     "Get an initial real_dir object." },
   { "make_conn_maker", plpy_make_conn_maker, METH_NOARGS,
     "Returns an object that creates connections." },
@@ -503,6 +510,9 @@ void initplash_core(void)
   Py_INCREF(plpy_pyobj_class);
   PyModule_AddObject(mod, "Pyobj", (PyObject *) plpy_pyobj_class);
 
+  PyModule_AddObject(mod, "make_fs_op",
+		     plpy_obj_to_py(fs_op_maker_make(NULL)));
+
 #define ADD_FUNCTION(py_name, c_function) \
   PyModule_AddObject(mod, py_name, plpy_obj_to_py(wrap_function(c_function)))
 
@@ -516,6 +526,7 @@ void initplash_core(void)
   ADD_FUNCTION("make_union_dir", plpy_make_union_dir);
   ADD_FUNCTION("make_cow_dir", plpy_make_cow_dir);
   ADD_FUNCTION("make_read_only_proxy", plpy_make_read_only_proxy);
+  ADD_FUNCTION("make_log_from_fd", plpy_make_log_from_fd);
   ADD_FUNCTION("cap_make_connection", plpy_make_conn2);
   ADD_FUNCTION("dirstack_get_path", plpy_dirstack_get_path);
 }

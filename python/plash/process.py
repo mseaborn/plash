@@ -119,3 +119,50 @@ class Process_spec:
         else:
             os.close(self.fd.fileno()) # Hack; to be removed
             return pid
+
+
+class NotFoundInPathError(Exception):
+    pass
+
+
+class Process_spec_ns(Process_spec):
+
+    def __init__(self):
+        Process_spec.__init__(self)
+        self.caps["conn_maker"] = self.conn_maker
+        self.root_node = ns.make_node()
+        self.root_dir = None
+        self.cwd_path = None
+        self.logger = None
+
+    def _look_up_in_path(self, name, search_path):
+        for dir_path in search_path.split(":"):
+            if self.cwd_path is None:
+                full_path = os.path.join(dir_path, name)
+            else:
+                full_path = os.path.join(self.cwd_path, dir_path, name)
+            try:
+                unused_obj = ns.resolve_obj(self.root_dir, full_path)
+            except ns.ReturnUnmarshalError:
+                pass
+            else:
+                return full_path
+        raise NotFoundInPathError(name, search_path)
+
+    def _resolve_executable(self):
+        if "/" not in self.cmd:
+            self.cmd = self._look_up_in_path(self.cmd, self.env["PATH"])
+
+    def plash_setup(self):
+        self.root_dir = ns.dir_of_node(self.root_node)
+        self._resolve_executable()
+        fs_op = ns.make_fs_op(self.root_dir, self.logger)
+        self.caps["fs_op"] = fs_op
+        # If the chosen cwd is present in the callee's namespace, set the cwd.
+        # Otherwise, leave it undefined.
+        if self.cwd_path is not None:
+            try:
+                fs_op.fsop_chdir(self.cwd_path)
+            except plash.marshal.UnmarshalError:
+                pass
+        Process_spec.plash_setup(self)

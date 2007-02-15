@@ -5,32 +5,9 @@ import os
 import plash.env
 import plash.mainloop
 import plash.namespace as ns
-from plash.process import Process_spec
 import plash.pola_run_args
 from plash.pola_run_args import BadArgException
-
-
-class Proc_spec(Process_spec):
-    
-    def __init__(self):
-        Process_spec.__init__(self)
-        self.caps["conn_maker"] = self.conn_maker
-        self.root_node = ns.make_node()
-        self.cwd_path = None
-        self.logger = None
-
-    def plash_setup(self):
-        root_dir = ns.dir_of_node(self.root_node)
-        fs_op = ns.make_fs_op(root_dir, self.logger)
-        self.caps["fs_op"] = fs_op
-        # If the chosen cwd is present in the callee's namespace, set the cwd.
-        # Otherwise, leave it undefined.
-        if self.cwd_path is not None:
-            try:
-                fs_op.fsop_chdir(self.cwd_path)
-            except plash.marshal.UnmarshalError:
-                pass
-        Process_spec.plash_setup(self)
+import plash.process
 
 
 def usage():
@@ -56,7 +33,7 @@ Usage: pola-run [options]
 """
 
 
-proc = Proc_spec()
+proc = plash.process.Process_spec_ns()
 proc.env = os.environ.copy()
 
 class State:

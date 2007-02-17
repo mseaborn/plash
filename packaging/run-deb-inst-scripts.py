@@ -10,7 +10,7 @@ import plash.namespace as ns
 from plash.process import Process_spec
 import plash.mainloop
 
-import pkg
+import plash_pkg
 
 
 class File_namespace:
@@ -64,8 +64,8 @@ def init_package(app_dir, package, control_script, args):
 def init_packages(app_dir):
     fh = open(os.path.join(app_dir, "package-list"), "r")
     try:
-        for block in pkg.file_blocks(fh):
-            info = pkg.block_fields(block)
+        for block in plash_pkg.file_blocks(fh):
+            info = plash_pkg.block_fields(block)
             package = "%s_%s" % (info["package"], info["version"])
             print package
             init_package(app_dir, package, "preinst", ["install"])

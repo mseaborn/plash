@@ -6,7 +6,7 @@
 import os
 import sys
 import traceback
-import plash_core
+
 import plash.env
 import plash.mainloop
 import plash.namespace as ns
@@ -14,13 +14,13 @@ from plash.process import Process_spec
 import plash.pola_run_args as pola_run_args
 import plash.powerbox
 
-import pkg
+import plash_pkg
 
 
 def read_config(filename):
     file = open(filename, "r")
     try:
-        return pkg.block_fields(pkg.get_block(file))
+        return plash_pkg.block_fields(plash_pkg.get_block(file))
     finally:
         file.close()
 
@@ -102,7 +102,7 @@ def launch_app(app_dir, files, args):
                             flags=ns.FS_FOLLOW_SYMLINKS | ns.FS_SLOT_RWC)
         proc.args.append(filename)
 
-    fs_op = plash_core.make_fs_op(ns.dir_of_node(proc.root_node))
+    fs_op = ns.make_fs_op(ns.dir_of_node(proc.root_node))
     fs_op.fsop_chdir("/")
     proc.caps["fs_op"] = fs_op
 

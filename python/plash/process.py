@@ -135,14 +135,18 @@ class Process_spec_ns(Process_spec):
         self.cwd_path = None
         self.logger = None
 
+    def _resolve_obj(self, pathname):
+        if self.cwd_path is None:
+            return ns.resolve_obj(self.root_dir, pathname)
+        else:
+            return ns.resolve_obj(self.root_dir,
+                                  os.path.join(self.cwd_path, pathname))
+
     def _look_up_in_path(self, name, search_path):
         for dir_path in search_path.split(":"):
-            if self.cwd_path is None:
-                full_path = os.path.join(dir_path, name)
-            else:
-                full_path = os.path.join(self.cwd_path, dir_path, name)
+            full_path = os.path.join(dir_path, name)
             try:
-                unused_obj = ns.resolve_obj(self.root_dir, full_path)
+                unused_obj = self._resolve_obj(full_path)
             except ns.ReturnUnmarshalError:
                 pass
             else:
@@ -153,9 +157,31 @@ class Process_spec_ns(Process_spec):
         if "/" not in self.cmd:
             self.cmd = self._look_up_in_path(self.cmd, self.env["PATH"])
 
+    def _set_up_script(self):
+        exec_obj = self._resolve_obj(self.cmd)
+        fd = exec_obj.file_open(os.O_RDONLY)
+        fh = os.fdopen(os.dup(fd.fileno()))
+        try:
+            line = fh.readline(1024)
+        finally:
+            fh.close()
+        line = line.rstrip("\n")
+        if line.startswith("#!"):
+            line = line[2:]
+            self.args.insert(0, self.cmd)
+            # A single argument may appear after the executable name.
+            # It may contain spaces.
+            if " " in line:
+                executable_path, rest = line.split(" ", 1)
+                self.cmd = executable_path
+                self.args.insert(0, rest.lstrip(" "))
+            else:
+                self.cmd = line
+
     def plash_setup(self):
         self.root_dir = ns.dir_of_node(self.root_node)
         self._resolve_executable()
+        self._set_up_script()
         fs_op = ns.make_fs_op(self.root_dir, self.logger)
         self.caps["fs_op"] = fs_op
         # If the chosen cwd is present in the callee's namespace, set the cwd.

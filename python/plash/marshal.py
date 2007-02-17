@@ -558,6 +558,9 @@ add_method('fsobj_stat', 'r_fsobj_stat')
 add_method('fsobj_utimes', 'okay')
 add_method('fsobj_chmod', 'okay')
 
+add_method('file_open', 'r_file_open')
+add_method('file_socket_connect', 'okay')
+
 add_method('dir_traverse', 'r_dir_traverse')
 add_method('dir_list', 'r_dir_list')
 add_method('dir_create_file', 'r_dir_create_file')

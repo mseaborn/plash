@@ -5,10 +5,9 @@
 import os
 import sys
 
-import plash_core
 import plash.namespace as ns
-from plash.process import Process_spec
 import plash.mainloop
+import plash.process
 
 import plash_pkg
 
@@ -32,9 +31,8 @@ os.chdir(cwd)
 
 
 def init_package(app_dir, package, control_script, args):
-    proc = Process_spec()
-    proc.root_node = ns.make_node()
-    proc.caps["conn_maker"] = ns.conn_maker
+    proc = plash.process.Process_spec_ns()
+    proc.cwd_path = "/"
 
     root_dir = ns.make_cow_dir(my_root.get_obj(
                                  os.path.join(app_dir, "unpacked")),
@@ -50,12 +48,8 @@ def init_package(app_dir, package, control_script, args):
     if os.path.exists(script_path):
         ns.attach_at_path(proc.root_node, "/script",
                           my_root.get_obj(script_path))
-
-        proc.caps["fs_op"] = \
-            plash_core.make_fs_op(ns.dir_of_node(proc.root_node))
-        proc.caps["fs_op"].fsop_chdir("/")
-        proc.setcmd(*(["/bin/sh", "-c", 'exec "$@"', "-",
-                       "/script"] + args))
+        proc.cmd = "/script"
+        proc.args = args
         pid = proc.spawn()
         plash.mainloop.run_server()
     else:

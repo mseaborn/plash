@@ -1,41 +1,68 @@
-#!/usr/bin/perl -w
+#!/usr/bin/python
 
-# Get the Packages.gz files for the distributions listed in sources.list,
-# and combine them into a single Packages file.  Adds a Base-URL field
-# to each package entry in the output.
+import os
+import re
+import subprocess
+import sys
 
-use Unpack;
-use PkgConfig;
-
-
-my $output_dir = PkgConfig::package_list_cache_dir();
-my $output_file = PkgConfig::package_list_combined();
+import plash_pkg
 
 
-my $list = Unpack::read_sources_list('sources.list');
+def join_with_slash(a, b):
+    return "%s/%s" % (a.rstrip("/"), b.lstrip("/"))
 
-foreach my $src (@$list) {
-  $src->{S_file} =
-    Unpack::fetch_packages_file($src, $output_dir, PkgConfig::get_arch());
-}
+def fetch_packages_file(src, dest_dir, arch):
+    url = join_with_slash(src["S_base"],
+                          join_with_slash(src["S_component"],
+                                          "binary-%s/Packages.gz" % arch))
+    match = re.match("http://(.*)$", url)
+    if not match:
+        raise Exception("Only HTTP is supported: %s" % url)
+    leafname = re.sub("/", "_", match.group(1))
+    filename = os.path.join(dest_dir, leafname)
+    if not os.path.exists(filename):
+        print "Get %s" % url
+        subprocess.call(["curl", url, "-o", filename])
+    else:
+        print "Hit %s" % url
+    return filename
+
+def open_gunzip(filename):
+    proc = subprocess.Popen(["zcat", filename],
+                            stdout=subprocess.PIPE,
+                            bufsize=8000)
+    return proc.stdout
+
+def combine_package_lists(out, src_list):
+    regexp_desc = re.compile(r"^Description:.*\n(\s+.*)*(\n|\Z)", re.M | re.I)
+    for src in src_list:
+        filename = src["S_file"]
+        fh = open_gunzip(filename)
+        try:
+            for block in plash_pkg.file_blocks(fh):
+                # Remove the Description field to save space.
+                block = "".join(block)
+                block = regexp_desc.sub("", block, 1)
+                out.write("\n")
+                out.write("Base-URL: %s\n" % src["S_base"])
+                out.write(block)
+        finally:
+            fh.close()
+
+def main():
+    arch = plash_pkg.get_arch()
+    output_dir = plash_pkg.get_package_list_cache_dir()
+
+    src_list = plash_pkg.read_sources_list("sources.list")
+    for src in src_list:
+        src["S_file"] = fetch_packages_file(src, output_dir, arch)
+
+    out = open(plash_pkg.get_package_list_combined(), "w")
+    try:
+        combine_package_lists(out, src_list)
+    finally:
+        out.close()
 
 
-my $output = IO::File->new($output_file, 'w') || die "Can't open $output_file";
-foreach my $src (@$list) {
-  my $file = $src->{S_file};
-  my $f = IO::File->new("zcat $file |") || die "Can't open $file";
-  while(1) {
-    my $block = Unpack::get_block($f);
-    if($block eq '') {
-      last;
-    }
-    
-    # Remove the Description field to save space.
-    $block =~ s/^Description:.*\n(\s+.*)*(\n|\Z)//im;
-    
-    print $output "Base-URL: $src->{S_base}\n";
-    print $output "$block\n";
-  }
-  $f->close();
-}
-$output->close();
+if __name__ == "__main__":
+    main()

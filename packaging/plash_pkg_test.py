@@ -4,7 +4,27 @@ import unittest
 import plash_pkg
 
 
-class Test(unittest.TestCase):
+class SourcesListTest(unittest.TestCase):
+
+    def test1(self):
+        line = "deb http://ftp.debian.org/debian etchy main universe"
+        self.assertEquals(
+            list(plash_pkg.read_sources_list_line(line)),
+            [{"S_base": "http://ftp.debian.org/debian",
+              "S_component": "dists/etchy/main"},
+             {"S_base": "http://ftp.debian.org/debian",
+              "S_component": "dists/etchy/universe"},
+             ])
+
+    def test2(self):
+        line = "deb http://ftp.debian.org/debian dists/etchy/main"
+        self.assertEquals(
+            list(plash_pkg.read_sources_list_line(line)),
+            [{"S_base": "http://ftp.debian.org/debian",
+              "S_component": "dists/etchy/main"}])
+
+
+class BlockTest(unittest.TestCase):
 
     def test1(self):
         data = ["Field: content",

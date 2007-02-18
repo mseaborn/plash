@@ -46,7 +46,7 @@ class Powerbox(plash.marshal.Pyobj_demarshal):
             elif arg[0] == 'Wantdir':
                 want_dir = True
             elif arg[0] == 'Transientfor':
-                transient_dir = arg[1]
+                transient_for = arg[1]
             else:
                 print "powerbox: unknown arg:", arg
         
@@ -94,8 +94,19 @@ class Powerbox(plash.marshal.Pyobj_demarshal):
                                                  pathname)
                 cont.cap_invoke(plash.marshal.pack('powerbox_result_filename',
                                                    pathname))
+            else:
+                cont.cap_invoke(plash.marshal.pack('fail', 0))
             dialog.hide()
 
         dialog.connect('response', response)
+
+        if transient_for is not None:
+            dialog.realize()
+            dialog.window.property_change(
+                gtk.gdk.atom_intern("WM_TRANSIENT_FOR", False),
+                gtk.gdk.atom_intern("WINDOW", False),
+                32,
+                gtk.gdk.PROP_MODE_REPLACE,
+                [transient_for])
         
         dialog.show()

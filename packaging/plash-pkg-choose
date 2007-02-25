@@ -117,9 +117,10 @@ sub write_result_package_list {
   
   $f = IO::File->new($file, 'w') || die "Can't open \"$file\"";
   foreach my $p (@{$deplist->{List}}) {
-    foreach my $field (qw(package version size md5sum filename base-url)) {
-      die "Field $field missing" if !defined $p->{$field};
-      printf $f "%s: %s\n", ucfirst($field), $p->{$field};
+    foreach my $field (qw(package version size md5sum sha1 filename base-url filelist-ref)) {
+      if(defined $p->{$field}) {
+	printf $f "%s: %s\n", ucfirst($field), $p->{$field};
+      }
     }
     print $f "\n";
   }
@@ -144,7 +145,7 @@ my $deplist = init_deplist();
 
 # List of fields to keep from Packages file
 my @fields = qw(package version
-		filename size md5sum sha1 base-url
+		filename size md5sum sha1 base-url filelist-ref
 		depends pre-depends essential);
 my $packages = Unpack::read_control_file($package_list, \@fields);
 

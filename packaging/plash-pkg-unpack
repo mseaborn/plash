@@ -2,6 +2,7 @@
 
 import os
 import re
+import sha
 import subprocess
 import sys
 
@@ -18,7 +19,23 @@ def read_control_file(filename):
     finally:
         fh.close()
 
+def sha_of_file(filename):
+    digest = sha.new()
+    fh = open(filename, "r")
+    try:
+        while True:
+            data = fh.read(4096)
+            if len(data) == 0:
+                break
+            digest.update(data)
+        return digest
+    finally:
+        fh.close()
+
 def unpack_into_cache(unpack_cache, pkg):
+    if "filelist-ref" in pkg:
+        return
+    
     match = re.search("/([^/]+)$", pkg["filename"])
     assert match is not None
     leafname = match.group(1)
@@ -26,41 +43,74 @@ def unpack_into_cache(unpack_cache, pkg):
     if not os.path.exists(deb_file):
         raise Exception("File not present: %s" % deb_file)
 
+    if "sha1" not in pkg:
+        raise Exception("Package %(package)s %(version)s lacks a SHA1 field"
+                        % pkg)
+
     out_dir = os.path.join(unpack_cache,
                            "%(package)s_%(version)s" % pkg)
     if not os.path.exists(out_dir):
         os.mkdir(out_dir)
 
+    dest_data = os.path.join(out_dir, "data")
+    dest_control = os.path.join(out_dir, "control")
+    extract_data = not os.path.exists(dest_data)
+    extract_control = not os.path.exists(dest_control)
+
+    # Check hash.  The contents of the file will be in the cache for
+    # when we unpack the .deb afterwards.
+    if extract_data or extract_control:
+        hash_expect = pkg["sha1"]
+        hash_got = sha_of_file(deb_file).hexdigest()
+        if hash_expect != hash_got:
+            raise Exception("Hashes do not match on file: %s" % deb_file)
+    
     # Extract main files -- data.tar.gz from the .deb
-    dest = os.path.join(out_dir, "data")
-    if not os.path.exists(dest):
-        print "unpack", dest
-        dest_tmp = "%s.tmp" % dest
-        if os.path.exists(dest_tmp):
-            raise Exception("Remove %s and try again" % dest_tmp)
-        rc = subprocess.call(["dpkg-deb", "-x", deb_file, dest_tmp])
+    if extract_data:
+        print "unpack", dest_data
+        dest_data_tmp = "%s.tmp" % dest_data
+        if os.path.exists(dest_data_tmp):
+            raise Exception("Remove %s and try again" % dest_data_tmp)
+        rc = subprocess.call(["dpkg-deb", "-x", deb_file, dest_data_tmp])
         assert rc == 0
-        os.rename(dest_tmp, dest)
+        os.rename(dest_data_tmp, dest_data)
 
     # Extract control files -- control.tar.gz from the .deb
-    dest = os.path.join(out_dir, "control")
-    if not os.path.exists(dest):
-        print "unpack", dest
-        dest_tmp = "%s.tmp" % dest
-        if os.path.exists(dest_tmp):
-            raise Exception("Remove %s and try again" % dest_tmp)
-        rc = subprocess.call(["dpkg-deb", "-e", deb_file, dest_tmp])
+    if extract_control:
+        print "unpack", dest_control
+        dest_control_tmp = "%s.tmp" % dest_control
+        if os.path.exists(dest_control_tmp):
+            raise Exception("Remove %s and try again" % dest_control_tmp)
+        rc = subprocess.call(["dpkg-deb", "-e", deb_file, dest_control_tmp])
         assert rc == 0
-        os.rename(dest_tmp, dest)
+        os.rename(dest_control_tmp, dest_control)
+
+def unpack_file_list(dest_dir, hash_dir, ref):
+    fh = open(os.path.join(hash_dir, ref), "r")
+    for line in fh:
+        line = line.rstrip("\n")
+        if line != "":
+            file_hash, dest_path = line.split("\t", 1)
+            # don't unpack into root!  remove this later...
+            dest_path = dest_path.lstrip("/")
+            mkdir_p(os.path.join(dest_dir,
+                                 os.path.dirname(dest_path)))
+            os.link(os.path.join(hash_dir, file_hash),
+                    os.path.join(dest_dir, dest_path))
 
 def unpack_to_single_dir(unpack_cache, dest_dir, pkg):
-    src = os.path.join(unpack_cache,
-                       "%(package)s_%(version)s" % pkg,
-                       "data")
-    for leaf in os.listdir(src):
-        rc = subprocess.call(["cp", "-lr", os.path.join(src, leaf),
-                              dest_dir])
-        assert rc == 0
+    if "filelist-ref" in pkg:
+        unpack_file_list(dest_dir,
+                         os.path.join(unpack_cache, "files"),
+                         pkg["filelist-ref"])
+    else:
+        src = os.path.join(unpack_cache,
+                           "%(package)s_%(version)s" % pkg,
+                           "data")
+        for leaf in os.listdir(src):
+            rc = subprocess.call(["cp", "-lr", os.path.join(src, leaf),
+                                  dest_dir])
+            assert rc == 0
 
 def mkdir_p(dir_path):
     if not os.path.exists(dir_path):
@@ -89,6 +139,7 @@ def main(args):
     packages = read_control_file(package_list)
     for pkg in packages:
         unpack_into_cache(unpack_cache, pkg)
+    os.mkdir(dest_dir)
     for pkg in packages:
         unpack_to_single_dir(unpack_cache, dest_dir, pkg)
     fill_out_dpkg_status(dest_dir, packages)

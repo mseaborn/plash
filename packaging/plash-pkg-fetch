@@ -13,7 +13,7 @@ if(scalar(@ARGV) != 1) {
 my $package_list = $ARGV[0];
 
 
-my @fields = qw(package version size md5sum filename base-url);
+my @fields = qw(package version size md5sum filename base-url filelist-ref);
 my $list = Unpack::read_control_file($package_list, \@fields);
 
 my $total_size = 0;
@@ -22,6 +22,11 @@ my $to_get = 0;
 
 # First pass: what is already available?
 foreach my $p (@$list) {
+  if(defined($p->{'filelist-ref'})) {
+    $p->{done} = 1;
+    next;
+  }
+  
   $total_size += $p->{size};
   
   $p->{filename} =~ /\/([^\/]+)$/ || die;

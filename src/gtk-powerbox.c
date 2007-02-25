@@ -59,7 +59,8 @@ struct _FilePowerboxClass
 enum FilePowerboxProp {
   PROP_ACTION = 1,
   PROP_LOCAL_ONLY,
-  PROP_LAST = PROP_LOCAL_ONLY
+  PROP_SELECT_MULTIPLE,
+  PROP_LAST = PROP_SELECT_MULTIPLE
 };
 
 enum PowerboxState {
@@ -74,6 +75,8 @@ struct _FilePowerbox
   
   enum PowerboxState state;
   GtkFileChooserAction action;
+  gboolean local_only;
+  gboolean select_multiple;
   /* Filled out when state == STATE_GOT_REPLY: */
   char *filename;
 };
@@ -120,6 +123,8 @@ file_powerbox_init(FilePowerbox *pb)
   fprintf(stderr, MOD_MSG "init instance\n");
   pb->state = STATE_UNSENT;
   pb->action = GTK_FILE_CHOOSER_ACTION_OPEN;
+  pb->local_only = TRUE;
+  pb->select_multiple = FALSE;
   pb->filename = NULL;
 }
 
@@ -143,6 +148,12 @@ file_powerbox_set_property (GObject      *object,
     case PROP_ACTION:
       pb->action = g_value_get_enum(value);
       break;
+    case PROP_LOCAL_ONLY:
+      pb->local_only = g_value_get_boolean(value);
+      break;
+    case PROP_SELECT_MULTIPLE:
+      pb->select_multiple = g_value_get_boolean(value);
+      break;
       
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -160,6 +171,12 @@ file_powerbox_get_property (GObject    *object,
   switch(prop_id) {
     case PROP_ACTION:
       g_value_set_enum(value, pb->action);
+      break;
+    case PROP_LOCAL_ONLY:
+      g_value_set_boolean(value, pb->local_only);
+      break;
+    case PROP_SELECT_MULTIPLE:
+      g_value_set_boolean(value, pb->select_multiple);
       break;
       
     default:
@@ -204,6 +221,14 @@ file_powerbox_class_init (FilePowerboxClass *class)
 							 P_("Local Only"),
 							 P_("Whether the selected file(s) should be limited to local file: URLs"),
 							 TRUE,
+							 GTK_PARAM_READWRITE));
+  
+  g_object_class_install_property (gobject_class,
+				   PROP_SELECT_MULTIPLE,
+				   g_param_spec_boolean ("select-multiple",
+							 P_("Select Multiple"),
+							 P_("Whether to allow multiple files to be selected"),
+							 FALSE,
 							 GTK_PARAM_READWRITE));
 }
 
@@ -312,6 +337,69 @@ gtk_file_chooser_dialog_new_with_backend (const gchar          *title,
   result = file_powerbox_new(title, parent, action, first_button_text, args);
   va_end(args);
   return result;
+}
+
+void
+gtk_file_chooser_set_action (GtkFileChooser       *chooser,
+			     GtkFileChooserAction  action)
+{
+  g_return_if_fail (GTK_IS_FILE_CHOOSER (chooser));
+
+  g_object_set (chooser, "action", action, NULL);
+}
+
+GtkFileChooserAction
+gtk_file_chooser_get_action (GtkFileChooser *chooser)
+{
+  GtkFileChooserAction action;
+  
+  g_return_val_if_fail (GTK_IS_FILE_CHOOSER (chooser), FALSE);
+
+  g_object_get (chooser, "action", &action, NULL);
+
+  return action;
+}
+
+void
+gtk_file_chooser_set_local_only (GtkFileChooser *chooser,
+				 gboolean        local_only)
+{
+  g_return_if_fail (GTK_IS_FILE_CHOOSER (chooser));
+
+  g_object_set (chooser, "local-only", local_only, NULL);
+}
+
+gboolean
+gtk_file_chooser_get_local_only (GtkFileChooser *chooser)
+{
+  gboolean local_only;
+  
+  g_return_val_if_fail (GTK_IS_FILE_CHOOSER (chooser), FALSE);
+
+  g_object_get (chooser, "local-only", &local_only, NULL);
+
+  return local_only;
+}
+
+void
+gtk_file_chooser_set_select_multiple (GtkFileChooser *chooser,
+				      gboolean        select_multiple)
+{
+  g_return_if_fail (GTK_IS_FILE_CHOOSER (chooser));
+
+  g_object_set (chooser, "select-multiple", select_multiple, NULL);
+}
+
+gboolean
+gtk_file_chooser_get_select_multiple (GtkFileChooser *chooser)
+{
+  gboolean select_multiple;
+  
+  g_return_val_if_fail (GTK_IS_FILE_CHOOSER (chooser), FALSE);
+
+  g_object_get (chooser, "select-multiple", &select_multiple, NULL);
+
+  return select_multiple;
 }
 
 gboolean
@@ -425,6 +513,15 @@ gtk_file_chooser_unselect_uri (GtkFileChooser *chooser,
   g_return_if_fail (GTK_IS_FILE_CHOOSER (chooser));
   g_return_if_fail (uri != NULL);
   LOG_NO_OP("unselect_uri");
+}
+
+GSList *
+gtk_file_chooser_get_uris (GtkFileChooser *chooser)
+{
+  GSList *list = NULL;
+  g_return_val_if_fail (GTK_IS_FILE_CHOOSER (chooser), NULL);
+  list = g_slist_prepend(list, gtk_file_chooser_get_uri(chooser));
+  return list;
 }
 
 void

@@ -1,0 +1,6 @@
+Depends: evince, gtk2-engines, gnome-themes, plash-gtk-hook
+Pet-name: Evince document viewer (sandboxed)
+Pet-id: evince
+Icon: evince.png
+Exec: LD_PRELOAD=libgtk-powerbox-hook.so evince "$@"
+MimeType: application/pdf;

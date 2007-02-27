@@ -46,13 +46,10 @@ def get_arg(args, name):
     return args.pop(0)
 
 def handle_arg(state, proc, args):
-    arg = args.pop(0)
-    if arg == '' or arg[0] != '-':
-        raise BadArgException, "Unknown argument: %s" % arg
 
     # -f<flags> <filename>
-    if arg[1] == 'f':
-        flags = handle_flags(arg[2:])
+    def bind_at_same(flags_arg, args):
+        flags = handle_flags(flags_arg)
         filename = get_arg(args, '-f')
         ns.resolve_populate(state.caller_root, proc.root_node,
                             filename, cwd=state.cwd, flags=flags['build_fs'])
@@ -61,8 +58,8 @@ def handle_arg(state, proc, args):
             proc.args.append(filename)
 
     # -t<flags> <dest_filename> <src_filename>
-    elif arg[1] == 't':
-        flags = handle_flags(arg[2:])
+    def bind_at(flags_arg, args):
+        flags = handle_flags(flags_arg)
         dest_filename = get_arg(args, '-t')
         src_filename = get_arg(args, '-t')
         obj = ns.resolve_obj(state.caller_root, src_filename,
@@ -78,13 +75,13 @@ def handle_arg(state, proc, args):
 
     # -a <string>
     # Append string to argument list.
-    elif arg == '-a':
+    def add_arg(args):
         x = get_arg(args, '-a')
         proc.args.append(x)
 
     # -e [<command>] <args...>
     # This option consumes the remaining arguments in the list.
-    elif arg[1] == 'e':
+    def command_and_args(args):
         # If --prog has not already been used, the first argument is taken
         # as the program executable filename.
         if proc.cmd == None:
@@ -94,7 +91,7 @@ def handle_arg(state, proc, args):
             proc.args.append(args.pop(0))
 
     # -B: Provide default environment.
-    elif arg[1] == 'B':
+    def default_env(args):
         handle_args(state, proc,
                     ["-fl", "/usr",
                      "-fl", "/bin",
@@ -103,29 +100,24 @@ def handle_arg(state, proc, args):
                      "-fl,objrw", "/dev/tty"
                      ])
 
-    # -h: Help
-    elif arg[1] == 'h':
-        usage()
-        sys.exit(0)
-
-    elif arg == '--prog':
+    def set_executable(args):
         if proc.cmd != None:
             raise BadArgException, "--prog argument used multiple times"
         proc.cmd = get_arg(args, '--prog')
 
-    elif arg == '--cwd':
+    def set_cwd(args):
         path = args.pop(0)
         state.cwd = ns.resolve_dir(state.caller_root, path, cwd=state.cwd)
 
-    elif arg == '--no-cwd':
+    def unset_cwd(args):
         state.cwd = None
 
-    elif arg == '--copy-cwd':
+    def copy_cwd(args):
         state.cwd = ns.resolve_dir(state.caller_root, os.getcwd())
 
     # --env NAME=VALUE
     # Sets an environment variable.
-    elif arg == '--env':
+    def add_environ_var(args):
         x = args.pop(0)
         index = x.find('=')
         if index == -1:
@@ -135,7 +127,7 @@ def handle_arg(state, proc, args):
         proc.env[name] = value
 
     # --x11: Grant access to X Window System displays
-    elif arg == '--x11':
+    def grant_x11_access(args):
         ns.resolve_populate(state.caller_root, proc.root_node,
                             "/tmp/.X11-unix/",
                             flags=ns.FS_FOLLOW_SYMLINKS | ns.FS_OBJECT_RW)
@@ -144,35 +136,74 @@ def handle_arg(state, proc, args):
                                 os.environ['XAUTHORITY'],
                                 flags=ns.FS_FOLLOW_SYMLINKS)
 
-    elif arg == '--net':
+    def grant_network_access(args):
         handle_args(state, proc,
                     ["-fl", "/etc/resolv.conf",
                      "-fl", "/etc/hosts",
                      "-fl", "/etc/services"])
 
-    elif arg == '--log':
+    def enable_logging(args):
         fd = plash_core.wrap_fd(os.dup(2))
         proc.logger = ns.make_log_from_fd(fd)
 
-    elif arg == '--log-file':
+    def log_to_file(args):
         log_filename = args.pop(0)
         fd = plash_core.wrap_fd(
             os.open(log_filename, os.O_WRONLY | os.O_CREAT | os.O_TRUNC))
         proc.logger = ns.make_log_from_fd(fd)
-    
-    elif arg == '--debug':
+
+    def debug(args):
         raise BadArgException, "not implemented"
 
-    elif arg == '--pet-name':
+    def set_pet_name(args):
         state.pet_name = get_arg(args, "--pet-name")
 
-    elif arg == '--powerbox':
+    def enable_powerbox(args):
         state.powerbox = True
 
-    elif arg == '--help':
+    def help(args):
         usage()
         sys.exit(0)
 
+    options = {}
+    def add_option(name, fun):
+        options[name] = (fun, False)
+    def add_option_t(name, fun):
+        options[name] = (fun, True)
+    
+    add_option_t("f", bind_at_same)
+    add_option_t("t", bind_at)
+    add_option("a", add_arg)
+    add_option("e", command_and_args)
+    add_option("B", default_env)
+    add_option("h", help)
+    add_option("prog", set_executable)
+    add_option("cwd", set_cwd)
+    add_option("no-cwd", unset_cwd)
+    add_option("copy-cwd", copy_cwd)
+    add_option("env", add_environ_var)
+    add_option("x11", grant_x11_access)
+    add_option("net", grant_network_access)
+    add_option("log", enable_logging)
+    add_option("log-file", log_to_file)
+    add_option("debug", debug)
+    add_option("pet-name", set_pet_name)
+    add_option("powerbox", enable_powerbox)
+    add_option("help", help)
+
+    arg = args.pop(0)
+    if arg == "" or arg[0] != "-":
+        raise BadArgException, "Unknown argument: %s" % arg
+    elif arg[1] in options:
+        fun, allow_trailing = options[arg[1]]
+        if allow_trailing:
+            fun(arg[2:], args)
+        else:
+            fun(args)
+    elif arg[1] == "-" and arg[2:] in options:
+        fun, allow_trailing = options[arg[2:]]
+        assert not allow_trailing
+        fun(args)
     else:
         raise BadArgException, "Unrecognised argument: %s" % arg
 

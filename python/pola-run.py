@@ -7,6 +7,7 @@ import plash.mainloop
 import plash.namespace as ns
 import plash.pola_run_args
 from plash.pola_run_args import BadArgException
+import plash.powerbox
 import plash.process
 
 
@@ -32,58 +33,61 @@ Usage: pola-run [options]
   [-e <command> <arg>...]
 """
 
+def main(args):
+    proc = plash.process.Process_spec_ns()
+    proc.env = os.environ.copy()
 
-proc = plash.process.Process_spec_ns()
-proc.env = os.environ.copy()
+    class State:
+        pass
+    state = State()
+    state.namespace_empty = True
+    state.caller_root = plash.env.get_root_dir()
+    state.cwd = ns.resolve_dir(state.caller_root, os.getcwd())
+    state.pet_name = None
+    state.powerbox = False
 
-class State:
-    pass
-state = State()
-state.namespace_empty = True
-state.caller_root = plash.env.get_root_dir()
-state.cwd = ns.resolve_dir(state.caller_root, os.getcwd())
-state.pet_name = None
-state.powerbox = False
+    try:
+        plash.pola_run_args.handle_args(state, proc, args)
 
-try:
-    plash.pola_run_args.handle_args(state, proc, sys.argv[1:])
+        # The zeroth argument defaults to being the same as the command pathname
+        proc.arg0 = proc.cmd
 
-    # The zeroth argument defaults to being the same as the command pathname
-    proc.arg0 = proc.cmd
+        if proc.cmd == None:
+            raise BadArgException, "No command name given (use --prog or -e)"
+    except BadArgException, msg:
+        print "pola-run: error:", msg
+        sys.exit(1)
 
-    if proc.cmd == None:
-        raise BadArgException, "No command name given (use --prog or -e)"
-except BadArgException, msg:
-    print "pola-run: error:", msg
-    sys.exit(1)
+    if state.namespace_empty:
+        print "pola-run: warning: namespace empty, try -B for default namespace"
 
-if state.namespace_empty:
-    print "pola-run: warning: namespace empty, try -B for default namespace"
+    plash.pola_run_args.set_fake_uids(proc)
 
-plash.pola_run_args.set_fake_uids(proc)
+    if state.cwd != None:
+        proc.cwd_path = ns.dirstack_get_path(state.cwd)
 
-if state.cwd != None:
-    proc.cwd_path = ns.dirstack_get_path(state.cwd)
+    if state.powerbox:
+        # The pet name defaults to the executable name
+        if state.pet_name == None:
+            state.pet_name = proc.cmd
+        proc.caps['powerbox_req_filename'] = \
+            plash.powerbox.Powerbox(user_namespace = state.caller_root,
+                                    app_namespace = proc.root_node,
+                                    pet_name = state.pet_name)
+        plash.mainloop.use_gtk_mainloop()
 
-if state.powerbox:
-    import plash.powerbox
-    # The pet name defaults to the executable name
-    if state.pet_name == None:
-        state.pet_name = proc.cmd
-    proc.caps['powerbox_req_filename'] = \
-        plash.powerbox.Powerbox(user_namespace = state.caller_root,
-                                app_namespace = proc.root_node,
-                                pet_name = state.pet_name)
-    plash.mainloop.use_gtk_mainloop()
+    pid = proc.spawn()
+    plash.mainloop.run_server()
 
-pid = proc.spawn()
-plash.mainloop.run_server()
+    # Wait for the subprocess to exit and check the exit code.
+    (pid2, status) = os.waitpid(pid, 0)
+    assert pid == pid2
+    if os.WIFEXITED(status):
+        sys.exit(os.WEXITSTATUS(status))
+    else:
+        # FIXME
+        sys.exit(1)
 
-# Wait for the subprocess to exit and check the exit code.
-(pid2, status) = os.waitpid(pid, 0)
-assert pid == pid2
-if os.WIFEXITED(status):
-    sys.exit(os.WEXITSTATUS(status))
-else:
-    # FIXME
-    sys.exit(1)
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

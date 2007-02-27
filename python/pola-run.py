@@ -48,10 +48,6 @@ def main(args):
 
     try:
         plash.pola_run_args.handle_args(state, proc, args)
-
-        # The zeroth argument defaults to being the same as the command pathname
-        proc.arg0 = proc.cmd
-
         if proc.cmd == None:
             raise BadArgException, "No command name given (use --prog or -e)"
     except BadArgException, msg:

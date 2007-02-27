@@ -49,8 +49,11 @@ def handle_arg(state, proc, args):
 
     # -f<flags> <filename>
     def bind_at_same(flags_arg, args):
+        if "=" in flags_arg:
+            flags_arg, filename = flags_arg.split("=", 1)
+        else:
+            filename = get_arg(args, "-f")
         flags = handle_flags(flags_arg)
-        filename = get_arg(args, '-f')
         ns.resolve_populate(state.caller_root, proc.root_node,
                             filename, cwd=state.cwd, flags=flags['build_fs'])
         state.namespace_empty = False

@@ -113,3 +113,13 @@ def block_fields(lines):
         else:
             raise BadControlLineError(line)
     return fields
+
+def write_block(fh, fields, keys=None):
+    if keys is None:
+        for key, value in sorted(fields.iteritems()):
+            fh.write("%s: %s\n" % (key.capitalize(), value))
+    else:
+        for key in keys:
+            if key in fields:
+                fh.write("%s: %s\n" % (key.capitalize(), fields[key]))
+    fh.write("\n")

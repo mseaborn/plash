@@ -1,173 +1,136 @@
-#!/usr/bin/perl -w
+#!/usr/bin/python
 
-use Unpack;
-use PkgConfig;
-use POSIX;
-use Cwd qw(abs_path);
+"""
+Usage:
+plash-pkg-install <package_dir> --init <package-spec-file>
+plash-pkg-install <package_dir> --get
+plash-pkg-install <package_dir> --inst
+"""
 
+import os
+import pwd
+import subprocess
+import sys
 
-sub usage {
-  print STDERR "Usage:\n";
-  print STDERR "$0 <package-dir> --init <package-spec-file>\n";
-  print STDERR "$0 <package-dir> --get\n";
-  print STDERR "$0 <package-dir> --inst\n";
-  exit(1);
-}
-
-if(scalar(@ARGV) < 2) {
-  usage();
-}
-my $output_dir = shift(@ARGV);
-
-if($ARGV[0] eq '--init' && scalar(@ARGV) == 2) {
-  PkgConfig::ensure_dir_exists($output_dir);
-  write_file("$output_dir/config", read_file($ARGV[1]));
-}
-elsif($ARGV[0] eq '--get' && scalar(@ARGV) == 1) {
-  my $config = read_config_file("$output_dir/config");
-  choose_and_unpack($output_dir, $config);
-  init_write_layer($output_dir);
-}
-elsif($ARGV[0] eq '--inst' && scalar(@ARGV) == 1) {
-  my $config = read_config_file("$output_dir/config");
-  PkgConfig::ensure_dir_exists("desktop-files");
-  
-  # Add a prefix to the name of the .desktop file so that it doesn't
-  # clash with existing .desktop files and override them.
-  write_file(sprintf("desktop-files/plash-%s.desktop",
-		     get_field($config, 'pet-id')),
-	     desktop_file($config));
-}
-else {
-  usage();
-}
+import plash_pkg
 
 
-sub read_config_file {
-  my ($file) = @_;
-  my $list = Unpack::read_control_file($file,
-				       [qw(nick-name pet-name pet-id icon
-					   depends mimetype)]);
-  die if scalar(@$list) != 1;
-  return $list->[0];
-}
+def read_config_file(filename):
+    fh = file(filename, "r")
+    try:
+        blocks = list(plash_pkg.file_blocks(fh))
+    finally:
+        fh.close()
+    assert len(blocks) == 1
+    return plash_pkg.block_fields(blocks[0])
 
-sub get_field {
-  my ($spec, $field) = @_;
-  if(!defined $spec->{$field}) {
-    die "Field \"$field\" missing";
-  }
-  return $spec->{$field};
-}
+def strip_root(filename):
+    """Remove the initial slashes from a pathname, turning it into a
+    relative pathname."""
+    return filename.lstrip("/")
 
+def look_up_in_path(name):
+    """Look up an executable name in PATH."""
+    for dir_path in os.environ["PATH"].split(":"):
+        filename = os.path.join(dir_path, name)
+        if os.path.exists(filename):
+            return filename
+    raise Exception("Executable not found in PATH: %s" % name)
 
-sub choose_and_unpack {
-  my ($output_dir, $config) = @_;
-  
-  run_cmd("plash-pkg-choose", $output_dir, get_field($config, 'depends'));
-  run_cmd("plash-pkg-fetch", "$output_dir/package-list");
-  
-  my $unpack_dir = "$output_dir/unpacked";
-  # Delete any existing unpacked tree
-  if(-d $unpack_dir) {
-    run_cmd("rm", "-rf", $unpack_dir);
-  }
-  run_cmd("plash-pkg-unpack", "$output_dir/package-list", $unpack_dir);
-}
-
-sub init_write_layer {
-  my ($output_dir) = @_;
-
-  my $dest = "$output_dir/write_layer";
-  if(!-e $dest) {
-    PkgConfig::ensure_dir_exists($dest);
-
-    # Many programs rely on being able to get the user name from their
-    # UID, so create a simple /etc/passwd file.
-    my $uid = getuid();
-    my @pw_ent = getpwuid($uid);
-    if(scalar(@pw_ent) > 0) {
-      my $user_name = $pw_ent[0];
-      my $home_dir = $pw_ent[7];
-      PkgConfig::ensure_dir_exists("$dest/etc");
-      write_file("$dest/etc/passwd",
-		 sprintf("%s:x:%i:%i::%s:/bin/false\n",
-			 $user_name, $uid, $uid, $home_dir));
-      
-      run_cmd('mkdir', '-p', "$dest/$home_dir");
-    }
-    else {
-      warn "No passwd entry found for $uid";
-    }
-  }
-}
-
-sub desktop_file {
-  my ($spec) = @_;
-  
-  my @fields;
-  push(@fields, ['Encoding', 'UTF-8']);
-  push(@fields, ['Type', 'Application']);
-  push(@fields, ['Terminal', 'false']);
-  
-  push(@fields, ['Name', $spec->{'pet-name'}]);
-  if(defined $spec->{mimetype}) {
-    push(@fields, ['MimeType', $spec->{mimetype}]);
-  }
-  if(defined $spec->{icon}) {
-    push(@fields, ['Icon', $spec->{icon}]);
-  }
-
-  my $launcher = abs_path(look_up_in_path("plash-pkg-launch"));
-  my $abs_output_dir = abs_path($output_dir);  
-  # FIXME: should quote unusual chars in substituted strings
-  push(@fields, ['Exec', "$launcher --app-dir $abs_output_dir --open-files %f"]);
-  push(@fields, ['Categories', 'SandboxedApps;']);
-
-  my $out = '';
-  $out .= "[Desktop Entry]\n";
-  foreach my $field (@fields) {
-    if(!defined $field->[1]) { die "Field $field->[0] not defined" }
-    if($field->[1] =~ /\n/) { die "Field $field->[0] contains newline" }
-    $out .= sprintf "%s=%s\n", $field->[0], $field->[1];
-  }
-  return $out;
-}
+def run_cmd(*args):
+    rc = subprocess.call(args)
+    if rc != 0:
+        raise Exception("Command failed with code %i: %s"
+                        % (rc, " ".join(args)))
 
 
-sub run_cmd {
-  my $rc = system(@_);
-  if($rc != 0) {
-    print join(' ', @_)."\n";
-    die "Return code $rc";
-  }
-}
+class AppDir(object):
 
-sub read_file {
-  my ($file) = @_;
-  my $f = IO::File->new($file, 'r');
-  if(!defined $f) { die "Can't open `$file' for reading" }
-  my $d = join('', <$f>);
-  $f->close();
-  $d
-}
+    def __init__(self, dir):
+        self.dir = dir
+        self.config = read_config_file(os.path.join(dir, "config"))
 
-sub write_file {
-  my ($file, $data) = @_;
-  my $f = IO::File->new($file, 'w');
-  if(!defined $f) { die "Can't open `$file' for writing" }
-  print $f $data;
-  $f->close();
-}
+    def choose_and_unpack(self):
+        run_cmd("plash-pkg-choose", self.dir, self.config["depends"])
+        run_cmd("plash-pkg-fetch", os.path.join(self.dir, "package-list"))
+        # Delete any existing unpacked tree
+        unpack_dir = os.path.join(self.dir, "unpacked")
+        if os.path.exists(unpack_dir):
+            run_cmd("rm", "-rf", unpack_dir)
+        run_cmd("plash-pkg-unpack",
+                os.path.join(self.dir, "package-list"),
+                unpack_dir)
 
-sub look_up_in_path {
-  my ($name) = @_;
+    def init_write_layer(self):
+        dest = os.path.join(self.dir, "write_layer")
+        if not os.path.exists(dest):
+            os.mkdir(dest)
 
-  foreach my $dir (split(/:/, $ENV{'PATH'})) {
-    my $path = "$dir/$name";
-    if(-e $path) {
-      return $path;
-    }
-  }
-  die "Not found in PATH: $name";
-}
+            uid = os.getuid()
+            try:
+                pw_ent = pwd.getpwuid(uid)
+            except KeyError:
+                print "Warning: No passwd entry found for uid %i" % uid
+            else:
+                home_dir = pw_ent.pw_dir
+                os.mkdir(os.path.join(dest, "etc"))
+                plash_pkg.write_file(os.path.join(dest, "etc", "passwd"),
+                                     "%s:x:%i:%i::%s:/bin/false\n"
+                                     % (pw_ent.pw_name, uid, uid, home_dir))
+                os.makedirs(os.path.join(dest, strip_root(home_dir)))
+
+    def desktop_file(self):
+        fields = []
+        fields.append(("Encoding", "UTF-8"))
+        fields.append(("Type", "Application"))
+        fields.append(("Terminal", "false"))
+        fields.append(("Name", self.config["pet-name"]))
+        if "mimetype" in self.config:
+            fields.append(("MimeType", self.config["mimetype"]))
+        if "icon" in self.config:
+            fields.append(("Icon", self.config["icon"]))
+        
+        launcher = os.path.abspath(look_up_in_path("plash-pkg-launch"))
+        abs_app_dir = os.path.abspath(self.dir)
+        # FIXME: should quote unusual chars in substituted strings
+        fields.append(("Exec",
+                       " ".join([launcher,
+                                 "--app-dir", abs_app_dir,
+                                 "--open-files", "%f"])))
+        fields.append(("Categories", "SandboxedApps"))
+
+        for key, value in fields:
+            assert "\n" not in value, "Field contains newline: %s" % value
+        return "".join(["[Desktop Entry]\n"] +
+                       ["%s=%s\n" for key, value in fields])
+
+
+def main(args):
+    if len(args) < 2:
+        print __doc__
+        return 1
+    output_dir = args.pop(0)
+    action = args.pop(0)
+    
+    if action == "--init" and len(args) == 1:
+        config_file = args[0]
+        if not os.path.exists(output_dir):
+            os.mkdir(output_dir)
+        plash_pkg.write_file(os.path.join(output_dir, "config"),
+                             plash_pkg.read_file(config_file))
+    elif action == "--get" and len(args) == 0:
+        app = AppDir(output_dir)
+        app.choose_and_unpack()
+        app.init_write_layer()
+    elif action == "--inst" and len(args) == 0:
+        app = AppDir(output_dir)
+        plash_pkg.write_file(os.path.join("desktop-files",
+                                          "%s.desktop" % app.config["pet-id"]),
+                             app.desktop_file())
+    else:
+        print __doc__
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

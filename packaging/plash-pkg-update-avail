@@ -8,12 +8,9 @@ import sys
 import plash_pkg
 
 
-def join_with_slash(a, b):
-    return "%s/%s" % (a.rstrip("/"), b.lstrip("/"))
-
 def fetch_packages_file(src, dest_dir, arch):
-    url = join_with_slash(src["S_base"],
-                          join_with_slash(src["S_component"],
+    url = plash_pkg.join_with_slash(src["S_base"],
+                plash_pkg.join_with_slash(src["S_component"],
                                           "binary-%s/Packages.gz" % arch))
     match = re.match("http://(.*)$", url)
     if not match:

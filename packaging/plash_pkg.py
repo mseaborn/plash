@@ -8,6 +8,10 @@ class BadControlLineError(Exception):
     pass
 
 
+def join_with_slash(a, b):
+    return "%s/%s" % (a.rstrip("/"), b.lstrip("/"))
+
+
 def ensure_dir_exists(dir_path):
     if not os.path.exists(dir_path):
         os.mkdir(dir_path)
@@ -22,6 +26,10 @@ def get_package_list_cache_dir():
 def get_package_list_combined():
     return os.path.join(get_package_list_cache_dir(),
                         "Packages.combined")
+
+def get_deb_cache_dir():
+    """Directory where downloaded .deb files are stored."""
+    return ensure_dir_exists("cache")
 
 def get_unpack_cache_dir():
     """Directory where unpacked copies of packages are stored."""

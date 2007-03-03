@@ -1,3 +1,4 @@
+#!/usr/bin/python
 
 """
 Usage: plash-pkg-choose <output-dir> <dependency>...

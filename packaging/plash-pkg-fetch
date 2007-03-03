@@ -1,92 +1,103 @@
-#!/usr/bin/perl -w
+#!/usr/bin/python
 
-# Takes a package list and downloads the .debs it contains.
+"""
+Usage: plash-pkg-fetch <package-list-file>
 
-use IO::File;
-use Unpack;
+Takes a package list and ensures that the .debs it lists are locally
+available by downloading them.
+"""
 
+import os
+import re
+import subprocess
+import sys
 
-if(scalar(@ARGV) != 1) {
-  print "Usage: $0 <package-list>\n";
-  exit(1);
-}
-my $package_list = $ARGV[0];
-
-
-my @fields = qw(package version size md5sum filename base-url filelist-ref);
-my $list = Unpack::read_control_file($package_list, \@fields);
-
-my $total_size = 0;
-my $remaining_size = 0;
-my $to_get = 0;
-
-# First pass: what is already available?
-foreach my $p (@$list) {
-  if(defined($p->{'filelist-ref'})) {
-    $p->{done} = 1;
-    next;
-  }
-  
-  $total_size += $p->{size};
-  
-  $p->{filename} =~ /\/([^\/]+)$/ || die;
-  my $leafname = $1;
-  
-  $p->{local_file} = "cache/$leafname";
-  if(-e $p->{local_file}) {
-    $p->{done} = 1;
-  }
-
-  if(!$p->{done}) {
-    my $cached = "/var/cache/apt/archives/$leafname";
-    if(-e $cached) {
-      run_cmd('cp', $cached, $p->{local_file});
-      $p->{done} = 1;
-    }
-  }
-
-  if(!$p->{done}) {
-    $to_get++;
-    $remaining_size += $p->{size};
-    printf "%10.1fMb  %s %s\n",
-      $p->{size} / (1024 * 1024),
-      $p->{package}, $p->{version};
-    
-    mkdir('cache');
-    if(!defined $p->{'base-url'}) {
-      die "Base-URL field missing: can't make URL for package";
-    }
-    if(!defined $p->{'filename'}) {
-      die "Base-URL field missing: can't make URL for package";
-    }
-    $p->{url} = Unpack::join_with_slash($p->{'base-url'}, $p->{'filename'});
-  }
-}
-printf "%i of %i packages to get: %.1fMb of %.1fMb\n",
-  $to_get, scalar(@$list),
-  $remaining_size / (1024 * 1024),
-  $total_size / (1024 * 1024);
-
-if($to_get > 0) {
-  print "download? [Yn] ";
-  my $reply = <STDIN>;
-  chomp($reply);
-  if($reply =~ /^y?$/i) {
-    foreach my $p (@$list) {
-      if(!$p->{done}) {
-	printf "getting %s %s\n", $p->{package}, $p->{version};
-	run_cmd('curl', $p->{url},
-		'-o', $p->{local_file});
-      }
-    }
-  }
-}
+import plash_pkg
 
 
-sub run_cmd {
-  print join(' ', @_)."\n";
-  my $rc = system(@_);
-  if($rc != 0) {
-    die "Return code $rc";
-  }
-}
+class PackageToDownload(object):
+
+    def __init__(self, pkg):
+        self.pkg = pkg
+        self.done = False
+        self.url = None
+        
+        match = re.search("/([^/]+)$", pkg["filename"])
+        assert match is not None
+        leafname = match.group(1)
+        self.local_file = os.path.join(plash_pkg.get_deb_cache_dir(),
+                                       leafname)
+        if os.path.exists(self.local_file):
+            self.done = True
+        
+        if not self.done:
+            apt_cache_file = os.path.join("/var/cache/apt/archives",
+                                          leafname)
+            if os.path.exists(apt_cache_file):
+                rc = subprocess.call(["cp", apt_cache_file, self.local_file])
+                assert rc == 0
+                self.done = True
+
+        if not self.done:
+            if "base-url" not in pkg:
+                raise Exception("Can't make URL for package: "
+                                "Base-URL field missing")
+            if "filename" not in pkg:
+                raise Exception("Can't make URL for package: "
+                                "Filename field missing")
+            self.url = plash_pkg.join_with_slash(pkg["base-url"],
+                                                 pkg["filename"])
+
+    def get_size(self):
+        return int(self.pkg["size"])
+
+    def download(self):
+        print "getting %s %s" % (self.pkg["package"],
+                                 self.pkg["version"])
+        rc = subprocess.call(["curl", self.url, "-o", self.local_file])
+        assert rc == 0
+
+
+def main(args):
+    if len(args) != 1:
+        print __doc__
+        sys.exit(1)
+    package_list = args[0]
+    packages = []
+    fh = open(package_list, "r")
+    try:
+        for block in plash_pkg.file_blocks(fh):
+            fields = plash_pkg.block_fields(block)
+            if "filelist-ref" not in fields:
+                packages.append(PackageToDownload(fields))
+    finally:
+        fh.close()
+
+    total_size = 0
+    remaining_size = 0
+    to_get = 0
+    for pkg in packages:
+        total_size += pkg.get_size()
+        if not pkg.done:
+            remaining_size += pkg.get_size()
+            to_get += 1
+            print ("%10.1fMb  %s %s"
+                   % (pkg.get_size() / (1024 * 1024),
+                      pkg.pkg["package"],
+                      pkg.pkg["version"]))
+    print ("%i of %i packages to get: %.1fMb of %.1fMb"
+           % (to_get, len(package_list),
+              remaining_size / (1024 * 1024),
+              total_size / (1024 * 1024)))
+    if to_get > 0:
+        print "download? [Yn] ",
+        reply = sys.stdin.readline().rstrip()
+        if not re.match("y?$", reply, re.I):
+            sys.exit(1)
+        for pkg in packages:
+            if not pkg.done:
+                pkg.download()
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

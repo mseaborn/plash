@@ -115,7 +115,7 @@ class Process_spec:
                 print "execve failed"
             except:
                 pass
-            sys.exit(1)
+            os._exit(1)
         else:
             os.close(self.fd.fileno()) # Hack; to be removed
             return pid

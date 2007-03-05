@@ -1,6 +1,12 @@
 
 \paras:
 
+\strong{2007/02/26:} There is now a wiki for Plash: {\strong\a
+href={http://plash.beasts.org/wiki/}: http://plash.beasts.org/wiki/}.
+Documentation from this site is being gradually moved there.
+
+\hr style={display: block};
+
 Plash is a system for sandboxing GNU/Linux programs.  Plash's aim is
 to protect you from the programs you run by letting you run them with
 the minimum authority and privileges they need do do their job -- this

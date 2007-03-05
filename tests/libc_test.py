@@ -139,6 +139,30 @@ void test_symlink()
         self.assertCalled("fsop_symlink", "dest_path", "symlink")
 
 
+class TestReadlink(LibcTest):
+    entry = "test_readlink"
+    code = r"""
+#include <string.h>
+#include <unistd.h>
+void test_readlink()
+{
+  const char *str = "dest_path";
+  char buf[100];
+  int got;
+
+  t_check_zero(symlink(str, "symlink"));
+  got = readlink("symlink", buf, sizeof(buf));
+  t_check(got >= 0);
+  assert(got == strlen(str));
+  buf[got] = 0;
+  assert(strcmp(buf, str) == 0);
+}
+"""
+    def check(self):
+        self.assertCalled("fsop_symlink", "dest_path", "symlink")
+        self.assertCalled("fsop_readlink", "symlink")
+
+
 class TestOpenOnDir(LibcTest):
     entry = "test_open_on_dir"
     code = r"""

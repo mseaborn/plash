@@ -440,6 +440,17 @@ int handle_arguments(region_t r, struct state *state,
       goto arg_handled;
     }
 
+    if(!strcmp(arg, "--fd")) {
+      int fd;
+      if(i + 1 > argc) {
+	fprintf(stderr, NAME_MSG _("--fd expects 1 parameter\n"));
+	return 1;
+      }
+      fd = atoi(argv[i++]);
+      /* Not implemented. */
+      goto arg_handled;
+    }
+
     if(!strcmp(arg, "--x11")) {
       /* FIXME: change from "-flw" to "-fl,socket". */
       char *args[] = { "-flw", "/tmp/.X11-unix/",

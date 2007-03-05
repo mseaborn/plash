@@ -129,6 +129,12 @@ def handle_arg(state, proc, args):
         value = x[index+1:]
         proc.env[name] = value
 
+    # -fd <fd-number>
+    # Add file descriptor.
+    def add_fd(args):
+        fd = int(get_arg(args, "--fd"))
+        proc.fds[fd] = plash_core.wrap_fd(os.dup(fd))
+
     # --x11: Grant access to X Window System displays
     def grant_x11_access(args):
         ns.resolve_populate(state.caller_root, proc.root_node,
@@ -185,6 +191,7 @@ def handle_arg(state, proc, args):
     add_option("no-cwd", unset_cwd)
     add_option("copy-cwd", copy_cwd)
     add_option("env", add_environ_var)
+    add_option("fd", add_fd)
     add_option("x11", grant_x11_access)
     add_option("net", grant_network_access)
     add_option("log", enable_logging)

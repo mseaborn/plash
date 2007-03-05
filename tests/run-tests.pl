@@ -217,7 +217,7 @@ sub stat_test {
   my $file = 'test-file'; # file to stat
   write_file($file, "Test file to stat");
   run_cmd("./test-stat $file 3>buf1");
-  run_cmd(@pola_run, qw(-B -fw .), '-e', 'sh', '-c',
+  run_cmd(@pola_run, qw(-B -fw .), '--fd', 3, '-e', 'sh', '-c',
 	  "./test-stat $file 3>buf2");
   my $buf1 = read_file('buf1');
   my $buf2 = read_file('buf2');

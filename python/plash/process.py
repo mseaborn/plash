@@ -1,11 +1,15 @@
 
-import string
+import errno
 import fcntl
 import os
+import string
+
 import plash_core
 import plash.namespace as ns
 import plash.env
-import sys
+
+
+STDERR_FILENO = 2
 
 
 def kernel_execve(cmd, argv, env):
@@ -38,18 +42,30 @@ class Process_spec:
         self.args = []
         self.caps = {}
         self.conn_maker = ns.conn_maker
+        self.fds = {}
+        self.next_fd = 3
 
     def setcmd(self, cmd, *args):
         self.cmd = cmd
         self.arg0 = cmd
         self.args = list(args)
+
+    def add_fd(self, fd):
+        """Add a file descriptor.  Takes FD object, returns the FD
+        number assigned."""
+        while self.next_fd in self.fds:
+            self.next_fd += 1
+        fd_number = self.next_fd
+        self.next_fd += 1
+        self.fds[fd_number] = fd
+        return fd_number
     
     def plash_setup(self):
         cap_names = self.caps.keys()
         fd = self.conn_maker.make_conn([self.caps[x] for x in cap_names])
+        fd_number = self.add_fd(fd)
         self.env['PLASH_CAPS'] = string.join(cap_names, ';')
-        self.env['PLASH_COMM_FD'] = str(fd.fileno())
-        fcntl.fcntl(fd.fileno(), fcntl.F_SETFD, 0) # Unset FD_CLOEXEC flag
+        self.env['PLASH_COMM_FD'] = str(fd_number)
 
         # Ensure that certain environment variables get preserved
         # across the invocation of a setuid program.
@@ -80,12 +96,36 @@ class Process_spec:
         self.cmd = prefix_cmd[0]
         self.args = prefix_cmd[1:] + [orig_cmd] + self.args
 
-        # This is a hack to ensure that the FD doesn't get GC'd and closed
-        self.fd = fd
-
     def set_post_defaults(self):
         if self.arg0 is None:
             self.arg0 = self.cmd
+
+    def _set_up_fds(self):
+        """Called after fork() in the child process."""
+        max_fd = 3
+        for dest_number, fd in self.fds.iteritems():
+            max_fd = max(max_fd, dest_number + 1)
+        # Duplicate the FDs to temporary numbers that won't conflict
+        # with where they will be assigned.
+        keep = set()
+        mappings = []
+        for dest_number, fd in self.fds.iteritems():
+            temp_fd = fcntl.fcntl(fd.fileno(), fcntl.F_DUPFD, max_fd)
+            keep.add(temp_fd)
+            mappings.append((dest_number, temp_fd))
+        for fd in range(3, 1024):
+            if fd not in keep:
+                try:
+                    os.close(fd)
+                except OSError, ex:
+                    if ex.errno == errno.EBADF:
+                        pass
+                    else:
+                        raise
+        # Copy the file descriptors into place.
+        for dest_fd, src_fd in mappings:
+            os.dup2(src_fd, dest_fd)
+            os.close(src_fd)
 
     def spawn(self):
         self.set_post_defaults()
@@ -109,15 +149,19 @@ class Process_spec:
             try:
                 plash_core.cap_close_all_connections()
                 try:
+                    self._set_up_fds()
                     my_execve(self.cmd, [self.arg0] + self.args, self.env)
-                except:
-                    pass
-                print "execve failed"
+                except Exception, ex:
+                    os.write(STDERR_FILENO, "%s\n" % str(ex))
+                os.write(STDERR_FILENO, "execve failed\n")
             except:
                 pass
             os._exit(1)
         else:
-            os.close(self.fd.fileno()) # Hack; to be removed
+            # We must drop our references to the client's FDs so that
+            # we do not hold its connections open even after the
+            # client has exited.
+            self.fds.clear()
             return pid
 
 

@@ -660,7 +660,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
       }
       else {
 	*log_reply = mk_string(r, "ok");
-	*reply = cat2(r, mk_int(r, METHOD_R_FSOP_DIRLIST),
+	*reply = cat2(r, mk_int(r, METHOD_R_FSOP_READLINK),
 		      mk_leaf(r, link_dest));
 	return 0;
       }

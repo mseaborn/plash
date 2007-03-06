@@ -70,6 +70,18 @@ if [ "$USE_PYTHON" = yes ]; then
      python$PYVERSION setup.py install --no-compile --root=$DEST_FULL
    done
   )
+
+  SCRIPTS="plash-pkg-update-avail
+           plash-pkg-choose
+           plash-pkg-fetch
+           plash-pkg-unpack
+           plash-pkg-install
+           plash-pkg-launch
+           plash-pkg-deb-inst"
+  for SCRIPT in $SCRIPTS; do
+    cp -av python/scripts/$SCRIPT $DEST/usr/bin/
+  done
+  
   dh_pysupport
 fi
 

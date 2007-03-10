@@ -33,7 +33,7 @@ def add_to_path(dir, path):
 # fds: dict mapping FD numbers to FDs
 # caps: dict mapping cap names (e.g. "fs_op") to objects
 # conn_maker: object to use for creating new connection
-class Process_spec:
+class Process_spec(object):
     
     def __init__(self):
         self.env = {}
@@ -222,11 +222,14 @@ class Process_spec_ns(Process_spec):
             else:
                 self.cmd = line
 
+    def make_fs_op(self, root_dir, logger):
+        return ns.make_fs_op(root_dir, logger)
+
     def plash_setup(self):
         self.root_dir = ns.dir_of_node(self.root_node)
         self._resolve_executable()
         self._set_up_script()
-        fs_op = ns.make_fs_op(self.root_dir, self.logger)
+        fs_op = self.make_fs_op(self.root_dir, self.logger)
         self.caps["fs_op"] = fs_op
         # If the chosen cwd is present in the callee's namespace, set the cwd.
         # Otherwise, leave it undefined.

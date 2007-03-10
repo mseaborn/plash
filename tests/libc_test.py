@@ -4,6 +4,12 @@ import shutil
 import subprocess
 import unittest
 
+import plash.env
+import plash.mainloop
+import plash.namespace as ns
+import plash.pola_run_args
+import plash.process
+
 
 prototypes = r"""
 #include <assert.h>
@@ -42,6 +48,18 @@ def write_file(filename, data):
         fh.close()
 
 
+class LogProxy(plash.marshal.Pyobj_marshal):
+    """Logging proxy that records method calls made."""
+
+    def __init__(self, obj, call_list):
+        self._obj = obj
+        self._calls = call_list
+
+    def cap_call(self, args):
+        self._calls.append(plash.marshal.unpack(args))
+        return self._obj.cap_call(args)
+
+
 class LibcTest(unittest.TestCase):
 
     entry = "test_base"
@@ -50,9 +68,6 @@ void test_base()
 {
 }
 """
-
-    def assertCalled(self, method_name, *args):
-        pass
 
     def check(self):
         """Default"""
@@ -69,6 +84,7 @@ int main()
         write_file("test-case.c", prototypes + self.code + shared_code + main_func)
         rc = subprocess.call(["gcc", "-Wall", "test-case.c", "-o", "test-case"])
         assert rc == 0
+        self._method_calls = []
 
     def _test_main(self, f):
         if os.path.exists("tmp-dir"):
@@ -80,20 +96,57 @@ int main()
             f()
         finally:
             os.fchdir(start_dir)
-        self.check()
 
-    def test(self):
+    def test_native(self):
         def run():
             rc = subprocess.call(["../test-case"])
             assert rc == 0
         self._test_main(run)
 
-    def test2(self):
+    def test_pola_run(self):
         def run():
             rc = subprocess.call(["pola-run", "-B", "-fw=.", "-f=../test-case",
                                   "-e", "../test-case"])
             assert rc == 0
         self._test_main(run)
+
+    def test_library(self):
+        def run():
+            calls = []
+            class ProcessWithLogging(plash.process.Process_spec_ns):
+                def make_fs_op(self, root_dir, logger):
+                    fs_op = super(ProcessWithLogging, self).\
+                            make_fs_op(root_dir, logger)
+                    return LogProxy(fs_op, calls)
+            class State:
+                pass
+            proc = ProcessWithLogging()
+            proc.cwd_path = os.getcwd()
+            proc.env = os.environ.copy()
+            state = State()
+            state.caller_root = plash.env.get_root_dir()
+            state.cwd = ns.resolve_dir(state.caller_root, proc.cwd_path)
+            plash.pola_run_args.handle_args(state, proc,
+                                      ["-B", "-fw=.", "-f=../test-case",
+                                       "--prog", "../test-case"])
+            if "PLASH_LIBRARY_DIR" in os.environ:
+                plash.pola_run_args.handle_args(
+                    state, proc,
+                    ["-f", os.environ["PLASH_LIBRARY_DIR"]])
+            pid = proc.spawn()
+            plash.mainloop.run_server()
+            self._method_calls = [(name,) + args
+                                  for name, args in calls]
+            pid2, status = os.wait()
+            self.assertEquals(pid, pid2)
+            self.assertTrue(os.WIFEXITED(status))
+            self.assertEquals(os.WEXITSTATUS(status), 0)
+        self._test_main(run)
+        self.check()
+
+    def assertCalled(self, method_name, *args):
+        self.assertTrue((method_name,) + args in self._method_calls,
+                        self._method_calls)
 
 
 class TestCreateFile(LibcTest):
@@ -109,7 +162,8 @@ void test_creat()
 }
 """
     def check(self):
-        self.assertCalled("fsop_open", "file", os.O_RDONLY, 0777)
+        self.assertCalled("fsop_open", os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+                          0777, "file")
 
 
 class TestMkdir(LibcTest):
@@ -122,7 +176,7 @@ void test_mkdir()
 }
 """
     def check(self):
-        self.assertCalled("fsop_mkdir", "dir", 0777)
+        self.assertCalled("fsop_mkdir", 0777, "dir")
 
 
 class TestSymlink(LibcTest):
@@ -136,7 +190,8 @@ void test_symlink()
 }
 """
     def check(self):
-        self.assertCalled("fsop_symlink", "dest_path", "symlink")
+        # TODO: order is reversed; confusing, should be fixed
+        self.assertCalled("fsop_symlink", "symlink", "dest_path")
 
 
 class TestReadlink(LibcTest):
@@ -159,7 +214,7 @@ void test_readlink()
 }
 """
     def check(self):
-        self.assertCalled("fsop_symlink", "dest_path", "symlink")
+        self.assertCalled("fsop_symlink", "symlink", "dest_path")
         self.assertCalled("fsop_readlink", "symlink")
 
 
@@ -176,7 +231,7 @@ void test_open_on_dir()
 }
 """
     def check(self):
-        self.assertCalled("fsop_open", ".", os.O_RDONLY, 0)
+        self.assertCalled("fsop_open", os.O_RDONLY, 0, ".")
 
 
 class TestGetcwd(LibcTest):

@@ -286,5 +286,65 @@ void test_readdir()
         self.assertCalled("fsop_dirlist", ".")
 
 
+class TestChmod(LibcTest):
+    entry = "test_chmod"
+    code = r"""
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/stat.h>
+void test_chmod()
+{
+  int fd = creat("file", 0666);
+  t_check(fd >= 0);
+  t_check_zero(close(fd));
+  /* Set the executable bit. */
+  t_check_zero(chmod("file", 0777));
+}
+"""
+    def check(self):
+        self.assertCalled("fsop_chmod", 0, 0777, "file")
+
+
+class TestChown(LibcTest):
+    entry = "test_chown"
+    code = r"""
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/stat.h>
+void test_chown()
+{
+  int fd = creat("file", 0666);
+  t_check(fd >= 0);
+  t_check_zero(close(fd));
+  /* Not attempting to change the owner/group. */
+  t_check_zero(chown("file", -1, -1));
+}
+"""
+    def check(self):
+        self.assertCalled("fsop_chown", 0, -1, -1, "file")
+
+
+class TestFork(LibcTest):
+    entry = "test_fork"
+    code = r"""
+#include <unistd.h>
+#include <sys/wait.h>
+void test_fork()
+{
+  int pid, pid2, status;
+  pid = fork();
+  t_check(pid >= 0);
+  if(pid == 0)
+    _exit(42);
+  pid2 = wait(&status);
+  t_check(pid2 >= 0);
+  assert(pid == pid2);
+  assert(WIFEXITED(status) && WEXITSTATUS(status) == 42);
+}
+"""
+    def check(self):
+        self.assertCalled("fsop_copy")
+
+
 if __name__ == "__main__":
     unittest.main()

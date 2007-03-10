@@ -135,8 +135,7 @@ int main()
                     ["-f", os.environ["PLASH_LIBRARY_DIR"]])
             pid = proc.spawn()
             plash.mainloop.run_server()
-            self._method_calls = [(name,) + args
-                                  for name, args in calls]
+            self._method_calls = calls
             pid2, status = os.wait()
             self.assertEquals(pid, pid2)
             self.assertTrue(os.WIFEXITED(status))
@@ -145,8 +144,14 @@ int main()
         self.check()
 
     def assertCalled(self, method_name, *args):
-        self.assertTrue((method_name,) + args in self._method_calls,
+        self.assertTrue((method_name, args) in self._method_calls,
                         self._method_calls)
+
+    def assertCalledMatches(self, method_name, fun):
+        for method, args in self._method_calls:
+            if method == method_name and fun(args):
+                return
+        self.fail("No match found for %s" % method_name)
 
 
 class TestCreateFile(LibcTest):
@@ -166,6 +171,23 @@ void test_creat()
                           0777, "file")
 
 
+class TestUnlink(LibcTest):
+    entry = "test_unlink"
+    code = r"""
+#include <fcntl.h>
+#include <unistd.h>
+void test_unlink()
+{
+  int fd = creat("file", 0777);
+  t_check(fd >= 0);
+  t_check_zero(close(fd));
+  t_check_zero(unlink("file"));
+}
+"""
+    def check(self):
+        self.assertCalled("fsop_unlink", "file")
+
+
 class TestMkdir(LibcTest):
     entry = "test_mkdir"
     code = r"""
@@ -177,6 +199,21 @@ void test_mkdir()
 """
     def check(self):
         self.assertCalled("fsop_mkdir", 0777, "dir")
+
+
+class TestRmdir(LibcTest):
+    entry = "test_rmdir"
+    code = r"""
+#include <sys/stat.h>
+#include <unistd.h>
+void test_rmdir()
+{
+  t_check_zero(mkdir("dir", 0777));
+  t_check_zero(rmdir("dir"));
+}
+"""
+    def check(self):
+        self.assertCalled("fsop_rmdir", "dir")
 
 
 class TestSymlink(LibcTest):
@@ -344,6 +381,29 @@ void test_fork()
 """
     def check(self):
         self.assertCalled("fsop_copy")
+
+
+class TestBind(LibcTest):
+    entry = "test_bind"
+    code = r"""
+#include <sys/socket.h>
+#include <sys/un.h>
+void test_bind()
+{
+  int fd;
+  struct sockaddr_un addr;
+
+  fd = socket(PF_UNIX, SOCK_STREAM, 0);
+  t_check(fd >= 0);
+  addr.sun_family = AF_UNIX;
+  strcpy(addr.sun_path, "socket");
+  t_check_zero(bind(fd, (struct sockaddr *) &addr,
+                    sizeof(struct sockaddr_un)));
+}
+"""
+    def check(self):
+        self.assertCalledMatches("fsop_bind",
+                                 lambda (fd, name): name == "socket")
 
 
 if __name__ == "__main__":

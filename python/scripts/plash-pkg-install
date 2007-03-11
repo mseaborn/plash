@@ -125,8 +125,9 @@ def main(args):
         app.init_write_layer()
     elif action == "--inst" and len(args) == 0:
         app = AppDir(output_dir)
-        plash_pkg.write_file(os.path.join("desktop-files",
-                                          "%s.desktop" % app.config["pet-id"]),
+        plash_pkg.write_file(os.path.join(plash_pkg.get_desktop_files_dir(),
+                                          "plash-%s.desktop"
+                                          % app.config["pet-id"]),
                              app.desktop_file())
     else:
         print __doc__

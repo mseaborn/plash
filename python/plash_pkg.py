@@ -49,6 +49,10 @@ def get_unpack_cache_dir():
     """Directory where unpacked copies of packages are stored."""
     return ensure_dir_exists("unpack-cache")
 
+def get_desktop_files_dir():
+    """Directory where generated .desktop files are written."""
+    return ensure_dir_exists("desktop-files")
+
 
 def read_sources_list_line(line):
     """

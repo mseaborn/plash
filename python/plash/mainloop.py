@@ -10,6 +10,21 @@ def use_gtk_mainloop():
     global _use_gtk
     _use_gtk = True
 
+def use_glib_mainloop():
+    use_gtk_mainloop()
+
+
+_forwarders = 0
+
+def inc_forwarders_count():
+    global _forwarders
+    _forwarders += 1
+
+def dec_forwarders_count():
+    global _forwarders
+    _forwarders -= 1
+
+
 def run_server():
     """Run the top-level loop.  Returns when this process is no longer
     exporting any object references.

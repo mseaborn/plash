@@ -72,8 +72,11 @@ def main(args):
                                     pet_name = state.pet_name)
         plash.mainloop.use_gtk_mainloop()
 
+    fwd_stdout, fwd_stderr = plash.pola_run_args.proxy_terminal(proc)
     pid = proc.spawn()
     plash.mainloop.run_server()
+    fwd_stdout.flush()
+    fwd_stderr.flush()
 
     # Wait for the subprocess to exit and check the exit code.
     (pid2, status) = os.waitpid(pid, 0)

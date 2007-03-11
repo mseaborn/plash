@@ -2,8 +2,15 @@
 import string
 import sys
 import os
+
 import plash_core
+import plash.filedesc
 import plash.namespace as ns
+
+
+STDIN_FILENO = 0
+STDOUT_FILENO = 1
+STDERR_FILENO = 2
 
 
 class BadArgException(Exception):
@@ -223,3 +230,12 @@ def set_fake_uids(proc):
     proc.env['PLASH_FAKE_GID'] = str(os.getgid())
     proc.env['PLASH_FAKE_EUID'] = str(os.getuid())
     proc.env['PLASH_FAKE_EGID'] = str(os.getgid())
+
+def proxy_terminal(proc):
+    proc.fds[STDIN_FILENO], forwarder1 = \
+        plash.filedesc.proxy_input_fd(os.dup(STDIN_FILENO))
+    proc.fds[STDOUT_FILENO], forwarder2 = \
+        plash.filedesc.proxy_output_fd(os.dup(STDOUT_FILENO))
+    proc.fds[STDERR_FILENO], forwarder3 = \
+        plash.filedesc.proxy_output_fd(os.dup(STDERR_FILENO))
+    return (forwarder2, forwarder3)

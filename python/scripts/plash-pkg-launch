@@ -65,13 +65,6 @@ def launch_app(app_dir, files, args):
 
     pola_run_args.set_fake_uids(proc)
 
-    dir = ns.resolve_obj(state.caller_root, app_dir)
-
-    dir_unpacked = dir.dir_traverse("unpacked")
-    dir_write_layer = dir.dir_traverse("write_layer")
-    root_dir = ns.make_cow_dir(dir_write_layer, dir_unpacked)
-    ns.attach_at_path(proc.root_node, "/", root_dir)
-
     # TODO: grant read-only access to apps configured as viewers
     for filename in files:
         ns.resolve_populate(state.caller_root, proc.root_node,

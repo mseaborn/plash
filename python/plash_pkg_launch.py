@@ -7,7 +7,19 @@ import plash.pola_run_args
 import plash.process
 
 
+class FileNamespace:
+
+    def __init__(self):
+        self._root = plash.env.get_root_dir()
+        self._cwd = ns.resolve_dir(self._root, os.getcwd())
+
+    def get_obj(self, pathname):
+        return ns.resolve_obj(self._root, pathname,
+                              cwd=self._cwd, nofollow=False)
+
+
 def make_process(app_dir):
+    my_root = FileNamespace()
     caller_root = plash.env.get_root_dir()
     proc = plash.process.Process_spec_ns()
     proc.env = os.environ.copy()
@@ -30,5 +42,11 @@ def make_process(app_dir):
          "-f", "/usr/lib/plash/lib",
          "--x11",
          "--net"])
+
+    root_dir = ns.make_cow_dir(my_root.get_obj(
+                                 os.path.join(app_dir, "unpacked")),
+                               my_root.get_obj(
+                                 os.path.join(app_dir, "write_layer")))
+    ns.attach_at_path(proc.root_node, "/", root_dir)
 
     return (proc, state)

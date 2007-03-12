@@ -12,7 +12,9 @@ import re
 import subprocess
 import sys
 
-import plash_pkg
+import plash_pkg.config
+import plash_pkg.control
+import plash_pkg.utils
 
 
 class PackageToDownload(object):
@@ -25,7 +27,7 @@ class PackageToDownload(object):
         match = re.search("/([^/]+)$", pkg["filename"])
         assert match is not None
         leafname = match.group(1)
-        self.local_file = os.path.join(plash_pkg.get_deb_cache_dir(),
+        self.local_file = os.path.join(plash_pkg.config.get_deb_cache_dir(),
                                        leafname)
         if os.path.exists(self.local_file):
             self.done = True
@@ -45,8 +47,8 @@ class PackageToDownload(object):
             if "filename" not in pkg:
                 raise Exception("Can't make URL for package: "
                                 "Filename field missing")
-            self.url = plash_pkg.join_with_slash(pkg["base-url"],
-                                                 pkg["filename"])
+            self.url = plash_pkg.utils.join_with_slash(pkg["base-url"],
+                                                       pkg["filename"])
 
     def get_size(self):
         return int(self.pkg["size"])
@@ -66,8 +68,8 @@ def main(args):
     packages = []
     fh = open(package_list, "r")
     try:
-        for block in plash_pkg.file_blocks(fh):
-            fields = plash_pkg.block_fields(block)
+        for block in plash_pkg.control.file_blocks(fh):
+            fields = plash_pkg.control.block_fields(block)
             if "filelist-ref" not in fields:
                 packages.append(PackageToDownload(fields))
     finally:

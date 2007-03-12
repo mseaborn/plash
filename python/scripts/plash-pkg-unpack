@@ -14,7 +14,8 @@ import sha
 import subprocess
 import sys
 
-import plash_pkg
+import plash_pkg.config
+import plash_pkg.control
 
 
 verbose = True
@@ -22,8 +23,8 @@ verbose = True
 def read_control_file(filename):
     fh = open(filename, "r")
     try:
-        return [plash_pkg.block_fields(b)
-                for b in plash_pkg.file_blocks(fh)]
+        return [plash_pkg.control.block_fields(b)
+                for b in plash_pkg.control.file_blocks(fh)]
     finally:
         fh.close()
 
@@ -47,7 +48,7 @@ def unpack_into_cache(unpack_cache, pkg):
     match = re.search("/([^/]+)$", pkg["filename"])
     assert match is not None
     leafname = match.group(1)
-    deb_file = os.path.join(plash_pkg.get_deb_cache_dir(), leafname)
+    deb_file = os.path.join(plash_pkg.config.get_deb_cache_dir(), leafname)
     if not os.path.exists(deb_file):
         raise Exception("File not present: %s" % deb_file)
 
@@ -143,7 +144,7 @@ def main(args):
         sys.exit(1)
     package_list = args[0]
     dest_dir = args[1]
-    unpack_cache = plash_pkg.get_unpack_cache_dir()
+    unpack_cache = plash_pkg.config.get_unpack_cache_dir()
     packages = read_control_file(package_list)
     for pkg in packages:
         unpack_into_cache(unpack_cache, pkg)

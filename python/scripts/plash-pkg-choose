@@ -2,8 +2,8 @@
 
 import sys
 
-import plash_pkg_choose
+import plash_pkg.choose
 
 
 if __name__ == "__main__":
-    sys.exit(plash_pkg_choose.main(sys.argv[1:]))
+    sys.exit(plash_pkg.choose.main(sys.argv[1:]))

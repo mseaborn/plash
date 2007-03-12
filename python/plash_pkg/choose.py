@@ -8,7 +8,8 @@ import os
 import re
 import sys
 
-import plash_pkg
+import plash_pkg.config
+import plash_pkg.control
 
 
 def split_dep_list(text):
@@ -108,7 +109,7 @@ def write_result_package_list(filename, chooser):
     fh = open(filename, "w")
     try:
         for pkg in chooser.get_output():
-            plash_pkg.write_block(fh, pkg, keys)
+            plash_pkg.control.write_block(fh, pkg, keys)
     finally:
         fh.close()
 
@@ -119,13 +120,13 @@ def main(args):
         return
     output_dir = args[0]
     top_deps = args[1:]
-    package_list = plash_pkg.get_package_list_combined()
+    package_list = plash_pkg.config.get_package_list_combined()
     chooser = DepChooser()
 
     fh = open(package_list, "r")
     try:
-        for block in plash_pkg.file_blocks(fh):
-            fields = plash_pkg.block_fields(block)
+        for block in plash_pkg.control.file_blocks(fh):
+            fields = plash_pkg.control.block_fields(block)
             chooser.add_avail_package(fields)
     finally:
         fh.close()

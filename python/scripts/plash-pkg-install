@@ -12,17 +12,19 @@ import pwd
 import subprocess
 import sys
 
-import plash_pkg
+import plash_pkg.config
+import plash_pkg.control
+import plash_pkg.utils
 
 
 def read_config_file(filename):
     fh = file(filename, "r")
     try:
-        blocks = list(plash_pkg.file_blocks(fh))
+        blocks = list(plash_pkg.control.file_blocks(fh))
     finally:
         fh.close()
     assert len(blocks) == 1
-    return plash_pkg.block_fields(blocks[0])
+    return plash_pkg.control.block_fields(blocks[0])
 
 def strip_root(filename):
     """Remove the initial slashes from a pathname, turning it into a
@@ -74,7 +76,7 @@ class AppDir(object):
             else:
                 home_dir = pw_ent.pw_dir
                 os.mkdir(os.path.join(dest, "etc"))
-                plash_pkg.write_file(os.path.join(dest, "etc", "passwd"),
+                plash_pkg.utils.write_file(os.path.join(dest, "etc", "passwd"),
                                      "%s:x:%i:%i::%s:/bin/false\n"
                                      % (pw_ent.pw_name, uid, uid, home_dir))
                 os.makedirs(os.path.join(dest, strip_root(home_dir)))
@@ -117,18 +119,19 @@ def main(args):
         config_file = args[0]
         if not os.path.exists(output_dir):
             os.mkdir(output_dir)
-        plash_pkg.write_file(os.path.join(output_dir, "config"),
-                             plash_pkg.read_file(config_file))
+        plash_pkg.utils.write_file(os.path.join(output_dir, "config"),
+                             plash_pkg.utils.read_file(config_file))
     elif action == "--get" and len(args) == 0:
         app = AppDir(output_dir)
         app.choose_and_unpack()
         app.init_write_layer()
     elif action == "--inst" and len(args) == 0:
         app = AppDir(output_dir)
-        plash_pkg.write_file(os.path.join(plash_pkg.get_desktop_files_dir(),
-                                          "plash-%s.desktop"
-                                          % app.config["pet-id"]),
-                             app.desktop_file())
+        plash_pkg.utils.write_file(
+            os.path.join(plash_pkg.config.get_desktop_files_dir(),
+                         "plash-%s.desktop"
+                         % app.config["pet-id"]),
+            app.desktop_file())
     else:
         print __doc__
         return 1

@@ -9,8 +9,8 @@ import plash.namespace as ns
 import plash.mainloop
 import plash.process
 
-import plash_pkg
-import plash_pkg_launch
+import plash_pkg.control
+import plash_pkg.launch
 
 
 unpack_cache = os.path.realpath("unpack-cache")
@@ -21,9 +21,9 @@ def restore_cwd_hack():
 
 
 def init_package(app_dir, package, control_script, args):
-    my_root = plash_pkg_launch.FileNamespace()
+    my_root = plash_pkg.launch.FileNamespace()
     restore_cwd_hack()
-    proc, state = plash_pkg_launch.make_process(app_dir)
+    proc, state = plash_pkg.launch.make_process(app_dir)
 
     script_path = os.path.join(unpack_cache, package,
                                "control", control_script)
@@ -42,8 +42,8 @@ def init_package(app_dir, package, control_script, args):
 def init_packages(app_dir):
     fh = open(os.path.join(app_dir, "package-list"), "r")
     try:
-        for block in plash_pkg.file_blocks(fh):
-            info = plash_pkg.block_fields(block)
+        for block in plash_pkg.control.file_blocks(fh):
+            info = plash_pkg.control.block_fields(block)
             package = "%s_%s" % (info["package"], info["version"])
             print package
             init_package(app_dir, package, "preinst", ["install"])

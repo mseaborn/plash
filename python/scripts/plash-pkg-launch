@@ -14,14 +14,14 @@ import plash.pola_run_args as pola_run_args
 import plash.powerbox
 import plash.process
 
-import plash_pkg
-import plash_pkg_launch
+import plash_pkg.control
+import plash_pkg.launch
 
 
 def read_config(filename):
     file = open(filename, "r")
     try:
-        return plash_pkg.block_fields(plash_pkg.get_block(file))
+        return plash_pkg.control.block_fields(plash_pkg.control.get_block(file))
     finally:
         file.close()
 
@@ -54,7 +54,7 @@ def main(args):
 def launch_app(app_dir, files, args):
     config = read_config(os.path.join(app_dir, "config"))
 
-    proc, state = plash_pkg_launch.make_process(app_dir)
+    proc, state = plash_pkg.launch.make_process(app_dir)
 
     pola_run_args.handle_args(state, proc, args)
 

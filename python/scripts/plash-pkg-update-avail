@@ -3,14 +3,16 @@
 import os
 import re
 import subprocess
-import sys
 
-import plash_pkg
+import plash_pkg.config
+import plash_pkg.control
+import plash_pkg.sources
+import plash_pkg.utils
 
 
 def fetch_packages_file(src, dest_dir, arch):
-    url = plash_pkg.join_with_slash(src["S_base"],
-                plash_pkg.join_with_slash(src["S_component"],
+    url = plash_pkg.utils.join_with_slash(src["S_base"],
+                plash_pkg.utils.join_with_slash(src["S_component"],
                                           "binary-%s/Packages.gz" % arch))
     match = re.match("http://(.*)$", url)
     if not match:
@@ -36,7 +38,7 @@ def combine_package_lists(out, src_list):
         filename = src["S_file"]
         fh = open_gunzip(filename)
         try:
-            for block in plash_pkg.file_blocks(fh):
+            for block in plash_pkg.control.file_blocks(fh):
                 # Remove the Description field to save space.
                 block = "".join(block)
                 block = regexp_desc.sub("", block, 1)
@@ -47,14 +49,14 @@ def combine_package_lists(out, src_list):
             fh.close()
 
 def main():
-    arch = plash_pkg.get_arch()
-    output_dir = plash_pkg.get_package_list_cache_dir()
+    arch = plash_pkg.config.get_arch()
+    output_dir = plash_pkg.config.get_package_list_cache_dir()
 
-    src_list = plash_pkg.read_sources_list("sources.list")
+    src_list = plash_pkg.sources.read_sources_list("sources.list")
     for src in src_list:
         src["S_file"] = fetch_packages_file(src, output_dir, arch)
 
-    out = open(plash_pkg.get_package_list_combined(), "w")
+    out = open(plash_pkg.config.get_package_list_combined(), "w")
     try:
         combine_package_lists(out, src_list)
     finally:

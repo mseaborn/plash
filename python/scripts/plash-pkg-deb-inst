@@ -10,6 +10,7 @@ import plash.mainloop
 import plash.process
 
 import plash_pkg
+import plash_pkg_launch
 
 
 class File_namespace:
@@ -31,8 +32,7 @@ os.chdir(cwd)
 
 
 def init_package(app_dir, package, control_script, args):
-    proc = plash.process.Process_spec_ns()
-    proc.cwd_path = "/"
+    proc, state = plash_pkg_launch.make_process(app_dir)
 
     root_dir = ns.make_cow_dir(my_root.get_obj(
                                  os.path.join(app_dir, "unpacked")),

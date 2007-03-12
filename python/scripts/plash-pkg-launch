@@ -15,6 +15,7 @@ import plash.powerbox
 import plash.process
 
 import plash_pkg
+import plash_pkg_launch
 
 
 def read_config(filename):
@@ -53,29 +54,9 @@ def main(args):
 def launch_app(app_dir, files, args):
     config = read_config(os.path.join(app_dir, "config"))
 
-    caller_root = plash.env.get_root_dir()
-    proc = plash.process.Process_spec_ns()
-    proc.env = os.environ.copy()
-    proc.cwd_path = "/"
-
-    class State:
-        pass
-    state = State()
-    state.namespace_empty = True
-    state.caller_root = caller_root
-    state.cwd = ns.resolve_dir(state.caller_root, os.getcwd())
-    state.pet_name = None
-    state.powerbox = False
+    proc, state = plash_pkg_launch.make_process(app_dir)
 
     pola_run_args.handle_args(state, proc, args)
-    
-    pola_run_args.handle_args(state, proc, \
-                              ["-fw", "/dev/null",
-                               "-f", "/dev/urandom",
-                               "-f", "/dev/random",
-                               "-f", "/usr/lib/plash/lib",
-                               "--x11",
-                               "--net"])
 
     if proc.cmd == None:
         # Run the configured command
@@ -84,7 +65,7 @@ def launch_app(app_dir, files, args):
 
     pola_run_args.set_fake_uids(proc)
 
-    dir = ns.resolve_obj(caller_root, app_dir)
+    dir = ns.resolve_obj(state.caller_root, app_dir)
 
     dir_unpacked = dir.dir_traverse("unpacked")
     dir_write_layer = dir.dir_traverse("write_layer")

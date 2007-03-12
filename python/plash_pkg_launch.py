@@ -40,6 +40,7 @@ def make_process(app_dir):
          "-f", "/dev/urandom",
          "-f", "/dev/random",
          "-f", "/usr/lib/plash/lib",
+         "-f", "/etc/localtime",
          "--x11",
          "--net"])
 

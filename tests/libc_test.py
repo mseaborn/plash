@@ -59,6 +59,32 @@ class LogProxy(plash.marshal.Pyobj_marshal):
         self._calls.append(plash.marshal.unpack(args))
         return self._obj.cap_call(args)
 
+class ProcessWithLogging(plash.process.Process_spec_ns):
+    """Process constructor that logs the calls the process makes."""
+
+    def __init__(self, call_list):
+        self._call_list = call_list
+        super(ProcessWithLogging, self).__init__()
+
+    def make_fs_op(self, root_dir, logger):
+        fs_op = super(ProcessWithLogging, self).\
+                make_fs_op(root_dir, logger)
+        return LogProxy(fs_op, self._call_list)
+
+class ProcessPreloadMixin(object):
+
+    def _set_up_library_path(self):
+        build_dir = os.environ["PLASH_BUILD_DIR"]
+        self.env["LD_PRELOAD"] = \
+            os.path.join(build_dir, "shobj/preload-libc.so")
+
+    def _set_up_sandbox_prog(self):
+        # This is a hack to restore the cwd.
+        # Needed because cwd gets corrupted.
+        # Not bad to set cwd, but it should be done in the
+        # forked process instead.
+        os.chdir(self.cwd_path)
+
 
 class LibcTest(unittest.TestCase):
 
@@ -110,36 +136,43 @@ int main()
             assert rc == 0
         self._test_main(run)
 
+    def _run_plash_process(self, proc):
+        class State:
+            pass
+        proc.cwd_path = os.getcwd()
+        proc.env = os.environ.copy()
+        state = State()
+        state.caller_root = plash.env.get_root_dir()
+        state.cwd = ns.resolve_dir(state.caller_root, proc.cwd_path)
+        plash.pola_run_args.handle_args(state, proc,
+                                  ["-B", "-fw=.", "-f=../test-case",
+                                   "--prog", "../test-case"])
+        if "PLASH_LIBRARY_DIR" in os.environ:
+            plash.pola_run_args.handle_args(
+                state, proc,
+                ["-f", os.environ["PLASH_LIBRARY_DIR"]])
+        pid = proc.spawn()
+        plash.mainloop.run_server()
+        pid2, status = os.wait()
+        self.assertEquals(pid, pid2)
+        self.assertTrue(os.WIFEXITED(status))
+        self.assertEquals(os.WEXITSTATUS(status), 0)
+
     def test_library(self):
         def run():
-            calls = []
-            class ProcessWithLogging(plash.process.Process_spec_ns):
-                def make_fs_op(self, root_dir, logger):
-                    fs_op = super(ProcessWithLogging, self).\
-                            make_fs_op(root_dir, logger)
-                    return LogProxy(fs_op, calls)
-            class State:
+            self._method_calls = []
+            proc = ProcessWithLogging(self._method_calls)
+            self._run_plash_process(proc)
+        self._test_main(run)
+        self.check()
+
+    def test_preload_library(self):
+        def run():
+            self._method_calls = []
+            class Proc(ProcessPreloadMixin, ProcessWithLogging):
                 pass
-            proc = ProcessWithLogging()
-            proc.cwd_path = os.getcwd()
-            proc.env = os.environ.copy()
-            state = State()
-            state.caller_root = plash.env.get_root_dir()
-            state.cwd = ns.resolve_dir(state.caller_root, proc.cwd_path)
-            plash.pola_run_args.handle_args(state, proc,
-                                      ["-B", "-fw=.", "-f=../test-case",
-                                       "--prog", "../test-case"])
-            if "PLASH_LIBRARY_DIR" in os.environ:
-                plash.pola_run_args.handle_args(
-                    state, proc,
-                    ["-f", os.environ["PLASH_LIBRARY_DIR"]])
-            pid = proc.spawn()
-            plash.mainloop.run_server()
-            self._method_calls = calls
-            pid2, status = os.wait()
-            self.assertEquals(pid, pid2)
-            self.assertTrue(os.WIFEXITED(status))
-            self.assertEquals(os.WEXITSTATUS(status), 0)
+            proc = Proc(self._method_calls)
+            self._run_plash_process(proc)
         self._test_main(run)
         self.check()
 

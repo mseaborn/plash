@@ -59,13 +59,17 @@ class Process_spec(object):
         self.next_fd += 1
         self.fds[fd_number] = fd
         return fd_number
-    
-    def plash_setup(self):
-        cap_names = self.caps.keys()
-        fd = self.conn_maker.make_conn([self.caps[x] for x in cap_names])
-        fd_number = self.add_fd(fd)
-        self.env['PLASH_CAPS'] = string.join(cap_names, ';')
-        self.env['PLASH_COMM_FD'] = str(fd_number)
+
+    def _set_up_library_path(self):
+        """Add entry to LD_LIBRARY_PATH."""
+        if (not plash.env.under_plash and
+            not "PLASH_SANDBOX_PROG" in os.environ):
+            self.env["LD_LIBRARY_PATH"] = \
+                add_to_path("/usr/lib/plash/lib",
+                            self.env.get("LD_LIBRARY_PATH", ""))
+
+    def _set_up_sandbox_prog(self):
+        """Make sure run-as-anonymous is invoked."""
 
         # Ensure that certain environment variables get preserved
         # across the invocation of a setuid program.
@@ -75,19 +79,15 @@ class Process_spec(object):
                     args.extend(["-s", var + '=' + self.env[var]])
 
         if not plash.env.under_plash:
-            if 'PLASH_SANDBOX_PROG' in os.environ:
-                prefix_cmd = [os.environ['PLASH_SANDBOX_PROG']]
-                # prefix_cmd = string.split(os.environ['PLASH_SANDBOX_PROGV'], ":")
+            if "PLASH_SANDBOX_PROG" in os.environ:
+                prefix_cmd = [os.environ["PLASH_SANDBOX_PROG"]]
             else:
-                self.env['LD_LIBRARY_PATH'] = \
-                    add_to_path("/usr/lib/plash/lib",
-                                self.env.get('LD_LIBRARY_PATH', ''))
                 prefix_cmd = ["/usr/lib/plash/run-as-anonymous"]
                 preserve_env(prefix_cmd)
                 prefix_cmd.append("/special/ld-linux.so.2")
         else:
-            if 'PLASH_P_SANDBOX_PROG' in os.environ:
-                prefix_cmd = [os.environ['PLASH_P_SANDBOX_PROG']]
+            if "PLASH_P_SANDBOX_PROG" in os.environ:
+                prefix_cmd = [os.environ["PLASH_P_SANDBOX_PROG"]]
             else:
                 prefix_cmd = ["/run-as-anonymous"]
                 preserve_env(prefix_cmd)
@@ -95,6 +95,16 @@ class Process_spec(object):
         orig_cmd = self.cmd
         self.cmd = prefix_cmd[0]
         self.args = prefix_cmd[1:] + [orig_cmd] + self.args
+
+    def plash_setup(self):
+        cap_names = self.caps.keys()
+        fd = self.conn_maker.make_conn([self.caps[x] for x in cap_names])
+        fd_number = self.add_fd(fd)
+        self.env['PLASH_CAPS'] = string.join(cap_names, ';')
+        self.env['PLASH_COMM_FD'] = str(fd_number)
+
+        self._set_up_library_path()
+        self._set_up_sandbox_prog()
 
     def set_post_defaults(self):
         if self.arg0 is None:

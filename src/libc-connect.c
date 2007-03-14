@@ -37,6 +37,13 @@
 #include "marshal.h"
 
 
+static int is_filename_socket_addr(struct sockaddr_un *addr)
+{
+  /* Exclude "abstract" namespace for Unix domain sockets. */
+  return addr->sun_family == AF_LOCAL && addr->sun_path[0] != '\0';
+}
+
+
 export_weak_alias(new_connect, connect);
 export_weak_alias(new_connect, __connect);
 export(new_connect, __libc_connect);
@@ -44,12 +51,12 @@ export(new_connect, __connect_internal);
 
 int new_connect(int sock_fd, const struct sockaddr *addr, socklen_t addr_len)
 {
+  struct sockaddr_un *addr2 = (void *) addr;
   if(!addr) { __set_errno(EINVAL); return -1; }
-  if(addr->sa_family == AF_LOCAL) {
+  if(is_filename_socket_addr(addr2)) {
     region_t r;
     seqf_t reply;
     fds_t reply_fds;
-    struct sockaddr_un *addr2 = (void *) addr;
     int sock_fd_copy = dup(sock_fd);
     if(sock_fd_copy < 0) return -1;
     r = region_make();
@@ -121,12 +128,12 @@ export_weak_alias(new_bind, __bind);
 
 int new_bind(int sock_fd, struct sockaddr *addr, socklen_t addr_len)
 {
+  struct sockaddr_un *addr2 = (void *) addr;
   if(!addr) { __set_errno(EINVAL); return -1; }
-  if(addr->sa_family == AF_LOCAL) {
+  if(is_filename_socket_addr(addr2)) {
     region_t r;
     seqf_t reply;
     fds_t reply_fds;
-    struct sockaddr_un *addr2 = (void *) addr;
     int sock_fd_copy = dup(sock_fd);
     if(sock_fd_copy < 0) return -1;
     r = region_make();

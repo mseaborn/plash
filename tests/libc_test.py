@@ -186,6 +186,11 @@ int main()
                 return
         self.fail("No match found for %s" % method_name)
 
+    def assertNotCalled(self, method_name):
+        for method, args in self._method_calls:
+            if method == method_name:
+                self.fail("Method %s was called" % method_name)
+
 
 class TestCreateFile(LibcTest):
     entry = "test_creat"
@@ -437,6 +442,31 @@ void test_bind()
     def check(self):
         self.assertCalledMatches("fsop_bind",
                                  lambda (fd, name): name == "socket")
+
+
+class TestBindAbstract(LibcTest):
+    """Use bind() with the Linux-specific "abstract" socket namespace."""
+    entry = "test_bind_abstract"
+    code = r"""
+#include <sys/socket.h>
+#include <sys/un.h>
+void test_bind_abstract()
+{
+  int fd;
+  struct sockaddr_un addr;
+
+  fd = socket(PF_UNIX, SOCK_STREAM, 0);
+  t_check(fd >= 0);
+  memset(&addr, 0, sizeof(addr));
+  addr.sun_family = AF_UNIX;
+  addr.sun_path[0] = '\0';
+  strcpy(addr.sun_path + 1, "/tmp/test-socket");
+  t_check_zero(bind(fd, (struct sockaddr *) &addr,
+                    sizeof(struct sockaddr_un)));
+}
+"""
+    def check(self):
+        self.assertNotCalled("fsop_bind")
 
 
 if __name__ == "__main__":

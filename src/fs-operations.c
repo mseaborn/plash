@@ -382,7 +382,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
       new_server = make_fs_op_server(new_log, proc->root, proc->cwd);
       
       *r_caps = mk_caps1(r, new_server);
-      *reply = mk_int(r, METHOD_OKAY);
+      *reply = mk_int(r, METHOD_R_CAP);
       *log_reply = mk_string(r, "ok");
       return 0;
     }

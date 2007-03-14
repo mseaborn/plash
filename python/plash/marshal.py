@@ -526,7 +526,7 @@ def add_method(name, result):
     Pyobj_demarshal.methods[methods_by_name[name]['code']] = incoming
 
 
-#add_method('fsop_copy', 'r_fsop_copy')
+add_method('fsop_copy', 'r_cap')
 #add_method('fsop_get_dir', ...)
 add_method('fsop_get_root_dir', 'r_cap')
 #add_method('fsop_get_obj', ...)

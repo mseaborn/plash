@@ -70,7 +70,7 @@ pid_t new_fork(void)
   cap_call(fs_server, r,
 	   cap_args_d(mk_int(r, METHOD_FSOP_COPY)),
 	   &result);
-  if(expect_cap1(result, &new_fs_server) < 0) {
+  if(!pl_unpack(r, result, METHOD_R_CAP, "c", &new_fs_server)) {
     region_free(r);
     __set_errno(ENOSYS);
     return -1;

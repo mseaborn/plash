@@ -102,6 +102,8 @@ void cow_dir_free(struct filesys_obj *obj)
     assert(found);
     
     free(dir->name);
+
+    filesys_obj_free(dir->parent);
   }
 }
 

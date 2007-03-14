@@ -221,7 +221,7 @@ class Process_spec_ns(Process_spec):
             fh.close()
         line = line.rstrip("\n")
         if line.startswith("#!"):
-            line = line[2:]
+            line = line[2:].lstrip(" ")
             self.args.insert(0, self.cmd)
             # A single argument may appear after the executable name.
             # It may contain spaces.

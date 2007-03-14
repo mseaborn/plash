@@ -42,6 +42,9 @@ def main(args):
         else:
             break
 
+    if app_dir is None:
+        raise Exception("--app-dir argument missing")
+
     try:
         launch_app(app_dir, files, args)
     except:

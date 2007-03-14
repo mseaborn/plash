@@ -45,9 +45,9 @@ def make_process(app_dir):
          "--net"])
 
     root_dir = ns.make_cow_dir(my_root.get_obj(
-                                 os.path.join(app_dir, "unpacked")),
+                                 os.path.join(app_dir, "write_layer")),
                                my_root.get_obj(
-                                 os.path.join(app_dir, "write_layer")))
+                                 os.path.join(app_dir, "unpacked")))
     ns.attach_at_path(proc.root_node, "/", root_dir)
 
     return (proc, state)

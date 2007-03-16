@@ -94,6 +94,7 @@ void test_base()
 {
 }
 """
+    main_args = []
 
     def check(self):
         """Default"""
@@ -125,14 +126,14 @@ int main()
 
     def test_native(self):
         def run():
-            rc = subprocess.call(["../test-case"])
+            rc = subprocess.call(["../test-case"] + self.main_args)
             assert rc == 0
         self._test_main(run)
 
     def test_pola_run(self):
         def run():
             rc = subprocess.call(["pola-run", "-B", "-fw=.", "-f=../test-case",
-                                  "-e", "../test-case"])
+                                  "-e", "../test-case"] + self.main_args)
             assert rc == 0
         self._test_main(run)
 
@@ -146,7 +147,7 @@ int main()
         state.cwd = ns.resolve_dir(state.caller_root, proc.cwd_path)
         plash.pola_run_args.handle_args(state, proc,
                                   ["-B", "-fw=.", "-f=../test-case",
-                                   "--prog", "../test-case"])
+                                   "-e", "../test-case"] + self.main_args)
         if "PLASH_LIBRARY_DIR" in os.environ:
             plash.pola_run_args.handle_args(
                 state, proc,
@@ -469,5 +470,53 @@ void test_bind_abstract()
         self.assertNotCalled("fsop_bind")
 
 
+def get_test_suite(module):
+    cases = [x for x in module.__dict__.values()
+             if isinstance(x, type) and issubclass(x, LibcTest)]
+    entry_points = [case.entry for case in cases]
+    code = ""
+    for case in cases:
+        code += case.code
+    code += r"""
+struct test_case {
+  const char *name;
+  void (*func)(void);
+};
+"""
+    code += ("struct test_case test_cases[] = { %s, { NULL, NULL } };\n"
+             % ", ".join(["""{ "%s", %s }""" % (name, name)
+                          for name in entry_points]))
+    main_func = r"""
+int main(int argc, char **argv)
+{
+  struct test_case *test_case;
+  assert(argc == 2);
+  for(test_case = test_cases; test_case->name != NULL; test_case++) {
+    if(strcmp(test_case->name, argv[1]) == 0) {
+      test_case->func();
+      return 0;
+    }
+  }
+  return 1;
+}
+"""
+    write_file("test-cases.c", prototypes + code + shared_code + main_func)
+    rc = subprocess.call(["gcc", "-Wall", "test-cases.c", "-o", "test-case"])
+    assert rc == 0
+
+    suite = unittest.TestSuite()
+    for case in cases:
+        class Case(case):
+            def setUp(self):
+                pass
+            main_args = [case.entry]
+        suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(Case))
+    return suite
+
+def run_tests(suite):
+    runner = unittest.TextTestRunner(verbosity=1)
+    runner.run(suite)
+
+
 if __name__ == "__main__":
-    unittest.main()
+    run_tests(get_test_suite(__import__("__main__")))

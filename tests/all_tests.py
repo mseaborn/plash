@@ -37,7 +37,10 @@ def main(args):
     loader = unittest.defaultTestLoader
     suite = unittest.TestSuite()
     for module in get_test_case_modules():
-        suite.addTests(loader.loadTestsFromModule(module))
+        if hasattr(module, "get_test_suite"):
+            suite.addTests(module.get_test_suite(module))
+        else:
+            suite.addTests(loader.loadTestsFromModule(module))
     runner = unittest.TextTestRunner(verbosity=verbosity)
     result = runner.run(suite)
     return not result.wasSuccessful()

@@ -9,11 +9,12 @@ import plash.namespace as ns
 import plash.mainloop
 import plash.process
 
+import plash_pkg.config
 import plash_pkg.control
 import plash_pkg.launch
 
 
-unpack_cache = os.path.realpath("unpack-cache")
+unpack_cache = os.path.realpath(plash_pkg.config.get_unpack_cache_dir())
 
 cwd = os.getcwd()
 def restore_cwd_hack():

@@ -18,10 +18,17 @@ class FileNamespace:
                               cwd=self._cwd, nofollow=False)
 
 
+class Process(plash.process.Process_spec_ns):
+
+    def _set_up_library_path(self):
+        # Don't set LD_LIBRARY_PATH
+        pass
+
+
 def make_process(app_dir):
     my_root = FileNamespace()
     caller_root = plash.env.get_root_dir()
-    proc = plash.process.Process_spec_ns()
+    proc = Process()
     proc.env = os.environ.copy()
     proc.cwd_path = "/"
 
@@ -39,10 +46,17 @@ def make_process(app_dir):
         ["-fw", "/dev/null",
          "-f", "/dev/urandom",
          "-f", "/dev/random",
-         "-f", "/usr/lib/plash/lib",
          "-f", "/etc/localtime",
          "--x11",
          "--net"])
+
+    lib_dir_path = os.environ.get("PLASH_LIBRARY_DIR", "/usr/lib/plash/lib")
+    lib_dir = my_root.get_obj(lib_dir_path)
+    for dir_entry in lib_dir.dir_list():
+        leafname = dir_entry["name"]
+        file_obj = lib_dir.dir_traverse(leafname)
+        ns.attach_at_path(proc.root_node, os.path.join("/lib", leafname),
+                          file_obj)
 
     root_dir = ns.make_cow_dir(my_root.get_obj(
                                  os.path.join(app_dir, "write_layer")),

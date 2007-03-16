@@ -470,6 +470,41 @@ void test_bind_abstract()
         self.assertNotCalled("fsop_bind")
 
 
+class TestRename(LibcTest):
+    entry = "test_rename"
+    code = r"""
+#include <stdio.h>
+void test_rename()
+{
+  int fd = creat("orig_file", 0777);
+  t_check(fd >= 0);
+  t_check_zero(close(fd));
+  t_check_zero(rename("orig_file", "new_file"));
+}
+"""
+    def check(self):
+        # FIXME: argument ordering is confusing
+        self.assertCalled("fsop_rename", "new_file", "orig_file")
+
+
+class TestHardLink(LibcTest):
+    entry = "test_hard_link"
+    code = r"""
+#include <fcntl.h>
+#include <unistd.h>
+void test_hard_link()
+{
+  int fd = creat("orig_file", 0777);
+  t_check(fd >= 0);
+  t_check_zero(close(fd));
+  t_check_zero(link("orig_file", "new_file"));
+}
+"""
+    def check(self):
+        # FIXME: argument ordering is confusing
+        self.assertCalled("fsop_link", "new_file", "orig_file")
+
+
 def get_test_suite(module):
     cases = [x for x in module.__dict__.values()
              if isinstance(x, type) and issubclass(x, LibcTest)]

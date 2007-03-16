@@ -19,11 +19,14 @@ def kernel_execve(cmd, argv, env):
 def add_to_path(dir, path):
     """Insert string <dir> into colon-separated list <path> if it is not
     already present.  Used for LD_LIBRARY_PATH."""
+    if path == "":
+        return dir
     elts = string.split(path, ":")
-    if dir not in elts:
-        elts.insert(0, dir)
-        return string.join(elts, ":")
-    return path
+    if dir in elts:
+        # dir gets moved to front
+        elts.remove(dir)
+    elts.insert(0, dir)
+    return string.join(elts, ":")
 
 # Attributes:
 # env: dict listing environment variables

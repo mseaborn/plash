@@ -1,6 +1,8 @@
 
 import os
+import shutil
 import subprocess
+import tempfile
 import unittest
 
 
@@ -23,11 +25,13 @@ class TestCaseChdir(unittest.TestCase):
 
     def setUp(self):
         self._dir_fd = os.open(".", os.O_RDONLY)
-        os.chdir("out-test")
+        self._tmp_dir = tempfile.mkdtemp(prefix="plash-test")
+        os.chdir(self._tmp_dir)
 
     def tearDown(self):
         os.fchdir(self._dir_fd)
         os.close(self._dir_fd)
+        shutil.rmtree(self._tmp_dir)
 
 
 class PolaShellTests(TestCaseChdir):

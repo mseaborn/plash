@@ -15,6 +15,13 @@ DIR=`pwd`
 ) > lib/pola-run
 chmod +x lib/pola-run
 
+# Wrapper for Python pola-run
+(
+ echo "#!/bin/sh"
+ echo "exec $DIR/python/pola-run.py -fl \$PLASH_LIBRARY_DIR \"\$@\""
+) > lib/pola-run-py
+chmod +x lib/pola-run-py
+
 export PLASH_SANDBOX_PROG=$DIR/tests/wrapper.sh
 export PLASH_P_SANDBOX_PROG=$DIR/shobj/ld.so
 export PLASH_LDSO_PATH=$DIR/shobj/ld.so

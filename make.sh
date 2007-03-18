@@ -599,6 +599,15 @@ build_python_module () {
   fi
 }
 
+install_libs_for_testing () {
+  mkdir -p lib
+  ./src/install-libs.pl --dest-dir lib/
+
+  if [ "$USE_GTK" = yes ]; then
+    cp -l shobj/powerbox-for-gtk.so lib/
+  fi
+}
+
 
 if [ "$1" != "--include" ]; then
 
@@ -613,5 +622,6 @@ build_libpthread
 build_shell_etc
 build_gtk_powerbox
 build_python_module
+install_libs_for_testing
 
 fi

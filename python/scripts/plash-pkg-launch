@@ -59,7 +59,7 @@ def launch_app(app_dir, files, args):
 
     proc, state = plash_pkg.launch.make_process(app_dir)
 
-    pola_run_args.handle_args(state, proc, args)
+    state.handle_args(args)
 
     if proc.cmd == None:
         # Run the configured command

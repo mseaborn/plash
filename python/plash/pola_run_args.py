@@ -41,68 +41,73 @@ def handle_flags(flag_str):
     return x
 
 
-def handle_args(state, proc, args):
-    args = args[:]
-    while len(args) > 0:
-        handle_arg(state, proc, args)
-
-
 def get_arg(args, name):
     if len(args) == 0:
         raise BadArgException, "%s expected an argument" % name
     return args.pop(0)
 
-def handle_arg(state, proc, args):
+
+class ProcessSetup(object):
+    """Processes the command line arguments accepted by pola-run.
+    Grant a process a subset of the caller's authority."""
+
+    def __init__(self, proc):
+        self.proc = proc
+        self.caller_root = None
+        self.cwd = None
+        self.namespace_empty = True
+        self.powerbox = False
+        self.pet_name = None
 
     # -f<flags> <filename>
-    def bind_at_same(flags_arg, args):
+    def bind_at_same(self, flags_arg, args):
         if "=" in flags_arg:
             flags_arg, filename = flags_arg.split("=", 1)
         else:
             filename = get_arg(args, "-f")
         flags = handle_flags(flags_arg)
-        ns.resolve_populate(state.caller_root, proc.root_node,
-                            filename, cwd=state.cwd, flags=flags['build_fs'])
-        state.namespace_empty = False
+        ns.resolve_populate(self.caller_root, self.proc.root_node,
+                            filename, cwd=self.cwd, flags=flags['build_fs'])
+        self.namespace_empty = False
         if flags['a']:
-            proc.args.append(filename)
+            self.proc.args.append(filename)
 
     # -t<flags> <dest_filename> <src_filename>
-    def bind_at(flags_arg, args):
+    def bind_at(self, flags_arg, args):
         flags = handle_flags(flags_arg)
         dest_filename = get_arg(args, '-t')
         src_filename = get_arg(args, '-t')
-        obj = ns.resolve_obj(state.caller_root, src_filename,
-                             cwd=state.cwd,
+        obj = ns.resolve_obj(self.caller_root, src_filename,
+                             cwd=self.cwd,
                              nofollow=(flags['build_fs'] & ns.FS_FOLLOW_SYMLINKS) != 0)
         if not ((flags['build_fs'] & ns.FS_OBJECT_RW != 0) or
                 (flags['build_fs'] & ns.FS_SLOT_RWC != 0)):
             obj = ns.make_read_only_proxy(obj)
-        ns.attach_at_path(proc.root_node, dest_filename, obj)
-        state.namespace_empty = False
+        ns.attach_at_path(self.proc.root_node, dest_filename, obj)
+        self.namespace_empty = False
         if flags['a']:
-            proc.args.append(dest_filename)
+            self.proc.args.append(dest_filename)
 
     # -a <string>
     # Append string to argument list.
-    def add_arg(args):
+    def add_arg(self, args):
         x = get_arg(args, '-a')
-        proc.args.append(x)
+        self.proc.args.append(x)
 
     # -e [<command>] <args...>
     # This option consumes the remaining arguments in the list.
-    def command_and_args(args):
+    def command_and_args(self, args):
         # If --prog has not already been used, the first argument is taken
         # as the program executable filename.
-        if proc.cmd == None:
-            proc.cmd = get_arg(args, '-e')
+        if self.proc.cmd == None:
+            self.proc.cmd = get_arg(args, '-e')
         # Take the rest as literal arguments.
         while(len(args) > 0):
-            proc.args.append(args.pop(0))
+            self.proc.args.append(args.pop(0))
 
     # -B: Provide default environment.
-    def default_env(args):
-        handle_args(state, proc,
+    def default_env(self, args):
+        self.handle_args(
                     ["-fl", "/usr",
                      "-fl", "/bin",
                      "-fl", "/lib",
@@ -110,119 +115,127 @@ def handle_arg(state, proc, args):
                      "-fl,objrw", "/dev/tty"
                      ])
 
-    def set_executable(args):
-        if proc.cmd != None:
+    def set_executable(self, args):
+        if self.proc.cmd != None:
             raise BadArgException, "--prog argument used multiple times"
-        proc.cmd = get_arg(args, '--prog')
+        self.proc.cmd = get_arg(args, '--prog')
 
-    def set_cwd(args):
+    def set_cwd(self, args):
         path = args.pop(0)
-        state.cwd = ns.resolve_dir(state.caller_root, path, cwd=state.cwd)
+        self.cwd = ns.resolve_dir(self.caller_root, path, cwd=self.cwd)
 
-    def unset_cwd(args):
-        state.cwd = None
+    def unset_cwd(self, args):
+        self.cwd = None
 
-    def copy_cwd(args):
-        state.cwd = ns.resolve_dir(state.caller_root, os.getcwd())
+    def copy_cwd(self, args):
+        self.cwd = ns.resolve_dir(self.caller_root, os.getcwd())
 
     # --env NAME=VALUE
     # Sets an environment variable.
-    def add_environ_var(args):
+    def add_environ_var(self, args):
         x = args.pop(0)
         index = x.find('=')
         if index == -1:
             raise BadArgException, "Bad --env parameter: %s" % x
         name = x[:index]
         value = x[index+1:]
-        proc.env[name] = value
+        self.proc.env[name] = value
 
     # -fd <fd-number>
     # Add file descriptor.
-    def add_fd(args):
+    def add_fd(self, args):
         fd = int(get_arg(args, "--fd"))
-        proc.fds[fd] = plash_core.wrap_fd(os.dup(fd))
+        self.proc.fds[fd] = plash_core.wrap_fd(os.dup(fd))
 
     # --x11: Grant access to X Window System displays
-    def grant_x11_access(args):
-        ns.resolve_populate(state.caller_root, proc.root_node,
+    def grant_x11_access(self, args):
+        ns.resolve_populate(self.caller_root, self.proc.root_node,
                             "/tmp/.X11-unix/",
                             flags=ns.FS_FOLLOW_SYMLINKS | ns.FS_OBJECT_RW)
         if 'XAUTHORITY' in os.environ:
-            ns.resolve_populate(state.caller_root, proc.root_node,
+            ns.resolve_populate(self.caller_root, self.proc.root_node,
                                 os.environ['XAUTHORITY'],
                                 flags=ns.FS_FOLLOW_SYMLINKS)
 
-    def grant_network_access(args):
-        handle_args(state, proc,
+    def grant_network_access(self, args):
+        self.handle_args(
                     ["-fl", "/etc/resolv.conf",
                      "-fl", "/etc/hosts",
                      "-fl", "/etc/services"])
 
-    def enable_logging(args):
+    def enable_logging(self, args):
         fd = plash_core.wrap_fd(os.dup(2))
-        proc.logger = ns.make_log_from_fd(fd)
+        self.proc.logger = ns.make_log_from_fd(fd)
 
-    def log_to_file(args):
+    def log_to_file(self, args):
         log_filename = args.pop(0)
         fd = plash_core.wrap_fd(
             os.open(log_filename, os.O_WRONLY | os.O_CREAT | os.O_TRUNC))
-        proc.logger = ns.make_log_from_fd(fd)
+        self.proc.logger = ns.make_log_from_fd(fd)
 
-    def debug(args):
+    def debug(self, args):
         raise BadArgException, "not implemented"
 
-    def set_pet_name(args):
-        state.pet_name = get_arg(args, "--pet-name")
+    def set_pet_name(self, args):
+        self.pet_name = get_arg(args, "--pet-name")
 
-    def enable_powerbox(args):
-        state.powerbox = True
+    def enable_powerbox(self, args):
+        self.powerbox = True
 
-    def help(args):
+    def help(self, args):
         usage()
         sys.exit(0)
 
     options = {}
-    def add_option(name, fun):
-        options[name] = (fun, False)
-    def add_option_t(name, fun):
-        options[name] = (fun, True)
-    
-    add_option_t("f", bind_at_same)
-    add_option_t("t", bind_at)
-    add_option("a", add_arg)
-    add_option("e", command_and_args)
-    add_option("B", default_env)
-    add_option("h", help)
-    add_option("prog", set_executable)
-    add_option("cwd", set_cwd)
-    add_option("no-cwd", unset_cwd)
-    add_option("copy-cwd", copy_cwd)
-    add_option("env", add_environ_var)
-    add_option("fd", add_fd)
-    add_option("x11", grant_x11_access)
-    add_option("net", grant_network_access)
-    add_option("log", enable_logging)
-    add_option("log-file", log_to_file)
-    add_option("debug", debug)
-    add_option("pet-name", set_pet_name)
-    add_option("powerbox", enable_powerbox)
-    add_option("help", help)
 
-    arg = args.pop(0)
-    if arg == "" or arg[0] != "-":
-        raise BadArgException, "Unknown argument: %s" % arg
-    elif arg[1] in options:
-        fun, allow_trailing = options[arg[1]]
-        if allow_trailing:
-            fun(arg[2:], args)
+    def handle_arg(self, args):
+        arg = args.pop(0)
+        if arg == "" or arg[0] != "-":
+            raise BadArgException, "Unknown argument: %s" % arg
+        elif arg[1] in self.options:
+            method_name, allow_trailing = self.options[arg[1]]
+            if allow_trailing:
+                getattr(self, method_name)(arg[2:], args)
+            else:
+                getattr(self, method_name)(args)
+        elif arg[1] == "-" and arg[2:] in self.options:
+            method_name, allow_trailing = self.options[arg[2:]]
+            assert not allow_trailing
+            getattr(self, method_name)(args)
         else:
-            fun(args)
-    elif arg[1] == "-" and arg[2:] in options:
-        fun, allow_trailing = options[arg[2:]]
-        assert not allow_trailing
-        fun(args)
-    else:
-        raise BadArgException, "Unrecognised argument: %s" % arg
+            raise BadArgException, "Unrecognised argument: %s" % arg
+
+    def handle_args(self, args):
+        args = args[:]
+        while len(args) > 0:
+            self.handle_arg(args)
+
+
+def add_option(name, method_name):
+    ProcessSetup.options[name] = (method_name, False)
+def add_option_t(name, method_name):
+    ProcessSetup.options[name] = (method_name, True)
+
+add_option_t("f", "bind_at_same")
+add_option_t("t", "bind_at")
+add_option("a", "add_arg")
+add_option("e", "command_and_args")
+add_option("B", "default_env")
+add_option("h", "help")
+add_option("prog", "set_executable")
+add_option("cwd", "set_cwd")
+add_option("no-cwd", "unset_cwd")
+add_option("copy-cwd", "copy_cwd")
+add_option("env", "add_environ_var")
+add_option("fd", "add_fd")
+add_option("x11", "grant_x11_access")
+add_option("net", "grant_network_access")
+add_option("log", "enable_logging")
+add_option("log-file", "log_to_file")
+add_option("debug", "debug")
+add_option("pet-name", "set_pet_name")
+add_option("powerbox", "enable_powerbox")
+add_option("help", "help")
 
 
 def set_fake_uids(proc):

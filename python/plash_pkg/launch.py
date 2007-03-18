@@ -32,17 +32,11 @@ def make_process(app_dir):
     proc.env = os.environ.copy()
     proc.cwd_path = "/"
 
-    class State:
-        pass
-    state = State()
-    state.namespace_empty = True
+    state = plash.pola_run_args.ProcessSetup(proc)
     state.caller_root = caller_root
     state.cwd = ns.resolve_dir(state.caller_root, os.getcwd())
-    state.pet_name = None
-    state.powerbox = False
     
-    plash.pola_run_args.handle_args(
-        state, proc,
+    state.handle_args(
         ["-fw", "/dev/null",
          "-f", "/dev/urandom",
          "-f", "/dev/random",

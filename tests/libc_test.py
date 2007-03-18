@@ -138,20 +138,15 @@ int main()
         self._test_main(run)
 
     def _run_plash_process(self, proc):
-        class State:
-            pass
         proc.cwd_path = os.getcwd()
         proc.env = os.environ.copy()
-        state = State()
+        state = plash.pola_run_args.ProcessSetup(proc)
         state.caller_root = plash.env.get_root_dir()
         state.cwd = ns.resolve_dir(state.caller_root, proc.cwd_path)
-        plash.pola_run_args.handle_args(state, proc,
-                                  ["-B", "-fw=.", "-f=../test-case",
-                                   "-e", "../test-case"] + self.main_args)
+        state.handle_args(["-B", "-fw=.", "-f=../test-case",
+                           "-e", "../test-case"] + self.main_args)
         if "PLASH_LIBRARY_DIR" in os.environ:
-            plash.pola_run_args.handle_args(
-                state, proc,
-                ["-f", os.environ["PLASH_LIBRARY_DIR"]])
+            state.handle_args(["-f", os.environ["PLASH_LIBRARY_DIR"]])
         pid = proc.spawn()
         plash.mainloop.run_server()
         pid2, status = os.wait()

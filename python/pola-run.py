@@ -7,7 +7,6 @@ import plash.mainloop
 import plash.namespace as ns
 import plash.pola_run_args
 from plash.pola_run_args import BadArgException
-import plash.powerbox
 import plash.process
 
 
@@ -37,9 +36,7 @@ def main(args):
     proc = plash.process.Process_spec_ns()
     proc.env = os.environ.copy()
 
-    class State:
-        pass
-    state = State()
+    state = plash.pola_run_args.ProcessSetup(proc)
     state.namespace_empty = True
     state.caller_root = plash.env.get_root_dir()
     state.cwd = ns.resolve_dir(state.caller_root, os.getcwd())
@@ -47,7 +44,7 @@ def main(args):
     state.powerbox = False
 
     try:
-        plash.pola_run_args.handle_args(state, proc, args)
+        state.handle_args(args)
         if proc.cmd == None:
             raise BadArgException, "No command name given (use --prog or -e)"
     except BadArgException, msg:
@@ -63,13 +60,14 @@ def main(args):
         proc.cwd_path = ns.dirstack_get_path(state.cwd)
 
     if state.powerbox:
+        powerbox = __import__("plash.powerbox")
         # The pet name defaults to the executable name
         if state.pet_name == None:
             state.pet_name = proc.cmd
         proc.caps['powerbox_req_filename'] = \
-            plash.powerbox.Powerbox(user_namespace = state.caller_root,
-                                    app_namespace = proc.root_node,
-                                    pet_name = state.pet_name)
+            powerbox.Powerbox(user_namespace = state.caller_root,
+                              app_namespace = proc.root_node,
+                              pet_name = state.pet_name)
         plash.mainloop.use_gtk_mainloop()
 
     fwd_stdout, fwd_stderr = plash.pola_run_args.proxy_terminal(proc)

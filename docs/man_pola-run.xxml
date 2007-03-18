@@ -210,7 +210,6 @@ to the options:
 >>-fl /bin
 >>-fl /lib
 >>-fl,objrw /dev/null
->>-fl,objrw /dev/tty
 
 }
 

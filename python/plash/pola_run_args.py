@@ -112,7 +112,6 @@ class ProcessSetup(object):
                      "-fl", "/bin",
                      "-fl", "/lib",
                      "-fl,objrw", "/dev/null",
-                     "-fl,objrw", "/dev/tty"
                      ])
 
     def set_executable(self, args):

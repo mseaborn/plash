@@ -372,12 +372,13 @@ int handle_arguments(region_t r, struct state *state,
       }
 
       case 'B': {
+	int number_args = 8;
 	char *args[] = { "-fl", "/usr",
 			 "-fl", "/bin",
 			 "-fl", "/lib",
-			 "-fl,objrw", "/dev/null",
-			 "-fl,objrw", "/dev/tty" };
-	if(handle_arguments(r, state, 0, 10, args)) { return 1; }
+			 "-fl,objrw", "/dev/null" };
+	if(handle_arguments(r, state, 0, number_args, args))
+	  return 1;
 	goto arg_handled;
       }
 

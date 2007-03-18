@@ -1557,7 +1557,6 @@ int command_invocation_sec
   sh_resolve_populate(state, &p, seqf_string("/bin"), FS_READ_ONLY | FS_FOLLOW_SYMLINKS);
   sh_resolve_populate(state, &p, seqf_string("/lib"), FS_READ_ONLY | FS_FOLLOW_SYMLINKS);
   sh_resolve_populate(state, &p, seqf_string("/usr"), FS_READ_ONLY | FS_FOLLOW_SYMLINKS);
-  sh_resolve_populate(state, &p, seqf_string("/dev/tty"), FS_OBJECT_RW | FS_FOLLOW_SYMLINKS);
   sh_resolve_populate(state, &p, seqf_string("/dev/null"), FS_OBJECT_RW | FS_FOLLOW_SYMLINKS);
   if(state->enable_x11) {
     /* FIXME: check XAUTHORITY env var */

@@ -604,7 +604,7 @@ install_libs_for_testing () {
   ./src/install-libs.pl --dest-dir lib/
 
   if [ "$USE_GTK" = yes ]; then
-    cp -l shobj/powerbox-for-gtk.so lib/
+    cp -a shobj/powerbox-for-gtk.so lib/
   fi
 }
 

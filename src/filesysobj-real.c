@@ -50,6 +50,67 @@
 static FILE *server_log = 0; /* FIXME */
 
 
+static int tested_for_proc = FALSE;
+static int cached_have_proc = FALSE;
+
+static int
+have_proc(void)
+{
+  if(!tested_for_proc) {
+    struct stat st;
+    cached_have_proc = stat("/proc/self/fd", &st) >= 0;
+    tested_for_proc = TRUE;
+  }
+  return cached_have_proc;
+}
+
+static int
+make_proc_fd_path(char **path, int dir_fd, const char *filename, int *err)
+{
+  if(asprintf(path, "/proc/self/fd/%i/%s", dir_fd, filename) < 0) {
+    *err = ENOMEM;
+    return -1;
+  }
+  return 0;
+}
+
+static int
+proc_linkat(int dir_fd1, const char *filename1,
+	    int dir_fd2, const char *filename2, int *err)
+{
+  char *path1 = NULL, *path2 = NULL;
+  int rc = -1;
+  if(make_proc_fd_path(&path1, dir_fd1, filename1, err) < 0)
+    goto error;
+  if(make_proc_fd_path(&path2, dir_fd2, filename2, err) < 0)
+    goto error;
+  rc = link(path1, path2);
+  *err = errno;
+ error:
+  free(path1);
+  free(path2);
+  return rc;
+}
+
+static int
+proc_renameat(int dir_fd1, const char *filename1,
+	      int dir_fd2, const char *filename2, int *err)
+{
+  char *path1 = NULL, *path2 = NULL;
+  int rc = -1;
+  if(make_proc_fd_path(&path1, dir_fd1, filename1, err) < 0)
+    goto error;
+  if(make_proc_fd_path(&path2, dir_fd2, filename2, err) < 0)
+    goto error;
+  rc = rename(path1, path2);
+  *err = errno;
+ error:
+  free(path1);
+  free(path2);
+  return rc;
+}
+
+
 struct filesys_obj *initial_dir(const char *pathname, int *err)
 {
   struct stat stat;
@@ -409,6 +470,11 @@ int real_dir_rename(struct filesys_obj *obj, const char *leaf,
 
   if(!leafname_ok(leaf) || !leafname_ok(dest_leaf)) { *err = ENOENT; return -1; }
 
+  if(have_proc() && dest_dir->vtable == &real_dir_vtable) {
+    struct real_dir *real_dest_dir = (struct real_dir *) dest_dir;
+    return proc_renameat(dir->fd->fd, leaf,
+			 real_dest_dir->fd->fd, dest_leaf, err);
+  }
   /* Handle the same-directory case only. */
   if(same_directory(dir, dest_dir)) {
     /* Couldn't open the directory; we don't have an FD for it. */
@@ -418,10 +484,8 @@ int real_dir_rename(struct filesys_obj *obj, const char *leaf,
     if(rename(leaf, dest_leaf) < 0) { *err = errno; return -1; }
     return 0;
   }
-  else {
-    *err = EXDEV;
-    return -1;
-  }
+  *err = EXDEV;
+  return -1;
 }
 
 int real_dir_link(struct filesys_obj *obj, const char *leaf,
@@ -432,6 +496,11 @@ int real_dir_link(struct filesys_obj *obj, const char *leaf,
 
   if(!leafname_ok(leaf) || !leafname_ok(dest_leaf)) { *err = ENOENT; return -1; }
 
+  if(have_proc() && dest_dir->vtable == &real_dir_vtable) {
+    struct real_dir *real_dest_dir = (struct real_dir *) dest_dir;
+    return proc_linkat(dir->fd->fd, leaf,
+		       real_dest_dir->fd->fd, dest_leaf, err);
+  }
   /* Handle the same-directory case only. */
   if(same_directory(dir, dest_dir)) {
     /* Couldn't open the directory; we don't have an FD for it. */
@@ -441,10 +510,8 @@ int real_dir_link(struct filesys_obj *obj, const char *leaf,
     if(link(leaf, dest_leaf) < 0) { *err = errno; return -1; }
     return 0;
   }
-  else {
-    *err = EXDEV;
-    return -1;
-  }
+  *err = EXDEV;
+  return -1;
 }
 
 int real_dir_unlink(struct filesys_obj *obj, const char *leaf, int *err)

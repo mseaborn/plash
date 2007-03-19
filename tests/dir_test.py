@@ -135,6 +135,24 @@ class TestDir(unittest.TestCase):
         self.assertEquals(subdir.fsobj_type(), plash.marshal.OBJT_DIR)
         subdir.dir_mkdir(0777, "dir4")
 
+    def test_cross_dir_hard_link(self):
+        dir1 = self.get_temp_dir()
+        dir2 = self.get_temp_dir()
+        fd = dir1.dir_create_file(os.O_WRONLY, 0666, "file")
+        dir1.dir_link("file", dir2, "dest")
+        stat1 = dir1.dir_traverse("file").fsobj_stat()
+        stat2 = dir2.dir_traverse("dest").fsobj_stat()
+        self.assertEquals(stat1, stat2)
+
+    def test_cross_dir_rename(self):
+        dir1 = self.get_temp_dir()
+        dir2 = self.get_temp_dir()
+        fd = dir1.dir_create_file(os.O_WRONLY, 0666, "file")
+        stat1 = dir1.dir_traverse("file").fsobj_stat()
+        dir1.dir_rename("file", dir2, "dest")
+        stat2 = dir2.dir_traverse("dest").fsobj_stat()
+        self.assertEquals(stat1, stat2)
+
 
 if __name__ == "__main__":
     unittest.main()

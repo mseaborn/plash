@@ -421,7 +421,7 @@ int cow_dir_rename(struct filesys_obj *obj, const char *src_leaf,
       return -1;
     }
     return dir->dir_write->vtable->rename(dir->dir_write, src_leaf,
-					  dest_dir, dest_leaf, err);
+                                          dir->dir_write, dest_leaf, err);
   }
   else {
     *err = EXDEV;

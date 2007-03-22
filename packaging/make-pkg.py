@@ -4,6 +4,8 @@ import os
 import string
 import tempfile
 
+import plash_pkg.config
+
 
 class InternStream:
     """Calculate a file's hash as we write it, and finally move it
@@ -71,7 +73,7 @@ def make_list(hash_dir, files):
 
 
 def make_pb_package():
-    ref = make_list("unpack-cache/files",
+    ref = make_list(plash_pkg.config.get_file_cache_dir(),
                     [("/usr/lib/libgtk-powerbox-hook.so",
                       "../shobj/powerbox-for-gtk.so")])
     pkg = {"package": "plash-gtk-hook",

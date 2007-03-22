@@ -34,6 +34,10 @@ def get_unpack_cache_dir():
     """Directory where unpacked copies of packages are stored."""
     return ensure_dir_exists(os.path.join(get_cache_dir(), "unpack-cache"))
 
+def get_file_cache_dir():
+    """Directory where immutable files can be stored, indexed by hash."""
+    return ensure_dir_exists(os.path.join(get_cache_dir(), "file-cache"))
+
 def get_desktop_files_dir():
     """Directory where generated .desktop files are written."""
     return ensure_dir_exists(os.path.join(get_cache_dir(), "desktop-files"))

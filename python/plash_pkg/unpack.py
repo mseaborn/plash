@@ -14,8 +14,10 @@ import shutil
 import subprocess
 import sys
 
+import plash.env
 import plash_pkg.config
 import plash_pkg.control
+import plash_pkg.utils
 
 
 verbose = True
@@ -104,6 +106,12 @@ class UnpackCache(object):
             os.rename(temp_dir, out_dir)
         return out_dir
 
+    def get_control_dir(self, pkg):
+        return os.path.join(self.get_unpacked(pkg), "control")
+
+    def get_data_dir(self, pkg):
+        return os.path.join(self.get_unpacked(pkg), "data")
+
 
 class FileCache(object):
     """Cache of individual files, named by hash."""
@@ -132,8 +140,7 @@ def unpack_to_single_dir(unpack_cache, file_cache, dest_dir, pkg):
     if "filelist-ref" in pkg:
         unpack_file_list(file_cache, dest_dir, pkg["filelist-ref"])
     else:
-        src = unpack_cache.get_unpacked(pkg)
-        src_data = os.path.join(src, "data")
+        src_data = unpack_cache.get_data_dir(pkg)
         for leaf in os.listdir(src_data):
             rc = subprocess.call(["cp", "-lr", os.path.join(src_data, leaf),
                                   dest_dir])
@@ -143,18 +150,58 @@ def mkdir_p(dir_path):
     if not os.path.exists(dir_path):
         os.makedirs(dir_path)
 
-def fill_out_dpkg_status(dest_dir, packages):
-    dpkg_dir = os.path.join(dest_dir, "var", "lib", "dpkg")
-    mkdir_p(dpkg_dir)
+def get_file_list(dir):
+    got = []
+
+    def recurse(filename, dir):
+        got.append(filename)
+        if dir.fsobj_type() == plash.marshal.OBJT_DIR:
+            for entry in dir.dir_list():
+                recurse(os.path.join(filename, entry["name"]),
+                        dir.dir_traverse(entry["name"]))
+
+    recurse("/", dir)
+    return got
+
+
+def fill_out_dpkg_status(unpack_cache, dpkg_dir, packages):
     fh = open(os.path.join(dpkg_dir, "status"), "w")
     try:
         for pkg in packages:
-            fh.write("Package: %(package)s\n"
-                     "Version: %(version)s\n"
-                     "Status: install ok installed\n\n"
-                     % pkg)
+            control_file = os.path.join(unpack_cache.get_control_dir(pkg),
+                                        "control")
+            fh.write("Status: install ok installed\n%s\n"
+                     % plash_pkg.utils.read_file(control_file))
     finally:
         fh.close()
+
+def fill_out_dpkg_lists(unpack_cache, dpkg_dir, packages):
+    mkdir_p(os.path.join(dpkg_dir, "info"))
+    for pkg in packages:
+        data_dir = plash.env.get_dir_from_path(unpack_cache.get_data_dir(pkg))
+        fh = open(os.path.join(dpkg_dir, "info", "%s.list" % pkg["package"]),
+                  "w")
+        try:
+            for line in get_file_list(data_dir):
+                if line == "/":
+                    line = "/."
+                fh.write("%s\n" % line)
+        finally:
+            fh.close()
+
+def fill_out_dpkg_state(unpack_cache, dest_dir, packages):
+    # Hack to deal with cwd being changed
+    dest_dir = os.path.abspath(dest_dir)
+
+    dpkg_dir = os.path.join(dest_dir, "var", "lib", "dpkg")
+    mkdir_p(dpkg_dir)
+
+    fh = open(os.path.join(dpkg_dir, "available"), "w")
+    fh.close()
+
+    fill_out_dpkg_status(unpack_cache, dpkg_dir, packages)
+    fill_out_dpkg_lists(unpack_cache, dpkg_dir, packages)
+
 
 def main(args):
     if len(args) != 2:
@@ -169,4 +216,4 @@ def main(args):
     os.mkdir(dest_dir)
     for pkg in packages:
         unpack_to_single_dir(unpack_cache, file_cache, dest_dir, pkg)
-    fill_out_dpkg_status(dest_dir, packages)
+    fill_out_dpkg_state(unpack_cache, dest_dir, packages)

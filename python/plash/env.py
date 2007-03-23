@@ -1,7 +1,10 @@
 
 import string
 import os
+
 import plash_core
+import plash.marshal
+
 
 # Whether we are running under the Plash environment
 under_plash = 'PLASH_CAPS' in os.environ
@@ -27,6 +30,12 @@ def get_root_dir():
         return get_caps()['fs_op'].fsop_get_root_dir()
     else:
         return plash_core.initial_dir('/')
+
+def get_dir_from_path(pathname):
+    if under_plash:
+        return get_caps()["fs_op"].fsop_get_dir(pathname)
+    else:
+        return plash_core.initial_dir(pathname)
 
 def get_return_cont():
     return get_caps()['return_cont']

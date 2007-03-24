@@ -104,12 +104,10 @@ def write_file_seq(filename, seq):
         fh.close()
 
 def write_result_package_list(filename, chooser):
-    keys=("package", "version",
-          "size", "md5sum", "sha1", "filename", "base-url", "filelist-ref")
     fh = open(filename, "w")
     try:
         for pkg in chooser.get_output():
-            plash_pkg.control.write_block(fh, pkg, keys)
+            plash_pkg.control.write_block(fh, pkg)
     finally:
         fh.close()
 

@@ -16,30 +16,22 @@ import plash_pkg.control
 import plash_pkg.utils
 
 
+def deb_filename(pkg):
+    return "%(package)s_%(version)s_%(architecture)s_%(sha1)s.deb" % pkg
+
+
 class PackageToDownload(object):
 
     def __init__(self, pkg):
         self.pkg = pkg
         self.done = False
         self.url = None
-        
-        match = re.search("/([^/]+)$", pkg["filename"])
-        assert match is not None
-        leafname = match.group(1)
+
         self.local_file = os.path.join(plash_pkg.config.get_deb_cache_dir(),
-                                       leafname)
+                                       deb_filename(pkg))
         if os.path.exists(self.local_file):
             self.done = True
-        
-        if not self.done:
-            apt_cache_file = os.path.join("/var/cache/apt/archives",
-                                          leafname)
-            if os.path.exists(apt_cache_file):
-                rc = subprocess.call(["cp", apt_cache_file, self.local_file])
-                assert rc == 0
-                self.done = True
-
-        if not self.done:
+        else:
             if "base-url" not in pkg:
                 raise Exception("Can't make URL for package: "
                                 "Base-URL field missing")
@@ -87,7 +79,7 @@ def main(args):
                       pkg.pkg["package"],
                       pkg.pkg["version"]))
     print ("%i of %i packages to get: %.1fMb of %.1fMb"
-           % (to_get, len(package_list),
+           % (to_get, len(packages),
               remaining_size / (1024 * 1024),
               total_size / (1024 * 1024)))
     if to_get > 0:

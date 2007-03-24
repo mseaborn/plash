@@ -8,7 +8,6 @@ directory.
 """
 
 import os
-import re
 import sha
 import shutil
 import subprocess
@@ -17,6 +16,7 @@ import sys
 import plash.env
 import plash_pkg.config
 import plash_pkg.control
+import plash_pkg.fetch
 import plash_pkg.utils
 
 
@@ -51,16 +51,10 @@ class DebCache(object):
         self._cache_dir = plash_pkg.config.get_deb_cache_dir()
 
     def get_deb(self, pkg):
-        match = re.search("/([^/]+)$", pkg["filename"])
-        assert match is not None
-        leafname = match.group(1)
-        deb_file = os.path.join(self._cache_dir, leafname)
+        deb_file = os.path.join(self._cache_dir,
+                                plash_pkg.fetch.deb_filename(pkg))
         if not os.path.exists(deb_file):
             raise Exception("File not present: %s" % deb_file)
-
-        if "sha1" not in pkg:
-            raise Exception("Package %(package)s %(version)s lacks a SHA1 field"
-                            % pkg)
 
         # Check hash.  The contents of the file will be in the cache for
         # when we unpack the .deb afterwards.

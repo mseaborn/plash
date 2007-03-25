@@ -18,7 +18,7 @@ chmod +x lib/pola-run
 # Wrapper for Python pola-run
 (
  echo "#!/bin/sh"
- echo "exec $DIR/python/pola-run.py -fl \$PLASH_LIBRARY_DIR \"\$@\""
+ echo "exec $DIR/python/scripts/pola-run -fl \$PLASH_LIBRARY_DIR \"\$@\""
 ) > lib/pola-run-py
 chmod +x lib/pola-run-py
 

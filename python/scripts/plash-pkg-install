@@ -21,9 +21,7 @@
 
 """
 Usage:
-plash-pkg-install <package_dir> --init <package-spec-file>
-plash-pkg-install <package_dir> --get
-plash-pkg-install <package_dir> --inst
+plash-pkg-install <app_dir> [-c <package-spec-file>]
 """
 
 import os
@@ -126,34 +124,36 @@ class AppDir(object):
                        ["%s=%s\n" % (key, value)
                         for key, value in fields])
 
-
-def main(args):
-    if len(args) < 2:
-        print __doc__
-        return 1
-    output_dir = args.pop(0)
-    action = args.pop(0)
-    
-    if action == "--init" and len(args) == 1:
-        config_file = args[0]
-        if not os.path.exists(output_dir):
-            os.mkdir(output_dir)
-        plash_pkg.utils.write_file(os.path.join(output_dir, "config"),
-                             plash_pkg.utils.read_file(config_file))
-    elif action == "--get" and len(args) == 0:
-        app = AppDir(output_dir)
-        app.choose_and_unpack()
-        app.init_write_layer()
-    elif action == "--inst" and len(args) == 0:
-        app = AppDir(output_dir)
+    def write_desktop_file(self):
         plash_pkg.utils.write_file(
             os.path.join(plash_pkg.config.get_desktop_files_dir(),
                          "plash-%s.desktop"
-                         % app.config["pet-id"]),
-            app.desktop_file())
+                         % self.config["pet-id"]),
+            self.desktop_file())
+
+
+def main(args):
+    if len(args) < 1:
+        print __doc__
+        return 1
+    app_dir = args.pop(0)
+
+    if len(args) == 2 and args[0] == "-c":
+        config_file = args[1]
+        if not os.path.exists(app_dir):
+            os.mkdir(app_dir)
+        plash_pkg.utils.write_file(os.path.join(app_dir, "config"),
+                                   plash_pkg.utils.read_file(config_file))
+    elif len(args) == 0:
+        pass
     else:
         print __doc__
         return 1
+    
+    app = AppDir(app_dir)
+    app.choose_and_unpack()
+    app.init_write_layer()
+    app.write_desktop_file()
 
 
 if __name__ == "__main__":

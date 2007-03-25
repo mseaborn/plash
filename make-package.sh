@@ -40,27 +40,34 @@ rm -f debian/plash.prerm.debhelper
 install -d $DEST/DEBIAN
 
 
-# Install docs
+function install_html_docs
+{
+  # Behave nicely if the documentation has not been built.
+  for FILE in web-site/out/*; do
+    if [ -e $FILE ]; then
+      install -d $DEST/usr/share/doc/$PACKAGE/html
+      cp -prv $FILE $DEST/usr/share/doc/$PACKAGE/html/
+    fi
+  done
+}
 
-install -d $DEST/usr/share/doc/$PACKAGE/html
-install -d $DEST/usr/share/man/man1
+function install_man_pages
+{
+  for FILE in docs/man/*; do
+    if [ -e $FILE ]; then
+      install -d $DEST/usr/share/man/man1
+      cp -pv $FILE $DEST/usr/share/man/man1/
+    fi
+  done
+  #( cd $DEST/usr/share/man/man1 &&
+  #  ln -s plash-opts.1 plash-opts-gtk.1 ) || false
+}
 
-# Behave nicely if the documentation has not been built.
-for FILE in web-site/out/*; do if [ -e $FILE ]; then
-  cp -prv $FILE $DEST/usr/share/doc/$PACKAGE/html/
-fi; done
+function install_python_modules
+{
+  # Delete build dir in case it contains old *.py modules
+  rm -rf python/build
 
-# Install man pages
-for FILE in docs/man/*; do if [ -e $FILE ]; then
-  cp -pv $FILE $DEST/usr/share/man/man1/
-fi; done
-( cd $DEST/usr/share/man/man1 &&
-  ln -s plash-opts.1 plash-opts-gtk.1 ) || false
-
-
-./install.sh debian/plash/
-
-if [ "$USE_PYTHON" = yes ]; then
   DEST_FULL=`pwd`/$DEST
   (cd python;
    for PYVERSION in `pyversions -vs`; do
@@ -70,18 +77,30 @@ if [ "$USE_PYTHON" = yes ]; then
      python$PYVERSION setup.py install --no-compile --root=$DEST_FULL
    done
   )
+}
 
-  SCRIPTS="plash-pkg-update-avail
-           plash-pkg-choose
-           plash-pkg-fetch
-           plash-pkg-unpack
-           plash-pkg-install
-           plash-pkg-launch
-           plash-pkg-deb-inst"
-  for SCRIPT in $SCRIPTS; do
-    cp -av python/scripts/$SCRIPT $DEST/usr/bin/
-  done
-  
+function install_python_script
+{
+  SCRIPT=$1
+  cp -av python/scripts/$SCRIPT $DEST/usr/bin/$SCRIPT
+}
+
+
+install_html_docs
+install_man_pages
+
+./install.sh debian/plash/
+
+if [ "$USE_PYTHON" = yes ]; then
+  install_python_modules
+  install_python_script pola-run
+  install_python_script plash-pkg-update-avail
+  install_python_script plash-pkg-choose
+  install_python_script plash-pkg-fetch
+  install_python_script plash-pkg-unpack
+  install_python_script plash-pkg-install
+  install_python_script plash-pkg-launch
+  install_python_script plash-pkg-deb-inst
   dh_pysupport
 fi
 

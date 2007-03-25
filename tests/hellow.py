@@ -1,9 +1,10 @@
 
 import os
+
 import plash.env
 import plash.mainloop
 import plash.namespace as ns
-from plash.process import Process_spec
+import plash.process
 
 
 caller_root = plash.env.get_root_dir()
@@ -20,7 +21,7 @@ if 'PLASH_LIBRARY_DIR' in os.environ:
 root = ns.dir_of_node(root_node)
 fs_op = ns.make_fs_op(root)
 
-p = Process_spec()
+p = plash.process.ProcessSpec()
 p.env = os.environ.copy()
 p.caps = { 'fs_op': fs_op,
            'conn_maker': ns.conn_maker }

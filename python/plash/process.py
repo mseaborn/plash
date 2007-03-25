@@ -54,7 +54,7 @@ def add_to_path(dir, path):
 # fds: dict mapping FD numbers to FDs
 # caps: dict mapping cap names (e.g. "fs_op") to objects
 # conn_maker: object to use for creating new connection
-class Process_spec(object):
+class ProcessSpec(object):
     
     def __init__(self):
         self.env = {}
@@ -200,10 +200,10 @@ class NotFoundInPathError(Exception):
     pass
 
 
-class Process_spec_ns(Process_spec):
+class ProcessSpecWithNamespace(ProcessSpec):
 
     def __init__(self):
-        Process_spec.__init__(self)
+        super(ProcessSpecWithNamespace, self).__init__()
         self.caps["conn_maker"] = self.conn_maker
         self.root_node = ns.make_node()
         self.root_dir = None
@@ -269,4 +269,4 @@ class Process_spec_ns(Process_spec):
                 fs_op.fsop_chdir(self.cwd_path)
             except plash.marshal.UnmarshalError:
                 pass
-        Process_spec.plash_setup(self)
+        super(ProcessSpecWithNamespace, self).plash_setup()

@@ -36,7 +36,7 @@ class FileNamespace:
                               cwd=self._cwd, nofollow=False)
 
 
-class Process(plash.process.Process_spec_ns):
+class Process(plash.process.ProcessSpecWithNamespace):
 
     def _set_up_library_path(self):
         # Don't set LD_LIBRARY_PATH

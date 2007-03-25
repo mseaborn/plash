@@ -77,7 +77,7 @@ class LogProxy(plash.marshal.Pyobj_marshal):
         self._calls.append(plash.marshal.unpack(args))
         return self._obj.cap_call(args)
 
-class ProcessWithLogging(plash.process.Process_spec_ns):
+class ProcessWithLogging(plash.process.ProcessSpecWithNamespace):
     """Process constructor that logs the calls the process makes."""
 
     def __init__(self, call_list):

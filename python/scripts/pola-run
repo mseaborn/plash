@@ -52,7 +52,7 @@ Usage: pola-run [options]
 """
 
 def main(args):
-    proc = plash.process.Process_spec_ns()
+    proc = plash.process.ProcessSpecWithNamespace()
     proc.env = os.environ.copy()
 
     state = plash.pola_run_args.ProcessSetup(proc)

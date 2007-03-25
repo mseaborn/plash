@@ -1,10 +1,11 @@
 
 import os
 import sys
+
 import plash.env
 import plash.mainloop
 import plash.namespace as ns
-from plash.process import Process_spec
+import plash.process
 
 
 args = sys.argv[1:]
@@ -34,7 +35,7 @@ ns.attach_at_path(root_node, "/dev",
 
 fs_op = ns.make_fs_op(ns.dir_of_node(root_node))
 fs_op.fsop_chdir(caller_cwd_path)
-p = Process_spec()
+p = plash.process.ProcessSpec()
 p.setcmd(*args[2:])
 p.env = os.environ.copy()
 p.env['PLASH_FAKE_UID'] = str(os.getuid())

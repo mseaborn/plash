@@ -1,0 +1,5 @@
+Depends: gajim
+Pet-name: Gajim Jabber client (sandboxed)
+Pet-id: gajim
+Icon: gajim.png
+Exec: gajim

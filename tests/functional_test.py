@@ -200,6 +200,15 @@ echo "this does not get used"
         self.assertEquals(proc.communicate()[0],
                           "args with spaces   ./script\n")
 
+    def test_tmp_arg(self):
+        proc = subprocess.Popen([pola_run, "--cwd", "/", "-B", "--tmp",
+                                 "-e", "sh", "-c", "> /tmp/test-tmp-file"])
+        self.assertEquals(proc.wait(), 0)
+        proc = subprocess.Popen([pola_run, "--cwd", "/", "-B",
+                                 "--tmpdir", "/foo",
+                                 "-e", "sh", "-c", "> /foo/test-tmp-file"])
+        self.assertEquals(proc.wait(), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

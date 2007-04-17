@@ -17,8 +17,15 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 # USA.
 
+import os
+import shutil
+import tempfile
 import unittest
+
+import plash.env
+import plash.namespace
 import plash.pola_run_args as pola_run_args
+import plash.process
 
 
 class TestFlags(unittest.TestCase):
@@ -28,6 +35,42 @@ class TestFlags(unittest.TestCase):
                          [])
         self.assertEqual(pola_run_args.split_flags("al,objrw,foo"),
                          ["a", "l", "objrw", "foo"])
+
+
+class TestEnvironment(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp_dirs = []
+        self.start_cwd = os.getcwd()
+
+    def tearDown(self):
+        for tmp_dir in self.tmp_dirs:
+            shutil.rmtree(tmp_dir)
+        # Restoring cwd only needed while FsObjReal corrupts cwd
+        os.chdir(self.start_cwd)
+
+    def get_temp_dir(self):
+        dir_path = tempfile.mkdtemp(prefix="plash-test")
+        self.tmp_dirs.append(dir_path)
+        return plash.env.get_dir_from_path(dir_path)
+
+    def test_environment_from_tmp(self):
+        proc = plash.process.ProcessSpecWithNamespace()
+        setup = pola_run_args.ProcessSetup(proc)
+        setup._make_temp_dir = self.get_temp_dir
+        setup.handle_args(["--tmp"])
+        root_dir = plash.namespace.dir_of_node(proc.root_node)
+        tmpdir = plash.namespace.resolve_obj(root_dir, "/tmp")
+        tmpdir.dir_create_file(os.O_WRONLY, 0666, "temp-file")
+
+    def test_environment_from_tmpdir(self):
+        proc = plash.process.ProcessSpecWithNamespace()
+        setup = pola_run_args.ProcessSetup(proc)
+        setup._make_temp_dir = self.get_temp_dir
+        setup.handle_args(["--tmpdir", "/foo"])
+        root_dir = plash.namespace.dir_of_node(proc.root_node)
+        tmpdir = plash.namespace.resolve_obj(root_dir, "/foo")
+        tmpdir.dir_create_file(os.O_WRONLY, 0666, "temp-file")
 
 
 if __name__ == '__main__':

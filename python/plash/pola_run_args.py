@@ -19,6 +19,7 @@
 
 import string
 import sys
+import tempfile
 import os
 
 import plash_core
@@ -180,6 +181,18 @@ class ProcessSetup(object):
                      "-fl", "/etc/hosts",
                      "-fl", "/etc/services"])
 
+    def _make_temp_dir(self):
+        dir_path = tempfile.mkdtemp()
+        return plash.env.get_dir_from_path(dir_path)
+
+    def grant_tmp(self, args):
+        ns.attach_at_path(self.proc.root_node, "/tmp", self._make_temp_dir())
+
+    def grant_tmp_dir(self, args):
+        dest_path = get_arg(args, "--tmpdir")
+        ns.attach_at_path(self.proc.root_node, dest_path,
+                          self._make_temp_dir())
+
     def enable_logging(self, args):
         fd = plash_core.wrap_fd(os.dup(2))
         self.proc.logger = ns.make_log_from_fd(fd)
@@ -247,6 +260,8 @@ add_option("env", "add_environ_var")
 add_option("fd", "add_fd")
 add_option("x11", "grant_x11_access")
 add_option("net", "grant_network_access")
+add_option("tmp", "grant_tmp")
+add_option("tmpdir", "grant_tmp_dir")
 add_option("log", "enable_logging")
 add_option("log-file", "log_to_file")
 add_option("debug", "debug")

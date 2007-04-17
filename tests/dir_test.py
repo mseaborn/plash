@@ -22,7 +22,7 @@ import shutil
 import tempfile
 import unittest
 
-import plash_core
+import plash.env
 import plash.marshal
 import plash.namespace
 
@@ -35,7 +35,7 @@ class TestDirMixin(object):
     def get_real_temp_dir(self):
         dir_path = tempfile.mkdtemp(prefix="plash-test")
         self._tmp_dirs.append(dir_path)
-        return plash_core.initial_dir(dir_path)
+        return plash.env.get_dir_from_path(dir_path)
 
     def tearDown(self):
         for tmp_dir in self._tmp_dirs:

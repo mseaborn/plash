@@ -32,15 +32,23 @@ def use_glib_mainloop():
     _use_glib = True
 
 
-_forwarders = 0
+_reasons_count = 0
 
-def inc_forwarders_count():
-    global _forwarders
-    _forwarders += 1
+class ReasonToRun(object):
 
-def dec_forwarders_count():
-    global _forwarders
-    _forwarders -= 1
+    def __init__(self):
+        global _reasons_count
+        _reasons_count += 1
+        self._alive = True
+
+    def __del__(self):
+        self.dispose()
+
+    def dispose(self):
+        if self._alive:
+            self._alive = False
+            global _reasons_count
+            _reasons_count -= 1
 
 
 def run_server():
@@ -49,7 +57,7 @@ def run_server():
     """
     if _use_glib:
         import gobject
-        while plash_core.cap_server_exporting():
+        while plash_core.cap_server_exporting() or _reasons_count > 0:
             gobject.main_context_default().iteration()
     else:
         plash_core.run_server()

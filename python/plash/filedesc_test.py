@@ -30,6 +30,7 @@ import gobject
 
 import plash.filedesc
 import plash.mainloop
+import plash_core
 
 
 def forked(func):
@@ -83,7 +84,7 @@ class ProcSet(object):
     def wait(self):
         while self._count > 0:
             pid, status = os.wait()
-            assert pid in self._pids
+            assert pid in self._pids, (pid, self._pids)
             assert self._pids[pid] is None
             self._count -= 1
             self._pids[pid] = status
@@ -103,9 +104,8 @@ def echo(text):
     return proc, pipe_read
 
 def mainloop():
-    while plash.mainloop._forwarders > 0:
-        sys.stdout.flush()
-        gobject.main_context_default().iteration()
+    assert not plash_core.cap_server_exporting()
+    plash.mainloop.run_server()
 
 def forward(fd):
     pipe_read, pipe_write = os.pipe()
@@ -118,6 +118,75 @@ def forward(fd):
     os.close(pipe_write)
     os.close(fd)
     return proc, pipe_read
+
+
+class PipeTests(unittest.TestCase):
+
+    def test_get_epipe_when_no_reader(self):
+        """Check that we get EPIPE when writing to a pipe with no reader."""
+        pipe_read, pipe_write = os.pipe()
+        os.close(pipe_read)
+        try:
+            try:
+                os.write(pipe_write, "text")
+            except OSError, ex:
+                self.assertEquals(ex.errno, errno.EPIPE)
+            else:
+                self.fail("Didn't get EPIPE")
+        finally:
+            os.close(pipe_write)
+
+    def test_get_eof_when_no_writer(self):
+        """
+        Check that we get end-of-file when reading from a pipe with no
+        writer.
+        """
+        pipe_read, pipe_write = os.pipe()
+        os.close(pipe_write)
+        try:
+            self.assertEquals(os.read(pipe_read, 100), "")
+        finally:
+            os.close(pipe_read)
+
+
+class GlibPollTests(unittest.TestCase):
+
+    def test_get_io_err_when_no_reader(self):
+        """Check that we get IO_ERR when polling a pipe FD with no reader."""
+        pipe_read, pipe_write = os.pipe()
+        os.close(pipe_read)
+        try:
+            calls = []
+            def callback(*args):
+                calls.append(args)
+            gobject.io_add_watch(pipe_write,
+                                 gobject.IO_OUT |
+                                 gobject.IO_ERR | gobject.IO_HUP,
+                                 callback)
+            gobject.main_context_default().iteration()
+            self.assertEquals(calls, [(pipe_write,
+                                       gobject.IO_OUT | gobject.IO_ERR)])
+        finally:
+            os.close(pipe_write)
+
+    def test_get_io_hup_when_no_writer(self):
+        """Check that we get IO_HUP when polling a pipe FD with no writer."""
+        pipe_read, pipe_write = os.pipe()
+        os.write(pipe_write, "foo")
+        os.close(pipe_write)
+        try:
+            calls = []
+            def callback(*args):
+                calls.append(args)
+            gobject.io_add_watch(pipe_read,
+                                 gobject.IO_IN |
+                                 gobject.IO_ERR | gobject.IO_HUP,
+                                 callback)
+            gobject.main_context_default().iteration()
+            self.assertEquals(calls, [(pipe_read,
+                                       gobject.IO_IN | gobject.IO_HUP)])
+        finally:
+            os.close(pipe_read)
 
 
 class ForwardTest(unittest.TestCase):
@@ -138,28 +207,30 @@ class ForwardTest(unittest.TestCase):
         self.assertEquals(got, "hello world")
         pids.wait()
 
-    def test_epipe(self):
-        """Check that we get EPIPE."""
-        pipe_read, pipe_write = os.pipe()
-        os.close(pipe_read)
-        try:
-            os.write(pipe_write, "text")
-        except OSError, ex:
-            self.assertEquals(ex.errno, errno.EPIPE)
-        else:
-            self.fail("Didn't get EPIPE")
-
     def test_broken_pipe(self):
         """Check that forwarding to a broken pipe does not kill the
         server or cause a traceback to be printed."""
         pids = ProcSet()
-        proc1, tmp_fd = echo("hello world")
-        proc2, fd = forward(tmp_fd)
+        pipe_read, pipe_write = os.pipe()
+        os.write(pipe_write, "hello world")
+        os.close(pipe_write)
+        proc, fd = forward(pipe_read)
         os.close(fd)
-        for p in [proc1, proc2]:
-            pids.add(p.pid)
-            p.start()
+        pids.add(proc.pid)
+        proc.start()
         pids.wait()
+
+    def test_broken_pipe2(self):
+        pids = ProcSet()
+        # Input pipe stays open: not closed until test is finished,
+        # and there is nothing to read from it.
+        pipe_read, pipe_write = os.pipe()
+        proc, fd = forward(pipe_read)
+        os.close(fd)
+        pids.add(proc.pid)
+        proc.start()
+        pids.wait()
+        os.close(pipe_write)
 
     # TODO: check that the forwarder does not block when the pipe's
     # reader is not reading

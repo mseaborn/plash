@@ -209,6 +209,29 @@ echo "this does not get used"
                                  "-e", "sh", "-c", "> /foo/test-tmp-file"])
         self.assertEquals(proc.wait(), 0)
 
+    def test_return_code_exited(self):
+        proc = subprocess.Popen([pola_run, "--cwd", "/", "-B", "-e",
+                                 "sh", "-c", "exit 123"])
+        self.assertEquals(proc.wait(), 123)
+
+    def test_return_code_signalled_sigsegv(self):
+        proc = subprocess.Popen([pola_run, "--cwd", "/", "-B", "-e",
+                                 "sh", "-c", "kill -SEGV $$"])
+        self.assertEquals(proc.wait(), 101)
+
+    def test_return_code_signalled_sigint(self):
+        proc = subprocess.Popen([pola_run, "--cwd", "/", "-B", "-e",
+                                 "sh", "-c", "kill -INT $$"])
+        self.assertEquals(proc.wait(), 101)
+
+    def test_return_code_stopped(self):
+        # Check that pola-run is not catching stop signals from child.
+        proc = subprocess.Popen([
+            pola_run, "--cwd", "/", "-B", "-e", "sh", "-c",
+            "PID=$$; (sleep 0.1s; kill -CONT $PID) & kill -STOP $PID; "
+            "exit 124"])
+        self.assertEquals(proc.wait(), 124)
+
 
 if __name__ == "__main__":
     unittest.main()

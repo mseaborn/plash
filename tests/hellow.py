@@ -4,6 +4,7 @@ import os
 import plash.env
 import plash.mainloop
 import plash.namespace as ns
+import plash.pola_run_args
 import plash.process
 
 
@@ -26,14 +27,10 @@ p.env = os.environ.copy()
 p.caps = { 'fs_op': fs_op,
            'conn_maker': ns.conn_maker }
 p.setcmd('/bin/echo', 'Hello world!')
-pid = p.spawn()
-plash.mainloop.run_server()
 
-(pid2, status) = os.waitpid(pid, 0)
-assert pid == pid2
-if os.WIFEXITED(status):
-    print "exited with status:", os.WEXITSTATUS(status)
-elif os.WIFSIGNALED(status):
-    print "exited with signal:", os.WTERMSIG(status)
-else:
-    print "unknown exit status:", status
+setup = plash.pola_run_args.ProcessSetup(p)
+forwarders = setup.grant_proxy_terminal_access()
+
+pid = p.spawn()
+plash.pola_run_args.flush_and_return_status_on_child_exit(pid, [])
+plash.mainloop.run_server()

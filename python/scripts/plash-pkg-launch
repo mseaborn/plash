@@ -19,7 +19,12 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 # USA.
 
-# Usage:  launch-pet-app --app-dir <app-dir> [--open-files [<file> ...]]
+"""
+plash-pkg-launch --app-dir <app-dir> [<options>]
+Options:
+  --open-file <file>
+  --open-files [<file> ...]
+"""
 
 
 import os
@@ -62,7 +67,8 @@ def main(args):
             break
 
     if app_dir is None:
-        raise Exception("--app-dir argument missing")
+        print __doc__
+        return 1
 
     try:
         launch_app(app_dir, files, args)
@@ -100,10 +106,11 @@ def launch_app(app_dir, files, args):
                                 pet_name = config["pet-name"])
     plash.mainloop.use_gtk_mainloop()
 
+    forwarders = state.grant_proxy_terminal_access()
     pid = proc.spawn()
+    plash.pola_run_args.flush_and_return_status_on_child_exit(pid, forwarders)
     plash.mainloop.run_server()
-    # No need to wait for subprocess to exit.
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    sys.exit(main(sys.argv[1:]))

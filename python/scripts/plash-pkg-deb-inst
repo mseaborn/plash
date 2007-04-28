@@ -25,6 +25,7 @@ Usage: plash-pkg-deb-inst <app-dir>
 Run preinst and postinst scripts for Debian packages.
 """
 
+import gobject
 import os
 import sys
 
@@ -46,7 +47,7 @@ def restore_cwd_hack():
 def init_package(unpack_cache, app_dir, pkg, control_script, args):
     my_root = plash_pkg.launch.FileNamespace()
     restore_cwd_hack()
-    proc, state = plash_pkg.launch.make_process(app_dir)
+    proc, setup = plash_pkg.launch.make_process(app_dir)
 
     unpack_dir = unpack_cache.get_unpacked(pkg)
     script_path = os.path.join(unpack_dir, "control", control_script)
@@ -57,7 +58,16 @@ def init_package(unpack_cache, app_dir, pkg, control_script, args):
                           my_root.get_obj(script_path))
         proc.cmd = "/script"
         proc.args = args
+        fd_forwarders = setup.grant_proxy_terminal_access()
         pid = proc.spawn()
+        reason_to_run = plash.mainloop.ReasonToRun()
+        def child_exit_callback(pid_unused, status):
+            reason_to_run.dispose()
+            for forwarder in fd_forwarders:
+                forwarder.flush()
+        gobject.child_watch_add(pid, child_exit_callback)
+        # TODO: give error if process's exit status is non-zero
+        # TODO: ensure we stop running server when child process exits
         plash.mainloop.run_server()
     else:
         print "  no %s" % control_script

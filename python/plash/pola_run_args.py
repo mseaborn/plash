@@ -17,6 +17,7 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 # USA.
 
+import gobject
 import string
 import sys
 import tempfile
@@ -159,6 +160,15 @@ class ProcessSetup(object):
         value = x[index+1:]
         self.proc.env[name] = value
 
+    def grant_proxy_terminal_access(self):
+        self.proc.fds[STDIN_FILENO], forwarder1 = \
+            plash.filedesc.proxy_input_fd(os.dup(STDIN_FILENO))
+        self.proc.fds[STDOUT_FILENO], forwarder2 = \
+            plash.filedesc.proxy_output_fd(os.dup(STDOUT_FILENO))
+        self.proc.fds[STDERR_FILENO], forwarder3 = \
+            plash.filedesc.proxy_output_fd(os.dup(STDERR_FILENO))
+        return (forwarder2, forwarder3)
+
     # -fd <fd-number>
     # Add file descriptor.
     def add_fd(self, args):
@@ -276,11 +286,25 @@ def set_fake_uids(proc):
     proc.env['PLASH_FAKE_EUID'] = str(os.getuid())
     proc.env['PLASH_FAKE_EGID'] = str(os.getgid())
 
-def proxy_terminal(proc):
-    proc.fds[STDIN_FILENO], forwarder1 = \
-        plash.filedesc.proxy_input_fd(os.dup(STDIN_FILENO))
-    proc.fds[STDOUT_FILENO], forwarder2 = \
-        plash.filedesc.proxy_output_fd(os.dup(STDOUT_FILENO))
-    proc.fds[STDERR_FILENO], forwarder3 = \
-        plash.filedesc.proxy_output_fd(os.dup(STDERR_FILENO))
-    return (forwarder2, forwarder3)
+
+def return_status_and_fork_to_background(exit_status):
+    pid = os.fork()
+    if pid != 0:
+        os._exit(exit_status)
+
+
+def flush_and_return_status_on_child_exit(pid, fd_forwarders):
+    reason_to_run = plash.mainloop.ReasonToRun()
+
+    def callback(pid_unused, status):
+        reason_to_run.dispose()
+        for forwarder in fd_forwarders:
+            forwarder.flush()
+        if os.WIFEXITED(status):
+            return_status_and_fork_to_background(os.WEXITSTATUS(status))
+        elif os.WIFSIGNALED(status):
+            return_status_and_fork_to_background(101)
+        else:
+            return_status_and_fork_to_background(102)
+
+    gobject.child_watch_add(pid, callback)

@@ -296,7 +296,7 @@ test('utimes',
 test('python_hellow',
      sub {
        my $data = cmd_capture('python', "$start_dir/hellow.py");
-       assert_equal($data, "Hello world!\nexited with status: 0\n", 'output');
+       assert_equal($data, "Hello world!\n", 'output');
      });
 
 test('python_tests',

@@ -19,7 +19,6 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 # USA.
 
-import gobject
 import sys
 import os
 
@@ -53,10 +52,6 @@ Usage: pola-run [options]
   [-e <command> <arg>...]
 """
 
-def return_status_and_fork_to_background(exit_status):
-    pid = os.fork()
-    if pid != 0:
-        os._exit(exit_status)
 
 def main(args):
     proc = plash.process.ProcessSpecWithNamespace()
@@ -75,7 +70,7 @@ def main(args):
             raise BadArgException, "No command name given (use --prog or -e)"
     except BadArgException, msg:
         print "pola-run: error:", msg
-        sys.exit(1)
+        return 1
 
     if state.namespace_empty:
         print "pola-run: warning: namespace empty, try -B for default namespace"
@@ -96,23 +91,11 @@ def main(args):
                               pet_name = state.pet_name)
         plash.mainloop.use_gtk_mainloop()
 
-    fwd_stdout, fwd_stderr = plash.pola_run_args.proxy_terminal(proc)
+    forwarders = state.grant_proxy_terminal_access()
     pid = proc.spawn()
-    
-    reason_to_run = plash.mainloop.ReasonToRun()
-    def callback(pid_unused, status):
-        reason_to_run.dispose()
-        fwd_stdout.flush()
-        fwd_stderr.flush()
-        if os.WIFEXITED(status):
-            return_status_and_fork_to_background(os.WEXITSTATUS(status))
-        elif os.WIFSIGNALED(status):
-            return_status_and_fork_to_background(101)
-        else:
-            return_status_and_fork_to_background(102)
-    gobject.child_watch_add(pid, callback)
+    plash.pola_run_args.flush_and_return_status_on_child_exit(pid, forwarders)
     plash.mainloop.run_server()
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    sys.exit(main(sys.argv[1:]))

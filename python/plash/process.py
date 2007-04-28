@@ -64,6 +64,7 @@ class ProcessSpec(object):
         self.caps = {}
         self.conn_maker = ns.conn_maker
         self.fds = {}
+        # Start allocating FDs after stdin/stdout/stderr
         self.next_fd = 3
 
     def setcmd(self, cmd, *args):
@@ -133,7 +134,7 @@ class ProcessSpec(object):
 
     def _set_up_fds(self):
         """Called after fork() in the child process."""
-        max_fd = 3
+        max_fd = 0
         for dest_number, fd in self.fds.iteritems():
             max_fd = max(max_fd, dest_number + 1)
         # Duplicate the FDs to temporary numbers that won't conflict
@@ -144,7 +145,7 @@ class ProcessSpec(object):
             temp_fd = fcntl.fcntl(fd.fileno(), fcntl.F_DUPFD, max_fd)
             keep.add(temp_fd)
             mappings.append((dest_number, temp_fd))
-        for fd in range(3, 1024):
+        for fd in range(0, 1024):
             if fd not in keep:
                 try:
                     os.close(fd)

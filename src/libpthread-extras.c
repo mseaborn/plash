@@ -18,6 +18,14 @@
    USA.  */
 
 
+int __libc_open_nocancel(const char *filename, int flags, int mode);
+
+int __open_nocancel(const char *filename, int flags, int mode)
+{
+  return __libc_open_nocancel(filename, flags, mode);
+}
+
+
 #define weak_alias(name, aliasname) \
   extern int aliasname() __attribute ((weak, alias (#name)));
 

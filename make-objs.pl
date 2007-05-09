@@ -195,7 +195,7 @@ sub gcc {
 
   if($b) {
     print "Compile $src -> $dest\n";
-    do_cmd($cc, @opts,
+    do_cmd(split(' ', $cc), @opts,
 	   '-c', $src, '-o', $dest,
 	   '-MD', '-MF', $deps_file);
   }

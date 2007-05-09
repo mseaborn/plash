@@ -1,4 +1,6 @@
-#!/bin/sh
+#!/bin/bash
+
+set -e
 
 if [ $# = 0 ]; then
   echo "Usage: $0 prog args..."
@@ -7,6 +9,8 @@ fi
 
 
 DIR=`pwd`
+
+source set-env.sh
 
 # Create wrapper script for pola-run that sets the library path, etc.
 (

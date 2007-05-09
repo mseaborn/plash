@@ -19,13 +19,13 @@
 
 import unittest
 
-import plash_pkg_choose
+import plash_pkg.choose
 
 
 class ChooseTest(unittest.TestCase):
 
     def test(self):
-        chooser = plash_pkg_choose.DepChooser()
+        chooser = plash_pkg.choose.DepChooser()
 
         def make_pkg(d):
             d["version"] = "1.0-1"

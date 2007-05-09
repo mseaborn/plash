@@ -32,7 +32,7 @@ PLASH_GLIBC_PRIVATE {
   __libc_connect;
   __libc_accept;
   __libc_close;
-  __open_nocancel;
+  __libc_open_nocancel;
 };
 END
 

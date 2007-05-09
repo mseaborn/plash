@@ -139,6 +139,7 @@ export(new_open, __GI___libc_open);
 export(new_open, open_not_cancel);
 export(new_open, open_not_cancel_2);
 export(new_open, __open_nocancel);
+export(new_open, __libc_open_nocancel);
 
 int new_open(const char *filename, int flags, ...)
 {

@@ -121,6 +121,7 @@ int new_unlinkat(int dir_fd, const char *pathname)
 
 
 export(new_readlinkat, readlinkat);
+export(new_readlinkat, __GI_readlinkat);
 
 int new_readlinkat(int dir_fd, const char *pathname, char *buf, size_t buf_size)
 {

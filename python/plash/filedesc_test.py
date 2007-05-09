@@ -159,6 +159,7 @@ class GlibPollTests(unittest.TestCase):
             calls = []
             def callback(*args):
                 calls.append(args)
+                return False
             gobject.io_add_watch(pipe_write,
                                  gobject.IO_OUT |
                                  gobject.IO_ERR | gobject.IO_HUP,
@@ -178,6 +179,7 @@ class GlibPollTests(unittest.TestCase):
             calls = []
             def callback(*args):
                 calls.append(args)
+                return False
             gobject.io_add_watch(pipe_read,
                                  gobject.IO_IN |
                                  gobject.IO_ERR | gobject.IO_HUP,

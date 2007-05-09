@@ -595,7 +595,11 @@ build_gtk_powerbox () {
 build_python_module () {
   if [ "$USE_PYTHON" = yes ]; then
     echo Building Python module
-    (cd python && $PYTHON setup.py build --force)
+    (cd python
+     $PYTHON setup.py build --force
+     # Install C module within build tree for use by unit tests
+     $PYTHON setup.py install --install-platlib=lib
+    ) || false
   fi
 }
 

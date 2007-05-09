@@ -47,7 +47,7 @@ GLIBC_VERSION=@GLIBC_VERSION@
 # GLIBC_SO_DIR=$DEB_GLIBC/libc6/lib
 
 
-CC=@CC@
+CC="@CC@"
 USE_GTK=@with_gtk@
 USE_PYTHON=@with_python@
 PYTHON=@PYTHON@

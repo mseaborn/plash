@@ -176,6 +176,18 @@ void plash_libc_reset_connection()
   }
 }
 
+int libc_get_fs_op(cap_t *result)
+{
+  if(plash_init() < 0)
+    return -1;
+  if(!fs_server) {
+    __set_errno(ENOSYS);
+    return -1;
+  }
+  *result = fs_server;
+  return 0;
+}
+
 int req_and_reply(region_t r, seqt_t msg, seqf_t *reply)
 {
   struct cap_args result;
@@ -213,12 +225,6 @@ int req_and_reply_with_fds2(region_t r, seqt_t msg, fds_t fds,
 
   plash_libc_unlock();
   return 0;
-}
-
-int req_and_reply_with_fds(region_t r, seqt_t msg,
-			   seqf_t *reply, fds_t *reply_fds)
-{
-  return req_and_reply_with_fds2(r, msg, fds_empty, reply, reply_fds);
 }
 
 void libc_log(const char *msg)

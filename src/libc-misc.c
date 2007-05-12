@@ -35,6 +35,7 @@
 #include "libc-comms.h"
 #include "libc-fds.h"
 #include "marshal.h"
+#include "marshal-pack.h"
 #include "cap-protocol.h"
 #include "cap-utils.h"
 
@@ -129,6 +130,11 @@ void set_errno_from_reply(seqf_t msg)
   __set_errno(ok ? err : ENOSYS);
 }
 
+void set_errno_from_result(region_t r, struct cap_args result)
+{
+  set_errno_from_reply(flatten_reuse(r, result.data));
+}
+
 
 export_weak_alias(new_open, __open);
 export_weak_alias(new_open, open);
@@ -145,6 +151,7 @@ int new_open(const char *filename, int flags, ...)
 {
   region_t r = region_make();
   int mode = 0;
+  cap_t fs_op_server;
   struct cap_args result;
   log_msg(MOD_MSG "open\n");
   plash_libc_lock();
@@ -159,17 +166,12 @@ int new_open(const char *filename, int flags, ...)
     mode = va_arg(arg, int);
     va_end(arg);
   }
-  {
-    if(plash_init() < 0) goto error;
-    if(!fs_server) { __set_errno(ENOSYS); goto error; }
-    cap_call(fs_server, r,
-	     cap_args_make(cat4(r, mk_int(r, METHOD_FSOP_OPEN),
-				mk_int(r, flags),
-				mk_int(r, mode),
-				mk_string(r, filename)),
-			   caps_empty, fds_empty),
-	     &result);
-  }
+  if(libc_get_fs_op(&fs_op_server) < 0)
+    goto error;
+  cap_call(fs_op_server, r,
+	   pl_pack(r, METHOD_FSOP_OPEN, "iiS", flags, mode,
+		   seqf_string(filename)),
+	   &result);
   {
     seqf_t msg = flatten_reuse(r, result.data);
     int ok = 1;
@@ -207,7 +209,7 @@ int new_open(const char *filename, int flags, ...)
   }
   caps_free(result.caps);
   close_fds(result.fds);
-  set_errno_from_reply(flatten_reuse(r, result.data));
+  set_errno_from_result(r, result);
  error:
   plash_libc_unlock();
   region_free(r);
@@ -301,9 +303,10 @@ int new_fchdir(int fd)
     if(obj) {
       struct cap_args result;
       region_t r = region_make();
-      if(plash_init() < 0) goto error;
-      if(!fs_server) { __set_errno(ENOSYS); goto error; }
-      cap_call(fs_server, r,
+      cap_t fs_op_server;
+      if(libc_get_fs_op(&fs_op_server) < 0)
+	goto error;
+      cap_call(fs_op_server, r,
 	       cap_args_dc(mk_int(r, METHOD_FSOP_FCHDIR),
 			   mk_caps1(r, inc_ref(obj))),
 	       &result);
@@ -319,7 +322,7 @@ int new_fchdir(int fd)
       }
       caps_free(result.caps);
       close_fds(result.fds);
-      set_errno_from_reply(flatten_reuse(r, result.data));
+      set_errno_from_result(r, result);
     error:
       region_free(r);
       return -1;
@@ -852,27 +855,29 @@ export(new_readlink, __GI___readlink);
 int new_readlink(const char *pathname, char *buf, size_t buf_size)
 {
   region_t r = region_make();
-  seqf_t reply;
+  cap_t fs_op_server;
+  struct cap_args result;
   log_msg(MOD_MSG "readlink\n");
   if(!pathname || !buf) {
     __set_errno(EINVAL);
     goto error;
   }
-  if(req_and_reply(r, cat2(r, mk_int(r, METHOD_FSOP_READLINK),
-			   mk_string(r, pathname)), &reply) < 0) goto error;
-  {
-    seqf_t msg = reply;
-    int ok = 1;
-    m_int_const(&ok, &msg, METHOD_R_FSOP_READLINK);
-    if(ok) {
-      int count = msg.size;
-      if(count > buf_size) count = buf_size;
-      memcpy(buf, msg.data, count);
-      region_free(r);
-      return count;
-    }
+  if(libc_get_fs_op(&fs_op_server) < 0)
+    goto error;
+  cap_call(fs_op_server, r,
+	   pl_pack(r, METHOD_FSOP_READLINK, "S", seqf_string(pathname)),
+	   &result);
+  seqf_t link_dest;
+  if(pl_unpack(r, result, METHOD_R_FSOP_READLINK, "S", &link_dest)) {
+    int count = link_dest.size;
+    if(count > buf_size)
+      count = buf_size;
+    memcpy(buf, link_dest.data, count);
+    region_free(r);
+    return count;
   }
-  set_errno_from_reply(reply);
+  set_errno_from_result(r, result);
+  pl_args_free(&result);
  error:
   region_free(r);
   return -1;
@@ -887,26 +892,24 @@ export(new_access, __GI___access);
 int new_access(const char *pathname, unsigned int mode)
 {
   region_t r = region_make();
-  seqf_t reply;
+  cap_t fs_op_server;
+  struct cap_args result;
   log_msg(MOD_MSG "access\n");
   if(!pathname) {
     __set_errno(EINVAL);
     goto error;
   }
-  if(req_and_reply(r, cat3(r, mk_int(r, METHOD_FSOP_ACCESS),
-			   mk_int(r, mode),
-			   mk_string(r, pathname)), &reply) < 0) goto error;
-  {
-    seqf_t msg = reply;
-    int ok = 1;
-    m_int_const(&ok, &msg, METHOD_OKAY);
-    m_end(&ok, &msg);
-    if(ok) {
-      region_free(r);
-      return 0;
-    }
+  if(libc_get_fs_op(&fs_op_server) < 0)
+    goto error;
+  cap_call(fs_op_server, r,
+	   pl_pack(r, METHOD_FSOP_ACCESS, "iS", mode, seqf_string(pathname)),
+	   &result);
+  if(pl_unpack(r, result, METHOD_OKAY, "")) {
+    region_free(r);
+    return 0;
   }
-  set_errno_from_reply(reply);
+  set_errno_from_result(r, result);
+  pl_args_free(&result);
  error:
   region_free(r);
   return -1;
@@ -922,36 +925,25 @@ int new_access(const char *pathname, unsigned int mode)
    case. */
 int my_chmod(int nofollow, const char *pathname, unsigned int mode)
 {
-  /* Usually, this code would work:
-  int fd, rc;
-  fd = open(pathname, O_RDONLY);
-  if(fd < 0) return -1;
-  rc = fchmod(fd, mode);
-  close(fd);
-  return rc;
-  */
-
   region_t r = region_make();
-  seqf_t reply;
+  cap_t fs_op_server;
+  struct cap_args result;
   if(!pathname) {
     __set_errno(EINVAL);
     goto error;
   }
-  if(req_and_reply(r, cat4(r, mk_int(r, METHOD_FSOP_CHMOD),
-			   mk_int(r, nofollow),
-			   mk_int(r, mode),
-			   mk_string(r, pathname)), &reply) < 0) goto error;
-  {
-    seqf_t msg = reply;
-    int ok = 1;
-    m_int_const(&ok, &msg, METHOD_OKAY);
-    m_end(&ok, &msg);
-    if(ok) {
-      region_free(r);
-      return 0;
-    }
+  if(libc_get_fs_op(&fs_op_server) < 0)
+    goto error;
+  cap_call(fs_op_server, r,
+	   pl_pack(r, METHOD_FSOP_CHMOD, "iiS",
+		   nofollow, mode, seqf_string(pathname)),
+	   &result);
+  if(pl_unpack(r, result, METHOD_OKAY, "")) {
+    region_free(r);
+    return 0;
   }
-  set_errno_from_reply(reply);
+  set_errno_from_result(r, result);
+  pl_args_free(&result);
  error:
   region_free(r);
   return -1;
@@ -984,27 +976,24 @@ static int my_chown(int nofollow, const char *pathname,
 		    unsigned int group_gid)
 {
   region_t r = region_make();
-  seqf_t reply;
+  cap_t fs_op_server;
+  struct cap_args result;
   if(!pathname) {
     __set_errno(EINVAL);
     goto error;
   }
-  if(req_and_reply(r, cat5(r, mk_int(r, METHOD_FSOP_CHOWN),
-			   mk_int(r, nofollow),
-			   mk_int(r, owner_uid),
-			   mk_int(r, group_gid),
-			   mk_string(r, pathname)), &reply) < 0) goto error;
-  {
-    seqf_t msg = reply;
-    int ok = 1;
-    m_int_const(&ok, &msg, METHOD_OKAY);
-    m_end(&ok, &msg);
-    if(ok) {
-      region_free(r);
-      return 0;
-    }
+  if(libc_get_fs_op(&fs_op_server) < 0)
+    goto error;
+  cap_call(fs_op_server, r,
+	   pl_pack(r, METHOD_FSOP_CHOWN, "iiiS", nofollow,
+		   owner_uid, group_gid, seqf_string(pathname)),
+	   &result);
+  if(pl_unpack(r, result, METHOD_OKAY, "")) {
+    region_free(r);
+    return 0;
   }
-  set_errno_from_reply(reply);
+  set_errno_from_result(r, result);
+  pl_args_free(&result);
  error:
   region_free(r);
   return -1;
@@ -1041,27 +1030,25 @@ export(new_rename, __GI_rename);
 int new_rename(const char *oldpath, const char *newpath)
 {
   region_t r = region_make();
-  seqf_t reply;
+  cap_t fs_op_server;
+  struct cap_args result;
   log_msg(MOD_MSG "rename\n");
   if(!oldpath || !newpath) {
     __set_errno(EINVAL);
     goto error;
   }
-  if(req_and_reply(r, cat4(r, mk_int(r, METHOD_FSOP_RENAME),
-			   mk_int(r, strlen(newpath)),
-			   mk_string(r, newpath),
-			   mk_string(r, oldpath)), &reply) < 0) goto error;
-  {
-    seqf_t msg = reply;
-    int ok = 1;
-    m_int_const(&ok, &msg, METHOD_OKAY);
-    m_end(&ok, &msg);
-    if(ok) {
-      region_free(r);
-      return 0;
-    }
+  if(libc_get_fs_op(&fs_op_server) < 0)
+    goto error;
+  cap_call(fs_op_server, r,
+	   pl_pack(r, METHOD_FSOP_RENAME, "sS",
+		   seqf_string(newpath), seqf_string(oldpath)),
+	   &result);
+  if(pl_unpack(r, result, METHOD_OKAY, "")) {
+    region_free(r);
+    return 0;
   }
-  set_errno_from_reply(reply);
+  set_errno_from_result(r, result);
+  pl_args_free(&result);
  error:
   region_free(r);
   return -1;
@@ -1076,27 +1063,25 @@ export(new_link, __GI___link);
 int new_link(const char *oldpath, const char *newpath)
 {
   region_t r = region_make();
-  seqf_t reply;
+  cap_t fs_op_server;
+  struct cap_args result;
   log_msg(MOD_MSG "link\n");
   if(!oldpath || !newpath) {
     __set_errno(EINVAL);
     goto error;
   }
-  if(req_and_reply(r, cat4(r, mk_int(r, METHOD_FSOP_LINK),
-			   mk_int(r, strlen(newpath)),
-			   mk_string(r, newpath),
-			   mk_string(r, oldpath)), &reply) < 0) goto error;
-  {
-    seqf_t msg = reply;
-    int ok = 1;
-    m_int_const(&ok, &msg, METHOD_OKAY);
-    m_end(&ok, &msg);
-    if(ok) {
-      region_free(r);
-      return 0;
-    }
+  if(libc_get_fs_op(&fs_op_server) < 0)
+    goto error;
+  cap_call(fs_op_server, r,
+	   pl_pack(r, METHOD_FSOP_LINK, "sS",
+		   seqf_string(newpath), seqf_string(oldpath)),
+	   &result);
+  if(pl_unpack(r, result, METHOD_OKAY, "")) {
+    region_free(r);
+    return 0;
   }
-  set_errno_from_reply(reply);
+  set_errno_from_result(r, result);
+  pl_args_free(&result);
  error:
   region_free(r);
   return -1;
@@ -1111,27 +1096,25 @@ export(new_symlink, __GI___symlink);
 int new_symlink(const char *oldpath, const char *newpath)
 {
   region_t r = region_make();
-  seqf_t reply;
+  cap_t fs_op_server;
+  struct cap_args result;
   log_msg(MOD_MSG "symlink\n");
   if(!oldpath || !newpath) {
     __set_errno(EINVAL);
     goto error;
   }
-  if(req_and_reply(r, cat4(r, mk_int(r, METHOD_FSOP_SYMLINK),
-			   mk_int(r, strlen(newpath)),
-			   mk_string(r, newpath),
-			   mk_string(r, oldpath)), &reply) < 0) goto error;
-  {
-    seqf_t msg = reply;
-    int ok = 1;
-    m_int_const(&ok, &msg, METHOD_OKAY);
-    m_end(&ok, &msg);
-    if(ok) {
-      region_free(r);
-      return 0;
-    }
+  if(libc_get_fs_op(&fs_op_server) < 0)
+    goto error;
+  cap_call(fs_op_server, r,
+	   pl_pack(r, METHOD_FSOP_SYMLINK, "sS",
+		   seqf_string(newpath), seqf_string(oldpath)),
+	   &result);
+  if(pl_unpack(r, result, METHOD_OKAY, "")) {
+    region_free(r);
+    return 0;
   }
-  set_errno_from_reply(reply);
+  set_errno_from_result(r, result);
+  pl_args_free(&result);
  error:
   region_free(r);
   return -1;
@@ -1146,26 +1129,24 @@ export(new_mkdir, __GI___mkdir);
 int new_mkdir(const char *pathname, unsigned int mode)
 {
   region_t r = region_make();
-  seqf_t reply;
+  cap_t fs_op_server;
+  struct cap_args result;
   log_msg(MOD_MSG "mkdir\n");
   if(!pathname) {
     __set_errno(EINVAL);
     goto error;
   }
-  if(req_and_reply(r, cat3(r, mk_int(r, METHOD_FSOP_MKDIR),
-			   mk_int(r, mode),
-			   mk_string(r, pathname)), &reply) < 0) goto error;
-  {
-    seqf_t msg = reply;
-    int ok = 1;
-    m_int_const(&ok, &msg, METHOD_OKAY);
-    m_end(&ok, &msg);
-    if(ok) {
-      region_free(r);
-      return 0;
-    }
+  if(libc_get_fs_op(&fs_op_server) < 0)
+    goto error;
+  cap_call(fs_op_server, r,
+	   pl_pack(r, METHOD_FSOP_MKDIR, "iS", mode, seqf_string(pathname)),
+	   &result);
+  if(pl_unpack(r, result, METHOD_OKAY, "")) {
+    region_free(r);
+    return 0;
   }
-  set_errno_from_reply(reply);
+  set_errno_from_result(r, result);
+  pl_args_free(&result);
  error:
   region_free(r);
   return -1;
@@ -1190,25 +1171,24 @@ export(new_unlink, __GI___unlink);
 int new_unlink(const char *pathname)
 {
   region_t r = region_make();
-  seqf_t reply;
+  cap_t fs_op_server;
+  struct cap_args result;
   log_msg(MOD_MSG "unlink\n");
   if(!pathname) {
     __set_errno(EINVAL);
     goto error;
   }
-  if(req_and_reply(r, cat2(r, mk_int(r, METHOD_FSOP_UNLINK),
-			   mk_string(r, pathname)), &reply) < 0) goto error;
-  {
-    seqf_t msg = reply;
-    int ok = 1;
-    m_int_const(&ok, &msg, METHOD_OKAY);
-    m_end(&ok, &msg);
-    if(ok) {
-      region_free(r);
-      return 0;
-    }
+  if(libc_get_fs_op(&fs_op_server) < 0)
+    goto error;
+  cap_call(fs_op_server, r,
+	   pl_pack(r, METHOD_FSOP_UNLINK, "S", seqf_string(pathname)),
+	   &result);
+  if(pl_unpack(r, result, METHOD_OKAY, "")) {
+    region_free(r);
+    return 0;
   }
-  set_errno_from_reply(reply);
+  set_errno_from_result(r, result);
+  pl_args_free(&result);
  error:
   region_free(r);
   return -1;
@@ -1223,25 +1203,24 @@ export(new_rmdir, __GI___rmdir);
 int new_rmdir(const char *pathname)
 {
   region_t r = region_make();
-  seqf_t reply;
+  cap_t fs_op_server;
+  struct cap_args result;
   log_msg(MOD_MSG "rmdir\n");
   if(!pathname) {
     __set_errno(EINVAL);
     goto error;
   }
-  if(req_and_reply(r, cat2(r, mk_int(r, METHOD_FSOP_RMDIR),
-			   mk_string(r, pathname)), &reply) < 0) goto error;
-  {
-    seqf_t msg = reply;
-    int ok = 1;
-    m_int_const(&ok, &msg, METHOD_OKAY);
-    m_end(&ok, &msg);
-    if(ok) {
-      region_free(r);
-      return 0;
-    }
+  if(libc_get_fs_op(&fs_op_server) < 0)
+    goto error;
+  cap_call(fs_op_server, r,
+	   pl_pack(r, METHOD_FSOP_RMDIR, "S", seqf_string(pathname)),
+	   &result);
+  if(pl_unpack(r, result, METHOD_OKAY, "")) {
+    region_free(r);
+    return 0;
   }
-  set_errno_from_reply(reply);
+  set_errno_from_result(r, result);
+  pl_args_free(&result);
  error:
   region_free(r);
   return -1;

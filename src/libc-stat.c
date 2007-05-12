@@ -26,6 +26,7 @@
 #include "libc-fds.h"
 #include "cap-utils.h"
 #include "marshal.h"
+#include "marshal-pack.h"
 
 
 #define log_msg(msg) /* nothing */
@@ -120,15 +121,20 @@ static void m_stat_info(int *ok, seqf_t *msg, int type, void *buf)
 int my_stat(int nofollow, int type, const char *pathname, void *buf)
 {
   region_t r = region_make();
-  seqf_t reply;
+  cap_t fs_op_server;
+  struct cap_args result;
   log_msg(MOD_MSG "stat\n");
   if(!pathname || !buf) {
     __set_errno(EINVAL);
     goto error;
   }
-  if(req_and_reply(r, cat3(r, mk_int(r, METHOD_FSOP_STAT),
-			   mk_int(r, nofollow),
-			   mk_string(r, pathname)), &reply) < 0) goto error;
+  if(libc_get_fs_op(&fs_op_server) < 0)
+    goto error;
+  cap_call(fs_op_server, r,
+	   pl_pack(r, METHOD_FSOP_STAT, "iS", nofollow, seqf_string(pathname)),
+	   &result);
+  seqf_t reply = flatten_reuse(r, result.data);
+  pl_args_free(&result);
   {
     seqf_t msg = reply;
     int ok = 1;

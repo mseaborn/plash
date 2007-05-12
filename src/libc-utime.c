@@ -25,48 +25,35 @@
 #include "comms.h"
 #include "libc-comms.h"
 #include "marshal.h"
+#include "marshal-pack.h"
+#include "cap-utils.h"
 
 
 int my_utimes(int nofollow, const char *pathname,
 	      struct timeval *atime, struct timeval *mtime)
 {
   region_t r = region_make();
-  seqf_t reply;
+  cap_t fs_op_server;
+  struct cap_args result;
   if(!pathname || !atime || !mtime) {
     __set_errno(EINVAL);
     goto error;
   }
-  if(req_and_reply(r,
-		   cat4(r, mk_int(r, METHOD_FSOP_UTIME),
-			mk_int(r, nofollow),
-			cat4(r,
-			  mk_int(r, atime->tv_sec), mk_int(r, atime->tv_usec),
-			  mk_int(r, mtime->tv_sec), mk_int(r, mtime->tv_usec)),
-			mk_string(r, pathname)), &reply) < 0) goto error;
-  {
-    seqf_t msg = reply;
-    int ok = 1;
-    m_int_const(&ok, &msg, METHOD_OKAY);
-    m_end(&ok, &msg);
-    if(ok) {
-      region_free(r);
-      return 0;
-    }
+  if(libc_get_fs_op(&fs_op_server) < 0)
+    goto error;
+  cap_call(fs_op_server, r,
+	   pl_pack(r, METHOD_FSOP_UTIME, "iiiiiS",
+		   nofollow,
+		   atime->tv_sec, atime->tv_usec,
+		   mtime->tv_sec, mtime->tv_usec,
+		   seqf_string(pathname)),
+	   &result);
+  if(pl_unpack(r, result, METHOD_OKAY, "")) {
+    region_free(r);
+    return 0;
   }
-  {
-    seqf_t msg = reply;
-    int err;
-    int ok = 1;
-    m_int_const(&ok, &msg, METHOD_FAIL);
-    m_int(&ok, &msg, &err);
-    m_end(&ok, &msg);
-    if(ok) {
-      __set_errno(err);
-      goto error;
-    }
-  }
-
-  __set_errno(ENOSYS);
+  set_errno_from_reply(flatten_reuse(r, result.data));
+  pl_args_free(&result);
  error:
   region_free(r);
   return -1;

@@ -27,11 +27,14 @@
 
 
 void set_errno_from_reply(seqf_t msg);
+void set_errno_from_result(region_t r, struct cap_args result);
 
 int new_open(const char *filename, int flags, ...);
 
 
 int my_atoi(const char *str);
+
+int libc_get_fs_op(cap_t *result);
 
 
 extern int comm_sock;
@@ -44,8 +47,6 @@ extern int libc_debug;
 int plash_init(void);
 int send_req(region_t r, seqt_t msg);
 int get_reply(seqf_t *msg, fds_t *fds);
-int req_and_reply_with_fds(region_t r, seqt_t msg,
-			   seqf_t *reply, fds_t *reply_fds);
 int req_and_reply_with_fds2(region_t r, seqt_t msg, fds_t fds,
 			    seqf_t *reply, fds_t *reply_fds);
 int req_and_reply(region_t r, seqt_t msg, seqf_t *reply);

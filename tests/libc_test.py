@@ -66,6 +66,20 @@ def write_file(filename, data):
         fh.close()
 
 
+class ProcessExitError(Exception):
+
+    pass
+
+
+def check_exit_status(status):
+    if os.WIFEXITED(status):
+        if os.WEXITSTATUS(status) != 0:
+            raise ProcessExitError("Process exited with status %i" %
+                                   os.WEXITSTATUS(status))
+    else:
+        raise ProcessExitError("Status %i" % status)
+
+
 class LogProxy(plash.marshal.Pyobj_marshal):
     """Logging proxy that records method calls made."""
 
@@ -169,8 +183,7 @@ int main()
         plash.mainloop.run_server()
         pid2, status = os.wait()
         self.assertEquals(pid, pid2)
-        self.assertTrue(os.WIFEXITED(status))
-        self.assertEquals(os.WEXITSTATUS(status), 0)
+        check_exit_status(status)
 
     def test_library(self):
         def run():
@@ -487,6 +500,8 @@ class TestRename(LibcTest):
     entry = "test_rename"
     code = r"""
 #include <stdio.h>
+#include <fcntl.h>
+#include <unistd.h>
 void test_rename()
 {
   int fd = creat("orig_file", 0777);
@@ -516,6 +531,144 @@ void test_hard_link()
     def check(self):
         # FIXME: argument ordering is confusing
         self.assertCalled("fsop_link", "new_file", "orig_file")
+
+
+class TestAccess(LibcTest):
+    entry = "test_access"
+    code = r"""
+#include <unistd.h>
+void test_access()
+{
+  int fd = creat("test_file", 0777);
+  t_check(fd >= 0);
+  t_check_zero(close(fd));
+  t_check_zero(access("test_file", R_OK | W_OK));
+}
+"""
+    def check(self):
+        self.assertCalled("fsop_access", os.R_OK | os.W_OK, "test_file")
+
+
+class TestStat(LibcTest):
+    entry = "test_stat"
+    code = r"""
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+void test_stat()
+{
+  int fd = creat("test_file", 0777);
+  t_check(fd >= 0);
+  t_check_zero(close(fd));
+  struct stat st;
+  t_check_zero(stat("test_file", &st));
+}
+"""
+    def check(self):
+        # TODO: decode nofollow argument as a bool not an int
+        self.assertCalled("fsop_stat", 0, "test_file")
+
+
+class TestLstat(LibcTest):
+    entry = "test_lstat"
+    code = r"""
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+void test_lstat()
+{
+  int fd = creat("test_file", 0777);
+  t_check(fd >= 0);
+  t_check_zero(close(fd));
+  struct stat st;
+  t_check_zero(lstat("test_file", &st));
+}
+"""
+    def check(self):
+        # TODO: decode nofollow argument as a bool not an int
+        self.assertCalled("fsop_stat", 1, "test_file")
+
+
+class TestFstatOnFile(LibcTest):
+    entry = "test_fstat_on_file"
+    code = r"""
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+void test_fstat_on_file()
+{
+  int fd = creat("test_file", 0777);
+  t_check(fd >= 0);
+  struct stat st;
+  t_check_zero(fstat(fd, &st));
+  t_check_zero(close(fd));
+}
+"""
+    def check(self):
+        pass
+
+
+class TestFstatOnDir(LibcTest):
+    entry = "test_fstat_on_dir"
+    code = r"""
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+void test_fstat_on_dir()
+{
+  int fd = open(".", O_RDONLY);
+  t_check(fd >= 0);
+  struct stat st;
+  t_check_zero(fstat(fd, &st));
+  t_check_zero(close(fd));
+}
+"""
+    def check(self):
+        self.assertCalledMatches("fsop_dir_fstat", lambda (dir,): True)
+
+
+class TestUtime(LibcTest):
+    entry = "test_utime"
+    code = r"""
+#include <fcntl.h>
+#include <unistd.h>
+#include <utime.h>
+void test_utime()
+{
+  int fd = creat("test_file", 0777);
+  t_check(fd >= 0);
+  t_check_zero(close(fd));
+  struct utimbuf buf;
+  buf.actime = 123;
+  buf.modtime = 456;
+  t_check_zero(utime("test_file", &buf));
+}
+"""
+    def check(self):
+        self.assertCalled("fsop_utime", 0, 123, 0, 456, 0, "test_file")
+
+
+class TestUtimes(LibcTest):
+    entry = "test_utimes"
+    code = r"""
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/time.h>
+void test_utimes()
+{
+  int fd = creat("test_file", 0777);
+  t_check(fd >= 0);
+  t_check_zero(close(fd));
+  struct timeval times[2];
+  times[0].tv_sec = 123;
+  times[0].tv_usec = 321;
+  times[1].tv_sec = 456;
+  times[1].tv_usec = 654;
+  t_check_zero(utimes("test_file", times));
+}
+"""
+    def check(self):
+        self.assertCalled("fsop_utime", 0, 123, 321, 456, 654, "test_file")
 
 
 def get_test_suite(module):

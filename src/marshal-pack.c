@@ -46,6 +46,13 @@ struct cap_args pl_pack(region_t r, int method, const char *fmt, ...)
 	data_size += sizeof(int);
 	break;
 
+      case 's': {
+	seqf_t arg = va_arg(list, seqf_t);
+	data_size += sizeof(int);
+	data_size += arg.size;
+	break;
+      }
+
       case 'S': {
 	seqf_t arg = va_arg(list, seqf_t);
 	data_size += arg.size;
@@ -98,6 +105,15 @@ struct cap_args pl_pack(region_t r, int method, const char *fmt, ...)
 	*(int *) data = va_arg(list, int);
 	data += sizeof(int);
 	break;
+
+      case 's': {
+	seqf_t arg = va_arg(list, seqf_t);
+	*(int *) data = arg.size;
+	data += sizeof(int);
+	memcpy(data, arg.data, arg.size);
+	data += arg.size;
+	break;
+      }
 
       case 'S': {
 	seqf_t arg = va_arg(list, seqf_t);

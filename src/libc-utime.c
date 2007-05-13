@@ -17,23 +17,31 @@
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
    USA.  */
 
+/* Get AT_FDCWD */
+#define _GNU_SOURCE
+
 #include <errno.h>
 #include <utime.h>
 #include <sys/time.h>
+#include <fcntl.h>
 
 #include "region.h"
 #include "comms.h"
-#include "libc-comms.h"
 #include "marshal.h"
 #include "marshal-pack.h"
 #include "cap-utils.h"
 
+#include "libc-comms.h"
+#include "libc-fds.h"
 
-int my_utimes(int nofollow, const char *pathname,
-	      struct timeval *atime, struct timeval *mtime)
+
+static int
+my_utimesat_nodefault(int dir_fd, int nofollow, const char *pathname,
+		      struct timeval *atime, struct timeval *mtime)
 {
   region_t r = region_make();
   cap_t fs_op_server;
+  cap_t dir_obj;
   struct cap_args result;
   if(!pathname || !atime || !mtime) {
     __set_errno(EINVAL);
@@ -41,9 +49,11 @@ int my_utimes(int nofollow, const char *pathname,
   }
   if(libc_get_fs_op(&fs_op_server) < 0)
     goto error;
+  if(fds_get_dir_obj(dir_fd, &dir_obj) < 0)
+    goto error;
   cap_call(fs_op_server, r,
-	   pl_pack(r, METHOD_FSOP_UTIME, "iiiiiS",
-		   nofollow,
+	   pl_pack(r, METHOD_FSOP_UTIME, "diiiiiS",
+		   dir_obj, nofollow,
 		   atime->tv_sec, atime->tv_usec,
 		   mtime->tv_sec, mtime->tv_usec,
 		   seqf_string(pathname)),
@@ -72,12 +82,31 @@ int new_utime(const char *path, struct utimbuf *buf)
     atime.tv_usec = 0;
     mtime.tv_sec = buf->modtime;
     mtime.tv_usec = 0;
-    return my_utimes(0 /* nofollow */, path, &atime, &mtime);
+    return my_utimesat_nodefault(AT_FDCWD, FALSE /* nofollow */, path,
+				 &atime, &mtime);
   }
   else {
     struct timeval time;
-    if(gettimeofday(&time, 0) < 0) return -1;
-    return my_utimes(0 /* nofollow */, path, &time, &time);
+    if(gettimeofday(&time, 0) < 0)
+      return -1;
+    return my_utimesat_nodefault(AT_FDCWD, FALSE /* nofollow */, path,
+				 &time, &time);
+  }
+}
+
+
+static int my_utimesat(int dir_fd, int nofollow, const char *path,
+		       struct timeval times[2])
+{
+  if(times) {
+    return my_utimesat_nodefault(dir_fd, nofollow, path,
+				 &times[0], &times[1]);
+  }
+  else {
+    struct timeval time;
+    if(gettimeofday(&time, 0) < 0)
+      return -1;
+    return my_utimesat_nodefault(dir_fd, nofollow, path, &time, &time);
   }
 }
 
@@ -87,14 +116,7 @@ export(new_utimes, __utimes);
 
 int new_utimes(const char *path, struct timeval times[2])
 {
-  if(times) {
-    return my_utimes(0 /* nofollow */, path, &times[0], &times[1]);
-  }
-  else {
-    struct timeval time;
-    if(gettimeofday(&time, 0) < 0) return -1;
-    return my_utimes(0 /* nofollow */, path, &time, &time);
-  }
+  return my_utimesat(AT_FDCWD, FALSE /* nofollow */, path, times);
 }
 
 
@@ -103,12 +125,13 @@ export(new_lutimes, __lutimes);
 
 int new_lutimes(const char *path, struct timeval times[2])
 {
-  if(times) {
-    return my_utimes(1 /* nofollow */, path, &times[0], &times[1]);
-  }
-  else {
-    struct timeval time;
-    if(gettimeofday(&time, 0) < 0) return -1;
-    return my_utimes(1 /* nofollow */, path, &time, &time);
-  }
+  return my_utimesat(AT_FDCWD, TRUE /* nofollow */, path, times);
+}
+
+
+export(new_futimesat, futimesat);
+
+int new_futimesat(int dir_fd, const char *path, struct timeval times[2])
+{
+  return my_utimesat(dir_fd, FALSE /* nofollow */, path, times);
 }

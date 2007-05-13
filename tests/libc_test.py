@@ -20,6 +20,7 @@
 import os
 import shutil
 import subprocess
+import tempfile
 import unittest
 
 import plash.env
@@ -34,11 +35,13 @@ prototypes = r"""
 
 void t_check_zero(int return_code);
 void t_check(int x);
+int get_dir_fd(const char *dir_pathname);
 """
 
 shared_code = r"""
 #include <stdio.h>
 #include <stdlib.h>
+#include <fcntl.h>
 
 void t_check_zero(int return_code)
 {
@@ -54,6 +57,13 @@ void t_check(int x)
     perror("system call");
     exit(1);
   }
+}
+
+int get_dir_fd(const char *dir_pathname)
+{
+  int dir_fd = open(dir_pathname, O_RDONLY);
+  t_check(dir_fd >= 0);
+  return dir_fd;
 }
 """
 
@@ -118,6 +128,18 @@ class ProcessPreloadMixin(object):
         os.chdir(self.cwd_path)
 
 
+class Wildcard(object):
+
+    def matches(self, val):
+        return True
+
+
+class WildcardNotNone(Wildcard):
+
+    def matches(self, val):
+        return val != None
+
+
 class LibcTest(unittest.TestCase):
 
     entry = "test_base"
@@ -141,7 +163,8 @@ int main()
 }
 """ % self.entry
         write_file("test-case.c", prototypes + self.code + shared_code + main_func)
-        rc = subprocess.call(["gcc", "-Wall", "test-case.c", "-o", "test-case"])
+        rc = subprocess.call(["gcc", "-Wall", "-D_GNU_SOURCE",
+                              "test-case.c", "-o", "test-case"])
         assert rc == 0
         self._method_calls = []
 
@@ -207,11 +230,25 @@ int main()
         self.assertTrue((method_name, args) in self._method_calls,
                         self._method_calls)
 
-    def assertCalledMatches(self, method_name, fun):
-        for method, args in self._method_calls:
-            if method == method_name and fun(args):
+    def _args_match(self, pattern, args):
+        if len(pattern) != len(args):
+            return False
+        for x1, x2 in zip(pattern, args):
+            if isinstance(x1, Wildcard):
+                if not x1.matches(x2):
+                    return False
+            else:
+                if x1 != x2:
+                    return False
+        return True
+
+    def assertCalledPattern(self, method_name, *pattern_args):
+        for method_name2, args2 in self._method_calls:
+            if (method_name == method_name2 and
+                self._args_match(pattern_args, args2)):
                 return
-        self.fail("No match found for %s" % method_name)
+        self.fail("No match found for %r in calls: %r" %
+                  (method_name, self._method_calls))
 
     def assertNotCalled(self, method_name):
         for method, args in self._method_calls:
@@ -232,8 +269,62 @@ void test_creat()
 }
 """
     def check(self):
-        self.assertCalled("fsop_open", os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
-                          0777, "file")
+        self.assertCalled("fsop_open", None,
+                          os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0777, "file")
+
+
+class TestOpenat(LibcTest):
+    entry = "test_openat"
+    code = r"""
+#include <fcntl.h>
+#include <unistd.h>
+void test_openat()
+{
+  int fd = openat(get_dir_fd("."), "file", O_CREAT | O_WRONLY, 0777);
+  t_check(fd >= 0);
+  t_check_zero(close(fd));
+}
+"""
+    def check(self):
+        self.assertCalledPattern(
+            "fsop_open", WildcardNotNone(), os.O_CREAT | os.O_WRONLY,
+            0777, "file")
+
+
+class TestOpen64(LibcTest):
+    entry = "test_open64"
+    code = r"""
+#include <fcntl.h>
+#include <unistd.h>
+void test_open64()
+{
+  int fd = open64("file", O_CREAT | O_WRONLY, 0777);
+  t_check(fd >= 0);
+  t_check_zero(close(fd));
+}
+"""
+    def check(self):
+        self.assertCalled(
+            "fsop_open", None,
+            os.O_WRONLY | os.O_CREAT | os.O_LARGEFILE, 0777, "file")
+
+
+class TestOpenat64(LibcTest):
+    entry = "test_openat64"
+    code = r"""
+#include <fcntl.h>
+#include <unistd.h>
+void test_openat64()
+{
+  int fd = openat64(get_dir_fd("."), "file", O_CREAT | O_WRONLY, 0777);
+  t_check(fd >= 0);
+  t_check_zero(close(fd));
+}
+"""
+    def check(self):
+        self.assertCalledPattern(
+            "fsop_open", WildcardNotNone(),
+            os.O_CREAT | os.O_WRONLY | os.O_LARGEFILE, 0777, "file")
 
 
 class TestUnlink(LibcTest):
@@ -250,7 +341,39 @@ void test_unlink()
 }
 """
     def check(self):
-        self.assertCalled("fsop_unlink", "file")
+        self.assertCalled("fsop_unlink", None, "file")
+
+
+class TestUnlinkat(LibcTest):
+    entry = "test_unlinkat"
+    code = r"""
+#include <fcntl.h>
+#include <unistd.h>
+void test_unlinkat()
+{
+  int fd = creat("file", 0777);
+  t_check(fd >= 0);
+  t_check_zero(close(fd));
+  t_check_zero(unlinkat(get_dir_fd("."), "file", 0 /* flags */));
+}
+"""
+    def check(self):
+        self.assertCalledPattern("fsop_unlink", WildcardNotNone(), "file")
+
+
+class TestUnlinkatOnDir(LibcTest):
+    entry = "test_unlinkat_on_dir"
+    code = r"""
+#include <fcntl.h>
+#include <unistd.h>
+void test_unlinkat_on_dir()
+{
+  t_check_zero(mkdir("test_dir", 0777));
+  t_check_zero(unlinkat(get_dir_fd("."), "test_dir", AT_REMOVEDIR));
+}
+"""
+    def check(self):
+        self.assertCalledPattern("fsop_rmdir", WildcardNotNone(), "test_dir")
 
 
 class TestMkdir(LibcTest):
@@ -263,7 +386,20 @@ void test_mkdir()
 }
 """
     def check(self):
-        self.assertCalled("fsop_mkdir", 0777, "dir")
+        self.assertCalled("fsop_mkdir", None, 0777, "dir")
+
+
+class TestMkdirat(LibcTest):
+    entry = "test_mkdirat"
+    code = r"""
+#include <sys/stat.h>
+void test_mkdirat()
+{
+  t_check_zero(mkdirat(get_dir_fd("."), "dir", 0777));
+}
+"""
+    def check(self):
+        self.assertCalledPattern("fsop_mkdir", WildcardNotNone(), 0777, "dir")
 
 
 class TestRmdir(LibcTest):
@@ -278,7 +414,7 @@ void test_rmdir()
 }
 """
     def check(self):
-        self.assertCalled("fsop_rmdir", "dir")
+        self.assertCalled("fsop_rmdir", None, "dir")
 
 
 class TestSymlink(LibcTest):
@@ -293,7 +429,21 @@ void test_symlink()
 """
     def check(self):
         # TODO: order is reversed; confusing, should be fixed
-        self.assertCalled("fsop_symlink", "symlink", "dest_path")
+        self.assertCalled("fsop_symlink", None, "symlink", "dest_path")
+
+
+class TestSymlinkat(LibcTest):
+    entry = "test_symlinkat"
+    code = r"""
+#include <unistd.h>
+void test_symlinkat()
+{
+  t_check_zero(symlinkat("dest_path", get_dir_fd("."), "symlink"));
+}
+"""
+    def check(self):
+        self.assertCalledPattern("fsop_symlink", WildcardNotNone(),
+                                 "symlink", "dest_path")
 
 
 class TestReadlink(LibcTest):
@@ -316,8 +466,32 @@ void test_readlink()
 }
 """
     def check(self):
-        self.assertCalled("fsop_symlink", "symlink", "dest_path")
-        self.assertCalled("fsop_readlink", "symlink")
+        self.assertCalled("fsop_symlink", None, "symlink", "dest_path")
+        self.assertCalled("fsop_readlink", None, "symlink")
+
+
+class TestReadlinkat(LibcTest):
+    entry = "test_readlinkat"
+    code = r"""
+#include <string.h>
+#include <unistd.h>
+void test_readlinkat()
+{
+  const char *str = "dest_path";
+  char buf[100];
+  int got;
+
+  t_check_zero(symlink(str, "symlink"));
+  got = readlinkat(get_dir_fd("."), "symlink", buf, sizeof(buf));
+  t_check(got >= 0);
+  assert(got == strlen(str));
+  buf[got] = 0;
+  assert(strcmp(buf, str) == 0);
+}
+"""
+    def check(self):
+        self.assertCalled("fsop_symlink", None, "symlink", "dest_path")
+        self.assertCalledPattern("fsop_readlink", WildcardNotNone(), "symlink")
 
 
 class TestOpenOnDir(LibcTest):
@@ -333,7 +507,7 @@ void test_open_on_dir()
 }
 """
     def check(self):
-        self.assertCalled("fsop_open", os.O_RDONLY, 0, ".")
+        self.assertCalled("fsop_open", None, os.O_RDONLY, 0, ".")
 
 
 class TestGetcwd(LibcTest):
@@ -404,7 +578,27 @@ void test_chmod()
 }
 """
     def check(self):
-        self.assertCalled("fsop_chmod", 0, 0777, "file")
+        self.assertCalled("fsop_chmod", None, 0, 0777, "file")
+
+
+class TestFchmodat(LibcTest):
+    entry = "test_fchmodat"
+    code = r"""
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/stat.h>
+void test_fchmodat()
+{
+  int fd = creat("file", 0666);
+  t_check(fd >= 0);
+  t_check_zero(close(fd));
+  /* Set the executable bit. */
+  t_check_zero(fchmodat(get_dir_fd("."), "file", 0777, 0 /* flags */));
+}
+"""
+    def check(self):
+        self.assertCalledPattern(
+            "fsop_chmod", WildcardNotNone(), 0, 0777, "file")
 
 
 class TestChown(LibcTest):
@@ -423,7 +617,25 @@ void test_chown()
 }
 """
     def check(self):
-        self.assertCalled("fsop_chown", 0, -1, -1, "file")
+        self.assertCalled("fsop_chown", None, 0, -1, -1, "file")
+
+
+class TestFchownat(LibcTest):
+    entry = "test_fchownat"
+    code = r"""
+#include <fcntl.h>
+#include <unistd.h>
+void test_fchownat()
+{
+  int fd = creat("file", 0666);
+  t_check(fd >= 0);
+  t_check_zero(close(fd));
+  t_check_zero(fchownat(get_dir_fd("."), "file", -1, -1, 0 /* flags */));
+}
+"""
+    def check(self):
+        self.assertCalledPattern(
+            "fsop_chown", WildcardNotNone(), 0, -1, -1, "file")
 
 
 class TestFork(LibcTest):
@@ -467,8 +679,7 @@ void test_bind()
 }
 """
     def check(self):
-        self.assertCalledMatches("fsop_bind",
-                                 lambda (fd, name): name == "socket")
+        self.assertCalledPattern("fsop_bind", WildcardNotNone(), "socket")
 
 
 class TestBindAbstract(LibcTest):
@@ -512,7 +723,28 @@ void test_rename()
 """
     def check(self):
         # FIXME: argument ordering is confusing
-        self.assertCalled("fsop_rename", "new_file", "orig_file")
+        self.assertCalled("fsop_rename", None, None, "new_file", "orig_file")
+
+
+class TestRenameat(LibcTest):
+    entry = "test_renameat"
+    code = r"""
+#include <stdio.h>
+#include <fcntl.h>
+#include <unistd.h>
+void test_renameat()
+{
+  int fd = creat("orig_file", 0777);
+  t_check(fd >= 0);
+  t_check_zero(close(fd));
+  t_check_zero(renameat(get_dir_fd("."), "orig_file",
+                        get_dir_fd("."), "new_file"));
+}
+"""
+    def check(self):
+        self.assertCalledPattern(
+            "fsop_rename", WildcardNotNone(), WildcardNotNone(),
+            "new_file", "orig_file")
 
 
 class TestHardLink(LibcTest):
@@ -530,13 +762,34 @@ void test_hard_link()
 """
     def check(self):
         # FIXME: argument ordering is confusing
-        self.assertCalled("fsop_link", "new_file", "orig_file")
+        self.assertCalled("fsop_link", None, None, "new_file", "orig_file")
+
+
+class TestLinkat(LibcTest):
+    entry = "test_linkat"
+    code = r"""
+#include <fcntl.h>
+#include <unistd.h>
+void test_linkat()
+{
+  int fd = creat("orig_file", 0777);
+  t_check(fd >= 0);
+  t_check_zero(close(fd));
+  t_check_zero(linkat(get_dir_fd("."), "orig_file",
+                      get_dir_fd("."), "new_file", 0 /* flags */));
+}
+"""
+    def check(self):
+        self.assertCalledPattern(
+            "fsop_link", WildcardNotNone(), WildcardNotNone(),
+            "new_file", "orig_file")
 
 
 class TestAccess(LibcTest):
     entry = "test_access"
     code = r"""
 #include <unistd.h>
+#include <fcntl.h>
 void test_access()
 {
   int fd = creat("test_file", 0777);
@@ -546,7 +799,25 @@ void test_access()
 }
 """
     def check(self):
-        self.assertCalled("fsop_access", os.R_OK | os.W_OK, "test_file")
+        self.assertCalled("fsop_access", None, os.R_OK | os.W_OK, "test_file")
+
+
+class TestFaccessat(LibcTest):
+    entry = "test_faccessat"
+    code = r"""
+#include <unistd.h>
+#include <fcntl.h>
+void test_faccessat()
+{
+  int fd = creat("test_file", 0777);
+  t_check(fd >= 0);
+  t_check_zero(close(fd));
+  t_check_zero(faccessat(get_dir_fd("."), "test_file", R_OK | W_OK, 0));
+}
+"""
+    def check(self):
+        self.assertCalledPattern("fsop_access", WildcardNotNone(),
+                                 os.R_OK | os.W_OK, "test_file")
 
 
 class TestStat(LibcTest):
@@ -566,7 +837,7 @@ void test_stat()
 """
     def check(self):
         # TODO: decode nofollow argument as a bool not an int
-        self.assertCalled("fsop_stat", 0, "test_file")
+        self.assertCalled("fsop_stat", None, 0, "test_file")
 
 
 class TestLstat(LibcTest):
@@ -586,7 +857,27 @@ void test_lstat()
 """
     def check(self):
         # TODO: decode nofollow argument as a bool not an int
-        self.assertCalled("fsop_stat", 1, "test_file")
+        self.assertCalled("fsop_stat", None, 1, "test_file")
+
+
+class TestFstatat(LibcTest):
+    entry = "test_fstatat"
+    code = r"""
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+void test_fstatat()
+{
+  int fd = creat("test_file", 0777);
+  t_check(fd >= 0);
+  t_check_zero(close(fd));
+  struct stat st;
+  t_check_zero(fstatat(get_dir_fd("."), "test_file", &st, 0));
+}
+"""
+    def check(self):
+        self.assertCalledPattern("fsop_stat", WildcardNotNone(), 0,
+                                 "test_file")
 
 
 class TestFstatOnFile(LibcTest):
@@ -624,7 +915,7 @@ void test_fstat_on_dir()
 }
 """
     def check(self):
-        self.assertCalledMatches("fsop_dir_fstat", lambda (dir,): True)
+        self.assertCalledPattern("fsop_dir_fstat", WildcardNotNone())
 
 
 class TestUtime(LibcTest):
@@ -645,7 +936,7 @@ void test_utime()
 }
 """
     def check(self):
-        self.assertCalled("fsop_utime", 0, 123, 0, 456, 0, "test_file")
+        self.assertCalled("fsop_utime", None, 0, 123, 0, 456, 0, "test_file")
 
 
 class TestUtimes(LibcTest):
@@ -668,17 +959,47 @@ void test_utimes()
 }
 """
     def check(self):
-        self.assertCalled("fsop_utime", 0, 123, 321, 456, 654, "test_file")
+        self.assertCalled("fsop_utime", None, 0, 123, 321, 456, 654,
+                          "test_file")
 
 
-def get_test_suite(module):
-    cases = [x for x in module.__dict__.values()
-             if isinstance(x, type) and issubclass(x, LibcTest)]
+class TestFutimesat(LibcTest):
+    entry = "test_futimesat"
+    code = r"""
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/time.h>
+void test_futimesat()
+{
+  int fd = creat("test_file", 0666);
+  t_check(fd >= 0);
+  t_check_zero(close(fd));
+  struct timeval times[2];
+  times[0].tv_sec = 123;
+  times[0].tv_usec = 321;
+  times[1].tv_sec = 456;
+  times[1].tv_usec = 654;
+  t_check_zero(futimesat(get_dir_fd("."), "test_file", times));
+}
+"""
+    def check(self):
+        self.assertCalledPattern("fsop_utime", WildcardNotNone(), 0,
+                                 123, 321, 456, 654, "test_file")
+
+
+def compile_into_one_executable(cases, tmp_dir):
     entry_points = [case.entry for case in cases]
-    code = ""
+    test_case_prototypes = ""
     for case in cases:
-        code += case.code
+        test_case_prototypes += "void %s(void);\n" % case.entry
+    c_files = []
+    for case in cases:
+        filename = os.path.join(tmp_dir, "%s.c" % case.entry)
+        write_file(filename, test_case_prototypes + prototypes + case.code)
+        c_files.append(filename)
+    code = test_case_prototypes
     code += r"""
+#include <stdlib.h>
 struct test_case {
   const char *name;
   void (*func)(void);
@@ -688,6 +1009,7 @@ struct test_case {
              % ", ".join(["""{ "%s", %s }""" % (name, name)
                           for name in entry_points]))
     main_func = r"""
+#include <string.h>
 int main(int argc, char **argv)
 {
   struct test_case *test_case;
@@ -702,15 +1024,27 @@ int main(int argc, char **argv)
 }
 """
     write_file("test-cases.c", prototypes + code + shared_code + main_func)
-    rc = subprocess.call(["gcc", "-Wall", "test-cases.c", "-o", "test-case"])
+    rc = subprocess.call(["gcc", "-Wall", "-D_GNU_SOURCE",
+                          "test-cases.c"] + c_files +
+                         ["-o", "test-case"])
     assert rc == 0
 
+
+def get_test_suite(module):
+    cases = [x for x in module.__dict__.values()
+             if isinstance(x, type) and issubclass(x, LibcTest)]
+    tmp_dir = tempfile.mkdtemp()
+    try:
+        compile_into_one_executable(cases, tmp_dir)
+    finally:
+        shutil.rmtree(tmp_dir)
     suite = unittest.TestSuite()
     for case in cases:
         class Case(case):
             def setUp(self):
                 pass
             main_args = [case.entry]
+        Case.__name__ = case.__name__
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(Case))
     return suite
 

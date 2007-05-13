@@ -20,6 +20,9 @@
 /* Needed to get O_LARGEFILE */
 #define _LARGEFILE64_SOURCE
 
+/* Get AT_FDCWD */
+#define _GNU_SOURCE
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
@@ -55,6 +58,20 @@ static void log_msg(const char *msg)
 #else
 #define log_fd(fd, msg)
 #endif
+
+
+int new_openat(int dir_fd, const char *filename, int flags, ...);
+int new_symlinkat(const char *oldpath, int dir_fd, const char *newpath);
+int new_mkdirat(int dir_fd, const char *pathname, unsigned int mode);
+int new_readlinkat(int dir_fd, const char *pathname,
+		   char *buf, size_t buf_size);
+int new_faccessat(int dir_fd, const char *pathname, unsigned int mode,
+		  int flags);
+int new_renameat(int old_dir_fd, const char *oldpath,
+		 int new_dir_fd, const char *newpath);
+int new_linkat(int old_dir_fd, const char *oldpath,
+	       int new_dir_fd, const char *newpath, int flags);
+int new_unlinkat(int dir_fd, const char *pathname, int flags);
 
 
 struct libc_fd *g_fds = NULL; /* Array allocated with malloc() */
@@ -119,6 +136,22 @@ void fds_slot_clear_warn_if_used(int fd)
 }
 
 
+int fds_get_dir_obj(int dir_fd, cap_t *result)
+{
+  if(dir_fd == AT_FDCWD) {
+    *result = NULL;
+    return 0;
+  }
+  if(0 <= dir_fd && dir_fd < g_fds_size &&
+     g_fds[dir_fd].fd_dir_obj) {
+    *result = inc_ref(g_fds[dir_fd].fd_dir_obj);
+    return 0;
+  }
+  __set_errno(ENOSYS);
+  return -1;
+}
+
+
 /* Try to set the errno from the given message, otherwise set it to ENOSYS. */
 void set_errno_from_reply(seqf_t msg)
 {
@@ -149,9 +182,28 @@ export(new_open, __libc_open_nocancel);
 
 int new_open(const char *filename, int flags, ...)
 {
+  int mode = 0;
+  if(flags & O_CREAT) {
+    va_list arg;
+    va_start(arg, flags);
+    mode = va_arg(arg, int);
+    va_end(arg);
+  }
+  return new_openat(AT_FDCWD, filename, flags, mode);
+}
+
+
+export_weak_alias(new_openat, openat);
+export(new_openat, __openat);
+export(new_openat, __openat_nocancel);
+export(new_openat, __GI___openat);
+
+int new_openat(int dir_fd, const char *filename, int flags, ...)
+{
   region_t r = region_make();
   int mode = 0;
   cap_t fs_op_server;
+  cap_t dir_obj;
   struct cap_args result;
   log_msg(MOD_MSG "open\n");
   plash_libc_lock();
@@ -168,8 +220,10 @@ int new_open(const char *filename, int flags, ...)
   }
   if(libc_get_fs_op(&fs_op_server) < 0)
     goto error;
+  if(fds_get_dir_obj(dir_fd, &dir_obj) < 0)
+    goto error;
   cap_call(fs_op_server, r,
-	   pl_pack(r, METHOD_FSOP_OPEN, "iiS", flags, mode,
+	   pl_pack(r, METHOD_FSOP_OPEN, "diiS", dir_obj, flags, mode,
 		   seqf_string(filename)),
 	   &result);
   {
@@ -352,6 +406,25 @@ int new_open64(const char *filename, int flags, ...)
     va_end(arg);
   }
   return new_open(filename, flags | O_LARGEFILE, mode);
+}
+
+
+export_weak_alias(new_openat64, openat64);
+export(new_openat64, __openat64);
+export(new_openat64, __openat64_nocancel);
+export(new_openat64, __GI___openat64);
+
+int new_openat64(int dir_fd, const char *filename, int flags, ...)
+{
+  int mode = 0;
+  log_msg(MOD_MSG "openat64\n");
+  if(flags & O_CREAT) {
+    va_list arg;
+    va_start(arg, flags);
+    mode = va_arg(arg, int);
+    va_end(arg);
+  }
+  return new_openat(dir_fd, filename, flags | O_LARGEFILE, mode);
 }
 
 
@@ -854,8 +927,19 @@ export(new_readlink, __GI___readlink);
 
 int new_readlink(const char *pathname, char *buf, size_t buf_size)
 {
+  return new_readlinkat(AT_FDCWD, pathname, buf, buf_size);
+}
+
+
+export(new_readlinkat, readlinkat);
+export(new_readlinkat, __GI_readlinkat);
+
+int new_readlinkat(int dir_fd, const char *pathname,
+		   char *buf, size_t buf_size)
+{
   region_t r = region_make();
   cap_t fs_op_server;
+  cap_t dir_obj;
   struct cap_args result;
   log_msg(MOD_MSG "readlink\n");
   if(!pathname || !buf) {
@@ -864,8 +948,11 @@ int new_readlink(const char *pathname, char *buf, size_t buf_size)
   }
   if(libc_get_fs_op(&fs_op_server) < 0)
     goto error;
+  if(fds_get_dir_obj(dir_fd, &dir_obj) < 0)
+    goto error;
   cap_call(fs_op_server, r,
-	   pl_pack(r, METHOD_FSOP_READLINK, "S", seqf_string(pathname)),
+	   pl_pack(r, METHOD_FSOP_READLINK, "dS",
+		   dir_obj, seqf_string(pathname)),
 	   &result);
   seqf_t link_dest;
   if(pl_unpack(r, result, METHOD_R_FSOP_READLINK, "S", &link_dest)) {
@@ -891,18 +978,32 @@ export(new_access, __GI___access);
 
 int new_access(const char *pathname, unsigned int mode)
 {
+  return new_faccessat(AT_FDCWD, pathname, mode, 0 /* flags */);
+}
+
+
+export(new_faccessat, faccessat);
+
+int new_faccessat(int dir_fd, const char *pathname, unsigned int mode,
+		  int flags)
+{
   region_t r = region_make();
   cap_t fs_op_server;
+  cap_t dir_obj;
   struct cap_args result;
   log_msg(MOD_MSG "access\n");
-  if(!pathname) {
+  /* TODO: support AT_SYMLINK_NOFOLLOW and AT_EACCESS */
+  if(!pathname || flags != 0) {
     __set_errno(EINVAL);
     goto error;
   }
   if(libc_get_fs_op(&fs_op_server) < 0)
     goto error;
+  if(fds_get_dir_obj(dir_fd, &dir_obj) < 0)
+    goto error;
   cap_call(fs_op_server, r,
-	   pl_pack(r, METHOD_FSOP_ACCESS, "iS", mode, seqf_string(pathname)),
+	   pl_pack(r, METHOD_FSOP_ACCESS, "diS", dir_obj, mode,
+		   seqf_string(pathname)),
 	   &result);
   if(pl_unpack(r, result, METHOD_OKAY, "")) {
     region_free(r);
@@ -923,10 +1024,11 @@ int new_access(const char *pathname, unsigned int mode)
    running under a user ID that doesn't own the file, and fchmod will
    not work in this case -- FDs don't behave like capabilities in this
    case. */
-int my_chmod(int nofollow, const char *pathname, unsigned int mode)
+int my_chmod(int dir_fd, int nofollow, const char *pathname, unsigned int mode)
 {
   region_t r = region_make();
   cap_t fs_op_server;
+  cap_t dir_obj;
   struct cap_args result;
   if(!pathname) {
     __set_errno(EINVAL);
@@ -934,9 +1036,11 @@ int my_chmod(int nofollow, const char *pathname, unsigned int mode)
   }
   if(libc_get_fs_op(&fs_op_server) < 0)
     goto error;
+  if(fds_get_dir_obj(dir_fd, &dir_obj) < 0)
+    goto error;
   cap_call(fs_op_server, r,
-	   pl_pack(r, METHOD_FSOP_CHMOD, "iiS",
-		   nofollow, mode, seqf_string(pathname)),
+	   pl_pack(r, METHOD_FSOP_CHMOD, "diiS",
+		   dir_obj, nofollow, mode, seqf_string(pathname)),
 	   &result);
   if(pl_unpack(r, result, METHOD_OKAY, "")) {
     region_free(r);
@@ -958,7 +1062,7 @@ export(new_chmod, __GI___chmod);
 int new_chmod(const char *pathname, unsigned int mode)
 {
   log_msg(MOD_MSG "chmod\n");
-  return my_chmod(0 /* nofollow */, pathname, mode);
+  return my_chmod(AT_FDCWD, FALSE /* nofollow */, pathname, mode);
 }
 
 
@@ -967,16 +1071,33 @@ export(new_lchmod, lchmod);
 int new_lchmod(const char *pathname, unsigned int mode)
 {
   log_msg(MOD_MSG "lchmod\n");
-  return my_chmod(1 /* nofollow */, pathname, mode);
+  return my_chmod(AT_FDCWD, TRUE /* nofollow */, pathname, mode);
 }
 
+
+export(new_fchmodat, fchmodat);
+
+int new_fchmodat(int dir_fd, const char *pathname, unsigned int mode,
+		 int flags)
+{
+  log_msg(MOD_MSG "fchmodat\n");
+  int nofollow = (flags & AT_SYMLINK_NOFOLLOW) ? TRUE : FALSE;
+  if((flags & ~AT_SYMLINK_NOFOLLOW) != 0) {
+    __set_errno(EINVAL);
+    return -1;
+  }
+  return my_chmod(dir_fd, nofollow, pathname, mode);
+}
+
+
 /* nofollow=0 for chown, nofollow=1 for lchown. */
-static int my_chown(int nofollow, const char *pathname,
+static int my_chown(int dir_fd, int nofollow, const char *pathname,
 		    unsigned int owner_uid,
 		    unsigned int group_gid)
 {
   region_t r = region_make();
   cap_t fs_op_server;
+  cap_t dir_obj;
   struct cap_args result;
   if(!pathname) {
     __set_errno(EINVAL);
@@ -984,8 +1105,10 @@ static int my_chown(int nofollow, const char *pathname,
   }
   if(libc_get_fs_op(&fs_op_server) < 0)
     goto error;
+  if(fds_get_dir_obj(dir_fd, &dir_obj) < 0)
+    goto error;
   cap_call(fs_op_server, r,
-	   pl_pack(r, METHOD_FSOP_CHOWN, "iiiS", nofollow,
+	   pl_pack(r, METHOD_FSOP_CHOWN, "diiiS", dir_obj, nofollow,
 		   owner_uid, group_gid, seqf_string(pathname)),
 	   &result);
   if(pl_unpack(r, result, METHOD_OKAY, "")) {
@@ -1010,7 +1133,7 @@ export(new_chown, __GI___chown);
 int new_chown(const char *pathname, unsigned int owner, unsigned int group)
 {
   log_msg(MOD_MSG "chown\n");
-  return my_chown(0 /* nofollow */, pathname, owner, group);
+  return my_chown(AT_FDCWD, FALSE /* nofollow */, pathname, owner, group);
 }
 
 
@@ -1020,7 +1143,24 @@ export(new_lchown, __lchown);
 int new_lchown(const char *pathname, unsigned int owner, unsigned int group)
 {
   log_msg(MOD_MSG "lchown\n");
-  return my_chown(1 /* nofollow */, pathname, owner, group);
+  return my_chown(AT_FDCWD, TRUE /* nofollow */, pathname, owner, group);
+}
+
+
+export(new_fchownat, fchownat);
+
+int new_fchownat(int dir_fd, const char *pathname,
+		 unsigned int owner_uid,
+		 unsigned int group_gid,
+		 int flags)
+{
+  log_msg(MOD_MSG "lchown\n");
+  int nofollow = (flags & AT_SYMLINK_NOFOLLOW) ? TRUE : FALSE;
+  if((flags & ~AT_SYMLINK_NOFOLLOW) != 0) {
+    __set_errno(EINVAL);
+    return -1;
+  }
+  return my_chown(dir_fd, nofollow, pathname, owner_uid, group_gid);
 }
 
 
@@ -1029,8 +1169,19 @@ export(new_rename, __GI_rename);
 
 int new_rename(const char *oldpath, const char *newpath)
 {
+  return new_renameat(AT_FDCWD, oldpath, AT_FDCWD, newpath);
+}
+
+
+export(new_renameat, renameat);
+
+int new_renameat(int old_dir_fd, const char *oldpath,
+		 int new_dir_fd, const char *newpath)
+{
   region_t r = region_make();
   cap_t fs_op_server;
+  cap_t new_dir_obj;
+  cap_t old_dir_obj;
   struct cap_args result;
   log_msg(MOD_MSG "rename\n");
   if(!oldpath || !newpath) {
@@ -1039,8 +1190,16 @@ int new_rename(const char *oldpath, const char *newpath)
   }
   if(libc_get_fs_op(&fs_op_server) < 0)
     goto error;
+  if(fds_get_dir_obj(old_dir_fd, &old_dir_obj) < 0)
+    goto error;
+  if(fds_get_dir_obj(new_dir_fd, &new_dir_obj) < 0) {
+    if(old_dir_obj)
+      filesys_obj_free(old_dir_obj);
+    goto error;
+  }
   cap_call(fs_op_server, r,
-	   pl_pack(r, METHOD_FSOP_RENAME, "sS",
+	   pl_pack(r, METHOD_FSOP_RENAME, "ddsS",
+		   new_dir_obj, old_dir_obj,
 		   seqf_string(newpath), seqf_string(oldpath)),
 	   &result);
   if(pl_unpack(r, result, METHOD_OKAY, "")) {
@@ -1062,18 +1221,37 @@ export(new_link, __GI___link);
 
 int new_link(const char *oldpath, const char *newpath)
 {
+  return new_linkat(AT_FDCWD, oldpath, AT_FDCWD, newpath, 0);
+}
+
+
+export(new_linkat, linkat);
+
+int new_linkat(int old_dir_fd, const char *oldpath,
+	       int new_dir_fd, const char *newpath, int flags)
+{
   region_t r = region_make();
   cap_t fs_op_server;
+  cap_t new_dir_obj;
+  cap_t old_dir_obj;
   struct cap_args result;
   log_msg(MOD_MSG "link\n");
-  if(!oldpath || !newpath) {
+  if(!oldpath || !newpath || flags != 0) {
     __set_errno(EINVAL);
     goto error;
   }
   if(libc_get_fs_op(&fs_op_server) < 0)
     goto error;
+  if(fds_get_dir_obj(old_dir_fd, &old_dir_obj) < 0)
+    goto error;
+  if(fds_get_dir_obj(new_dir_fd, &new_dir_obj) < 0) {
+    if(old_dir_obj)
+      filesys_obj_free(old_dir_obj);
+    goto error;
+  }
   cap_call(fs_op_server, r,
-	   pl_pack(r, METHOD_FSOP_LINK, "sS",
+	   pl_pack(r, METHOD_FSOP_LINK, "ddsS",
+		   new_dir_obj, old_dir_obj,
 		   seqf_string(newpath), seqf_string(oldpath)),
 	   &result);
   if(pl_unpack(r, result, METHOD_OKAY, "")) {
@@ -1095,8 +1273,17 @@ export(new_symlink, __GI___symlink);
 
 int new_symlink(const char *oldpath, const char *newpath)
 {
+  return new_symlinkat(oldpath, AT_FDCWD, newpath);
+}
+
+
+export(new_symlinkat, symlinkat);
+
+int new_symlinkat(const char *oldpath, int dir_fd, const char *newpath)
+{
   region_t r = region_make();
   cap_t fs_op_server;
+  cap_t dir_obj;
   struct cap_args result;
   log_msg(MOD_MSG "symlink\n");
   if(!oldpath || !newpath) {
@@ -1105,9 +1292,11 @@ int new_symlink(const char *oldpath, const char *newpath)
   }
   if(libc_get_fs_op(&fs_op_server) < 0)
     goto error;
+  if(fds_get_dir_obj(dir_fd, &dir_obj) < 0)
+    goto error;
   cap_call(fs_op_server, r,
-	   pl_pack(r, METHOD_FSOP_SYMLINK, "sS",
-		   seqf_string(newpath), seqf_string(oldpath)),
+	   pl_pack(r, METHOD_FSOP_SYMLINK, "dsS",
+		   dir_obj, seqf_string(newpath), seqf_string(oldpath)),
 	   &result);
   if(pl_unpack(r, result, METHOD_OKAY, "")) {
     region_free(r);
@@ -1128,8 +1317,17 @@ export(new_mkdir, __GI___mkdir);
 
 int new_mkdir(const char *pathname, unsigned int mode)
 {
+  return new_mkdirat(AT_FDCWD, pathname, mode);
+}
+
+
+export(new_mkdirat, mkdirat);
+
+int new_mkdirat(int dir_fd, const char *pathname, unsigned int mode)
+{
   region_t r = region_make();
   cap_t fs_op_server;
+  cap_t dir_obj;
   struct cap_args result;
   log_msg(MOD_MSG "mkdir\n");
   if(!pathname) {
@@ -1138,8 +1336,11 @@ int new_mkdir(const char *pathname, unsigned int mode)
   }
   if(libc_get_fs_op(&fs_op_server) < 0)
     goto error;
+  if(fds_get_dir_obj(dir_fd, &dir_obj) < 0)
+    goto error;
   cap_call(fs_op_server, r,
-	   pl_pack(r, METHOD_FSOP_MKDIR, "iS", mode, seqf_string(pathname)),
+	   pl_pack(r, METHOD_FSOP_MKDIR, "diS",
+		   dir_obj, mode, seqf_string(pathname)),
 	   &result);
   if(pl_unpack(r, result, METHOD_OKAY, "")) {
     region_free(r);
@@ -1170,18 +1371,32 @@ export(new_unlink, __GI___unlink);
 
 int new_unlink(const char *pathname)
 {
+  return new_unlinkat(AT_FDCWD, pathname, 0);
+}
+
+
+export(new_unlinkat, unlinkat);
+
+int new_unlinkat(int dir_fd, const char *pathname, int flags)
+{
   region_t r = region_make();
   cap_t fs_op_server;
+  cap_t dir_obj;
   struct cap_args result;
   log_msg(MOD_MSG "unlink\n");
-  if(!pathname) {
+  if(!pathname || (flags & ~AT_REMOVEDIR) != 0) {
     __set_errno(EINVAL);
     goto error;
   }
   if(libc_get_fs_op(&fs_op_server) < 0)
     goto error;
+  if(fds_get_dir_obj(dir_fd, &dir_obj) < 0)
+    goto error;
   cap_call(fs_op_server, r,
-	   pl_pack(r, METHOD_FSOP_UNLINK, "S", seqf_string(pathname)),
+	   pl_pack(r, (flags & AT_REMOVEDIR
+		       ? METHOD_FSOP_RMDIR : METHOD_FSOP_UNLINK),
+		   "dS",
+		   dir_obj, seqf_string(pathname)),
 	   &result);
   if(pl_unpack(r, result, METHOD_OKAY, "")) {
     region_free(r);
@@ -1202,28 +1417,7 @@ export(new_rmdir, __GI___rmdir);
 
 int new_rmdir(const char *pathname)
 {
-  region_t r = region_make();
-  cap_t fs_op_server;
-  struct cap_args result;
-  log_msg(MOD_MSG "rmdir\n");
-  if(!pathname) {
-    __set_errno(EINVAL);
-    goto error;
-  }
-  if(libc_get_fs_op(&fs_op_server) < 0)
-    goto error;
-  cap_call(fs_op_server, r,
-	   pl_pack(r, METHOD_FSOP_RMDIR, "S", seqf_string(pathname)),
-	   &result);
-  if(pl_unpack(r, result, METHOD_OKAY, "")) {
-    region_free(r);
-    return 0;
-  }
-  set_errno_from_result(r, result);
-  pl_args_free(&result);
- error:
-  region_free(r);
-  return -1;
+  return new_unlinkat(AT_FDCWD, pathname, AT_REMOVEDIR);
 }
 
 

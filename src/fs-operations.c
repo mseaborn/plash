@@ -160,23 +160,25 @@ int process_open(struct filesys_obj *root, struct dir_stack *cwd,
 
 /* mkdir() behaves like open() with O_EXCL: it won't follow a symbolic
    link and create the destination. */
-int process_mkdir(struct process *p, seqf_t pathname, int mode, int *err)
+int process_mkdir(struct filesys_obj *root, struct dir_stack *cwd,
+		  seqf_t pathname, int mode, int *err)
 {
   int r;
   struct resolved_slot *slot =
-    resolve_empty_slot(p->root, p->cwd, pathname, SYMLINK_LIMIT, err);
+    resolve_empty_slot(root, cwd, pathname, SYMLINK_LIMIT, err);
   if(!slot) return -1;
   r = slot->dir->vtable->mkdir(slot->dir, slot->leaf, mode, err);
   free_resolved_slot(slot);
   return r;
 }
 
-int process_symlink(struct process *p, seqf_t newpath, seqf_t oldpath, int *err)
+int process_symlink(struct filesys_obj *root, struct dir_stack *cwd,
+		    seqf_t newpath, seqf_t oldpath, int *err)
 {
   char *oldpath1;
   int r;
   struct resolved_slot *slot =
-    resolve_empty_slot(p->root, p->cwd, newpath, SYMLINK_LIMIT, err);
+    resolve_empty_slot(root, cwd, newpath, SYMLINK_LIMIT, err);
   if(!slot) return -1;
   oldpath1 = strdup_seqf(oldpath);
   r = slot->dir->vtable->symlink(slot->dir, slot->leaf, oldpath1, err);
@@ -185,13 +187,15 @@ int process_symlink(struct process *p, seqf_t newpath, seqf_t oldpath, int *err)
   return r;
 }
 
-int process_rename(struct process *p, seqf_t oldpath, seqf_t newpath, int *err)
+int process_rename(struct filesys_obj *root,
+		   struct dir_stack *old_dir, seqf_t oldpath,
+		   struct dir_stack *new_dir, seqf_t newpath, int *err)
 {
   struct resolved_slot *slot_src, *slot_dest;
   int rc;
-  slot_src = resolve_any_slot(p->root, p->cwd, oldpath, SYMLINK_LIMIT, err);
+  slot_src = resolve_any_slot(root, old_dir, oldpath, SYMLINK_LIMIT, err);
   if(!slot_src) return -1;
-  slot_dest = resolve_any_slot(p->root, p->cwd, newpath, SYMLINK_LIMIT, err);
+  slot_dest = resolve_any_slot(root, new_dir, newpath, SYMLINK_LIMIT, err);
   if(!slot_dest) {
     free_resolved_slot(slot_src);
     return -1;
@@ -204,13 +208,15 @@ int process_rename(struct process *p, seqf_t oldpath, seqf_t newpath, int *err)
   return rc;
 }
 
-int process_link(struct process *p, seqf_t oldpath, seqf_t newpath, int *err)
+int process_link(struct filesys_obj *root,
+		 struct dir_stack *old_dir, seqf_t oldpath,
+		 struct dir_stack *new_dir, seqf_t newpath, int *err)
 {
   struct resolved_slot *slot_src, *slot_dest;
   int rc;
-  slot_src = resolve_any_slot(p->root, p->cwd, oldpath, SYMLINK_LIMIT, err);
+  slot_src = resolve_any_slot(root, old_dir, oldpath, SYMLINK_LIMIT, err);
   if(!slot_src) return -1;
-  slot_dest = resolve_any_slot(p->root, p->cwd, newpath, SYMLINK_LIMIT, err);
+  slot_dest = resolve_any_slot(root, new_dir, newpath, SYMLINK_LIMIT, err);
   if(!slot_dest) {
     free_resolved_slot(slot_src);
     return -1;
@@ -223,36 +229,38 @@ int process_link(struct process *p, seqf_t oldpath, seqf_t newpath, int *err)
   return rc;
 }
 
-int process_unlink(struct process *p, seqf_t pathname, int *err)
+int process_unlink(struct filesys_obj *root, struct dir_stack *cwd,
+		   seqf_t pathname, int *err)
 {
   int rc;
   struct resolved_slot *slot =
-    resolve_any_slot(p->root, p->cwd, pathname, SYMLINK_LIMIT, err);
+    resolve_any_slot(root, cwd, pathname, SYMLINK_LIMIT, err);
   if(!slot) return -1;
   rc = slot->dir->vtable->unlink(slot->dir, slot->leaf, err);
   free_resolved_slot(slot);
   return rc;
 }
 
-int process_rmdir(struct process *p, seqf_t pathname, int *err)
+int process_rmdir(struct filesys_obj *root, struct dir_stack *cwd,
+		  seqf_t pathname, int *err)
 {
   int rc;
   struct resolved_slot *slot =
-    resolve_any_slot(p->root, p->cwd, pathname, SYMLINK_LIMIT, err);
+    resolve_any_slot(root, cwd, pathname, SYMLINK_LIMIT, err);
   if(!slot) return -1;
   rc = slot->dir->vtable->rmdir(slot->dir, slot->leaf, err);
   free_resolved_slot(slot);
   return rc;
 }
 
-int process_chmod(struct process *p, seqf_t pathname,
-		  int mode, int nofollow, int *err)
+int process_chmod(struct filesys_obj *root, struct dir_stack *cwd,
+		  seqf_t pathname, int mode, int nofollow, int *err)
 {
   int rc;
   /* chmod does follow symlinks.  Symlinks do not have permissions of
      their own. */
   struct filesys_obj *obj =
-    resolve_obj_simple(p->root, p->cwd, pathname, SYMLINK_LIMIT,
+    resolve_obj_simple(root, cwd, pathname, SYMLINK_LIMIT,
 		       nofollow, err);
   if(!obj) return -1;
   rc = obj->vtable->chmod(obj, mode, err);
@@ -264,11 +272,12 @@ int process_chmod(struct process *p, seqf_t pathname,
    not, it returns an error.  If the file exists and no owner or group
    change was requested, it returns success.  Otherwise, it returns
    EPERM. */
-int process_chown(struct process *p, seqf_t pathname,
-		  int owner_uid, int group_gid, int nofollow, int *err)
+int process_chown(struct filesys_obj *root, struct dir_stack *cwd,
+		  seqf_t pathname, int owner_uid, int group_gid,
+		  int nofollow, int *err)
 {
   struct filesys_obj *obj =
-    resolve_obj_simple(p->root, p->cwd, pathname, SYMLINK_LIMIT,
+    resolve_obj_simple(root, cwd, pathname, SYMLINK_LIMIT,
 		       nofollow, err);
   if(!obj) return -1;
   filesys_obj_free(obj);
@@ -283,13 +292,14 @@ int process_chown(struct process *p, seqf_t pathname,
   }
 }
 
-int process_utimes(struct process *p, seqf_t pathname, int nofollow,
+int process_utimes(struct filesys_obj *root, struct dir_stack *cwd,
+		   seqf_t pathname, int nofollow,
 		   const struct timeval *atime, const struct timeval *mtime,
 		   int *err)
 {
   int rc;
   struct filesys_obj *obj =
-    resolve_obj_simple(p->root, p->cwd, pathname, SYMLINK_LIMIT,
+    resolve_obj_simple(root, cwd, pathname, SYMLINK_LIMIT,
 		       nofollow, err);
   if(!obj) return -1;
   rc = obj->vtable->utimes(obj, atime, mtime, err);
@@ -327,6 +337,30 @@ int process_readlink(region_t r,
   else return -1; /* `err' already filled out */
 }
 
+
+static void m_dir_fd(int *ok, seqf_t *msg, cap_seq_t *cap_args,
+		     struct dir_stack **dir_stack)
+{
+  int cap_not_null;
+  m_int(ok, msg, &cap_not_null);
+  if(*ok && cap_not_null) {
+    if(cap_args->size > 0) {
+      cap_t object = cap_args->caps[0];
+      cap_args->caps++;
+      cap_args->size--;
+
+      *dir_stack = dir_stack_upcast(object);
+      if(!*dir_stack)
+	*ok = FALSE;
+    }
+    else {
+      *ok = FALSE;
+    }
+  }
+  else {
+    *dir_stack = NULL;
+  }
+}
 
 static seqt_t pack_stat_info(region_t r, struct stat *st)
 {
@@ -558,7 +592,9 @@ int handle_fs_op_message(region_t r, struct process *proc,
   }
   case METHOD_FSOP_OPEN:
   {
+    struct dir_stack *dir;
     int flags, mode;
+    m_dir_fd(&ok, &msg, &cap_args, &dir);
     m_int(&ok, &msg, &flags);
     m_int(&ok, &msg, &mode);
     if(ok) {
@@ -573,8 +609,10 @@ int handle_fs_op_message(region_t r, struct process *proc,
       if((flags & O_ACCMODE) == O_RDONLY) {
 	log->read_only = TRUE;
       }
-            
-      fd = process_open_d(proc->root, proc->cwd, pathname, flags, mode, &err,
+
+      if(!dir)
+	dir = proc->cwd;
+      fd = process_open_d(proc->root, dir, pathname, flags, mode, &err,
 			  &dummy_fd, &d_obj);
       if(fd >= 0) {
 	*reply = mk_int(r, METHOD_R_FSOP_OPEN);
@@ -616,7 +654,9 @@ int handle_fs_op_message(region_t r, struct process *proc,
   }
   case METHOD_FSOP_STAT:
   {
+    struct dir_stack *dir;
     int nofollow;
+    m_dir_fd(&ok, &msg, &cap_args, &dir);
     m_int(&ok, &msg, &nofollow);
     if(ok) {
       seqf_t pathname = msg;
@@ -628,7 +668,9 @@ int handle_fs_op_message(region_t r, struct process *proc,
       *log_msg = mk_leaf(r, pathname);
       log->read_only = TRUE;
 
-      obj = resolve_obj_simple(proc->root, proc->cwd, pathname,
+      if(!dir)
+	dir = proc->cwd;
+      obj = resolve_obj_simple(proc->root, dir, pathname,
 			       SYMLINK_LIMIT, nofollow, &err);
       if(!obj) {
 	return err;
@@ -646,6 +688,8 @@ int handle_fs_op_message(region_t r, struct process *proc,
   }
   case METHOD_FSOP_READLINK:
   {
+    struct dir_stack *dir;
+    m_dir_fd(&ok, &msg, &cap_args, &dir);
     if(ok) {
       seqf_t pathname = msg;
       seqf_t link_dest;
@@ -654,7 +698,10 @@ int handle_fs_op_message(region_t r, struct process *proc,
       log->op_name = "readlink";
       *log_msg = mk_leaf(r, pathname);
       log->read_only = TRUE;
-      if(process_readlink(r, proc->root, proc->cwd, pathname,
+
+      if(!dir)
+	dir = proc->cwd;
+      if(process_readlink(r, proc->root, dir, pathname,
 			  &link_dest, &err) < 0) {
 	return err;
       }
@@ -734,7 +781,9 @@ int handle_fs_op_message(region_t r, struct process *proc,
        all! */
     /* This implementation is incomplete.  It doesn't check permissions.
        It returns successfully simply if the object exists. */
+    struct dir_stack *dir;
     int mode;
+    m_dir_fd(&ok, &msg, &cap_args, &dir);
     m_int(&ok, &msg, &mode);
     if(ok) {
       seqf_t pathname = msg;
@@ -744,7 +793,10 @@ int handle_fs_op_message(region_t r, struct process *proc,
       log->op_name = "access";
       *log_msg = mk_leaf(r, pathname);
       log->read_only = TRUE;
-      obj = resolve_obj_simple(proc->root, proc->cwd, pathname, SYMLINK_LIMIT,
+
+      if(!dir)
+	dir = proc->cwd;
+      obj = resolve_obj_simple(proc->root, dir, pathname, SYMLINK_LIMIT,
 			       FALSE /*nofollow*/, &err);
       if(obj) {
 	filesys_obj_free(obj);
@@ -761,7 +813,9 @@ int handle_fs_op_message(region_t r, struct process *proc,
   case METHOD_FSOP_MKDIR:
   {
     /* mkdir() call */
+    struct dir_stack *dir;
     int mode;
+    m_dir_fd(&ok, &msg, &cap_args, &dir);
     m_int(&ok, &msg, &mode);
     if(ok) {
       seqf_t pathname = msg;
@@ -769,7 +823,10 @@ int handle_fs_op_message(region_t r, struct process *proc,
       
       log->op_name = "mkdir";
       *log_msg = mk_leaf(r, pathname);
-      if(process_mkdir(proc, pathname, mode, &err) < 0) {
+
+      if(!dir)
+	dir = proc->cwd;
+      if(process_mkdir(proc->root, dir, pathname, mode, &err) < 0) {
 	return err;
       }
       else {
@@ -783,7 +840,9 @@ int handle_fs_op_message(region_t r, struct process *proc,
   case METHOD_FSOP_SYMLINK:
   {
     /* symlink() call */
+    struct dir_stack *dir;
     seqf_t newpath;
+    m_dir_fd(&ok, &msg, &cap_args, &dir);
     m_lenblock(&ok, &msg, &newpath);
     if(ok) {
       seqf_t oldpath = msg;
@@ -792,7 +851,10 @@ int handle_fs_op_message(region_t r, struct process *proc,
       log->op_name = "symlink";
       *log_msg = cat3(r, mk_leaf(r, newpath),
 		      mk_string(r, " to link to "), mk_leaf(r, oldpath));
-      if(process_symlink(proc, newpath, oldpath, &err) < 0) {
+
+      if(!dir)
+	dir = proc->cwd;
+      if(process_symlink(proc->root, dir, newpath, oldpath, &err) < 0) {
 	return err;
       }
       else {
@@ -805,7 +867,11 @@ int handle_fs_op_message(region_t r, struct process *proc,
   case METHOD_FSOP_RENAME:
   {
     /* rename() call */
+    struct dir_stack *new_dir;
+    struct dir_stack *old_dir;
     seqf_t newpath;
+    m_dir_fd(&ok, &msg, &cap_args, &new_dir);
+    m_dir_fd(&ok, &msg, &cap_args, &old_dir);
     m_lenblock(&ok, &msg, &newpath);
     if(ok) {
       seqf_t oldpath = msg;
@@ -814,7 +880,14 @@ int handle_fs_op_message(region_t r, struct process *proc,
       log->op_name = "rename";
       *log_msg = cat3(r, mk_leaf(r, oldpath),
 		      mk_string(r, " to "), mk_leaf(r, newpath));
-      if(process_rename(proc, oldpath, newpath, &err) < 0) {
+
+      if(!new_dir)
+	new_dir = proc->cwd;
+      if(!old_dir)
+	old_dir = proc->cwd;
+      if(process_rename(proc->root,
+			old_dir, oldpath,
+			new_dir, newpath, &err) < 0) {
 	return err;
       }
       else {
@@ -828,7 +901,11 @@ int handle_fs_op_message(region_t r, struct process *proc,
   case METHOD_FSOP_LINK:
   {
     /* link() call */
+    struct dir_stack *new_dir;
+    struct dir_stack *old_dir;
     seqf_t newpath;
+    m_dir_fd(&ok, &msg, &cap_args, &new_dir);
+    m_dir_fd(&ok, &msg, &cap_args, &old_dir);
     m_lenblock(&ok, &msg, &newpath);
     if(ok) {
       seqf_t oldpath = msg;
@@ -837,7 +914,14 @@ int handle_fs_op_message(region_t r, struct process *proc,
       log->op_name = "link";
       *log_msg = cat4(r, mk_string(r, "create "), mk_leaf(r, newpath),
 		      mk_string(r, " to link to "), mk_leaf(r, oldpath));
-      if(process_link(proc, oldpath, newpath, &err) < 0) {
+
+      if(!new_dir)
+	new_dir = proc->cwd;
+      if(!old_dir)
+	old_dir = proc->cwd;
+      if(process_link(proc->root,
+		      old_dir, oldpath,
+		      new_dir, newpath, &err) < 0) {
 	return err;
       }
       else {
@@ -855,8 +939,10 @@ int handle_fs_op_message(region_t r, struct process *proc,
        would allow the client process to chmod any file, even those it's
        not supposed to have write access to!  I have now added a chmod
        method to file and directory objects. */
+    struct dir_stack *dir;
     int nofollow;
     int mode;
+    m_dir_fd(&ok, &msg, &cap_args, &dir);
     m_int(&ok, &msg, &nofollow);
     m_int(&ok, &msg, &mode);
     if(ok) {
@@ -865,7 +951,10 @@ int handle_fs_op_message(region_t r, struct process *proc,
 
       log->op_name = nofollow ? "lchmod" : "chmod";
       *log_msg = mk_leaf(r, pathname);
-      if(process_chmod(proc, pathname, mode, nofollow, &err) < 0) {
+
+      if(!dir)
+	dir = proc->cwd;
+      if(process_chmod(proc->root, dir, pathname, mode, nofollow, &err) < 0) {
 	return err;
       }
       else {
@@ -879,8 +968,10 @@ int handle_fs_op_message(region_t r, struct process *proc,
   case METHOD_FSOP_CHOWN:
   {
     /* chown()/lchown() calls.   */
+    struct dir_stack *dir;
     int nofollow;
     int owner_uid, group_gid;
+    m_dir_fd(&ok, &msg, &cap_args, &dir);
     m_int(&ok, &msg, &nofollow);
     m_int(&ok, &msg, &owner_uid);
     m_int(&ok, &msg, &group_gid);
@@ -890,7 +981,10 @@ int handle_fs_op_message(region_t r, struct process *proc,
 
       log->op_name = nofollow ? "lchown" : "chown";
       *log_msg = mk_leaf(r, pathname);
-      if(process_chown(proc, pathname, owner_uid, group_gid,
+
+      if(!dir)
+	dir = proc->cwd;
+      if(process_chown(proc->root, dir, pathname, owner_uid, group_gid,
 		       nofollow, &err) < 0) {
 	return err;
       }
@@ -905,9 +999,11 @@ int handle_fs_op_message(region_t r, struct process *proc,
   case METHOD_FSOP_UTIME:
   {
     /* utime()/utimes()/lutimes() calls */
+    struct dir_stack *dir;
     int nofollow;
     int atime_sec, atime_usec;
     int mtime_sec, mtime_usec;
+    m_dir_fd(&ok, &msg, &cap_args, &dir);
     m_int(&ok, &msg, &nofollow);
     m_int(&ok, &msg, &atime_sec);
     m_int(&ok, &msg, &atime_usec);
@@ -924,7 +1020,11 @@ int handle_fs_op_message(region_t r, struct process *proc,
 
       log->op_name = nofollow ? "lutime" : "utime";
       *log_msg = mk_leaf(r, pathname);
-      if(process_utimes(proc, pathname, nofollow, &atime, &mtime, &err) < 0) {
+
+      if(!dir)
+	dir = proc->cwd;
+      if(process_utimes(proc->root, dir, pathname, nofollow,
+			&atime, &mtime, &err) < 0) {
 	return err;
       }
       else {
@@ -938,13 +1038,18 @@ int handle_fs_op_message(region_t r, struct process *proc,
   case METHOD_FSOP_UNLINK:
   {
     /* unlink() call */
+    struct dir_stack *dir;
+    m_dir_fd(&ok, &msg, &cap_args, &dir);
     if(ok) {
       seqf_t pathname = msg;
       int err;
 
       log->op_name = "unlink";
       *log_msg = mk_leaf(r, pathname);
-      if(process_unlink(proc, pathname, &err) < 0) {
+
+      if(!dir)
+	dir = proc->cwd;
+      if(process_unlink(proc->root, dir, pathname, &err) < 0) {
 	return err;
       }
       else {
@@ -958,13 +1063,18 @@ int handle_fs_op_message(region_t r, struct process *proc,
   case METHOD_FSOP_RMDIR:
   {
     /* rmdir() call */
+    struct dir_stack *dir;
+    m_dir_fd(&ok, &msg, &cap_args, &dir);
     if(ok) {
       seqf_t pathname = msg;
       int err;
 
       log->op_name = "rmdir";
       *log_msg = mk_leaf(r, pathname);
-      if(process_rmdir(proc, pathname, &err) < 0) {
+
+      if(!dir)
+	dir = proc->cwd;
+      if(process_rmdir(proc->root, dir, pathname, &err) < 0) {
 	return err;
       }
       else {

@@ -17,9 +17,13 @@
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
    USA.  */
 
+/* Get AT_FDCWD */
+#define _GNU_SOURCE
+
 /* To get "struct stat64" defined */
 #define _LARGEFILE64_SOURCE
 #include <sys/stat.h>
+#include <fcntl.h>
 
 #include "libc-errno.h"
 #include "libc-comms.h"
@@ -118,10 +122,12 @@ static void m_stat_info(int *ok, seqf_t *msg, int type, void *buf)
 }
 
 /* nofollow=0 for stat, nofollow=1 for lstat. */
-int my_stat(int nofollow, int type, const char *pathname, void *buf)
+int my_statat(int dir_fd, int nofollow, int type, const char *pathname,
+	      void *buf)
 {
   region_t r = region_make();
   cap_t fs_op_server;
+  cap_t dir_obj;
   struct cap_args result;
   log_msg(MOD_MSG "stat\n");
   if(!pathname || !buf) {
@@ -130,8 +136,11 @@ int my_stat(int nofollow, int type, const char *pathname, void *buf)
   }
   if(libc_get_fs_op(&fs_op_server) < 0)
     goto error;
+  if(fds_get_dir_obj(dir_fd, &dir_obj) < 0)
+    goto error;
   cap_call(fs_op_server, r,
-	   pl_pack(r, METHOD_FSOP_STAT, "iS", nofollow, seqf_string(pathname)),
+	   pl_pack(r, METHOD_FSOP_STAT, "diS", dir_obj, nofollow,
+		   seqf_string(pathname)),
 	   &result);
   seqf_t reply = flatten_reuse(r, result.data);
   pl_args_free(&result);
@@ -223,7 +232,7 @@ int new_xstat(int vers, const char *pathname, void *buf)
 #endif
     __set_errno(ENOSYS); return -1;
   }
-  return my_stat(0, type, pathname, buf);
+  return my_statat(AT_FDCWD, FALSE /* nofollow */, type, pathname, buf);
 }
 
 
@@ -246,7 +255,7 @@ int new_xstat64(int vers, const char *pathname, void *buf)
 #endif
     __set_errno(ENOSYS); return -1;
   }
-  return my_stat(0, type, pathname, buf);
+  return my_statat(AT_FDCWD, FALSE /* nofollow */, type, pathname, buf);
 }
 
 
@@ -265,7 +274,7 @@ int new_lxstat(int vers, const char *pathname, void *buf)
 #endif
     __set_errno(ENOSYS); return -1;
   }
-  return my_stat(1, type, pathname, buf);
+  return my_statat(AT_FDCWD, TRUE /* nofollow */, type, pathname, buf);
 }
 
 
@@ -288,7 +297,7 @@ int new_lxstat64(int vers, const char *pathname, void *buf)
 #endif
     __set_errno(ENOSYS); return -1;
   }
-  return my_stat(1, type, pathname, buf);
+  return my_statat(AT_FDCWD, TRUE /* nofollow */, type, pathname, buf);
 }
 
 
@@ -337,20 +346,42 @@ int new_fxstat64(int vers, int fd, void *buf)
 export(new_fxstatat, __fxstatat);
 export(new_fxstatat, __GI___fxstatat);
 
-/* Added in glibc 2.4 */
-int new_fxstatat(int vers, int fd, const char *filename, void *buf, int flag)
+int new_fxstatat(int vers, int dir_fd, const char *filename,
+		 void *buf, int flags)
 {
-  __set_errno(ENOSYS);
-  return -1;
+  int nofollow = (flags & AT_SYMLINK_NOFOLLOW) ? TRUE : FALSE;
+  int type;
+  if((flags & ~AT_SYMLINK_NOFOLLOW) != 0) {
+    __set_errno(EINVAL);
+    return -1;
+  }
+  if(vers == _STAT_VER)
+    type = TYPE_STAT;
+  else {
+    __set_errno(ENOSYS);
+    return -1;
+  }
+  return my_statat(dir_fd, nofollow, type, filename, buf);
 }
 
 
 export(new_fxstatat64, __fxstatat64);
 export(new_fxstatat64, __GI___fxstatat64);
 
-/* Added in glibc 2.4 */
-int new_fxstatat64(int vers, int fd, const char *filename, void *buf, int flag)
+int new_fxstatat64(int vers, int dir_fd, const char *filename,
+		   void *buf, int flags)
 {
-  __set_errno(ENOSYS);
-  return -1;
+  int nofollow = (flags & AT_SYMLINK_NOFOLLOW) ? TRUE : FALSE;
+  int type;
+  if((flags & ~AT_SYMLINK_NOFOLLOW) != 0) {
+    __set_errno(EINVAL);
+    return -1;
+  }
+  if(vers == _STAT_VER)
+    type = TYPE_STAT64;
+  else {
+    __set_errno(ENOSYS);
+    return -1;
+  }
+  return my_statat(dir_fd, nofollow, type, filename, buf);
 }

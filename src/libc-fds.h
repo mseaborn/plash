@@ -55,6 +55,7 @@ extern int g_fds_size;
 
 void fds_resize(int fd);
 void fds_slot_clear(int fd);
+int fds_get_dir_obj(int dir_fd, cap_t *result);
 
 
 #endif

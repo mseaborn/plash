@@ -617,7 +617,7 @@ if [ "$1" != "--include" ]; then
 
 build_small_bits
 (export CC; cd setuid && ./make-setuid.sh)
-./make-objs.pl
+./make_objs.py
 build_libc_ldso_extras
 # Building ld.so first is useful because libc.so and libpthread.so link against it.
 build_ldso

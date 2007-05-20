@@ -205,12 +205,13 @@ int new_openat(int dir_fd, const char *filename, int flags, ...)
   cap_t fs_op_server;
   cap_t dir_obj;
   struct cap_args result;
+  int result_fd = -1;
   log_msg(MOD_MSG "open\n");
   plash_libc_lock();
 
   if(!filename) {
     __set_errno(EINVAL);
-    goto error;
+    goto exit;
   }
   if(flags & O_CREAT) {
     va_list arg;
@@ -219,9 +220,9 @@ int new_openat(int dir_fd, const char *filename, int flags, ...)
     va_end(arg);
   }
   if(libc_get_fs_op(&fs_op_server) < 0)
-    goto error;
+    goto exit;
   if(fds_get_dir_obj(dir_fd, &dir_obj) < 0)
-    goto error;
+    goto exit;
   cap_call(fs_op_server, r,
 	   pl_pack(r, METHOD_FSOP_OPEN, "diiS", dir_obj, flags, mode,
 		   seqf_string(filename)),
@@ -234,9 +235,8 @@ int new_openat(int dir_fd, const char *filename, int flags, ...)
     if(ok && result.fds.count == 1 && result.caps.size == 0) {
       int fd = result.fds.fds[0];
       fds_slot_clear_warn_if_used(fd);
-      plash_libc_unlock();
-      region_free(r);
-      return fd;
+      result_fd = fd;
+      goto exit;
     }
   }
   {
@@ -256,18 +256,17 @@ int new_openat(int dir_fd, const char *filename, int flags, ...)
       log_fd(fd, "fill out fd_dir_obj");
       g_fds[fd].fd_dir_obj = result.caps.caps[0];
 
-      plash_libc_unlock();
-      region_free(r);
-      return fd;
+      result_fd = fd;
+      goto exit;
     }
   }
   caps_free(result.caps);
   close_fds(result.fds);
   set_errno_from_result(r, result);
- error:
+ exit:
   plash_libc_unlock();
   region_free(r);
-  return -1;
+  return result_fd;
 }
 
 
@@ -352,41 +351,38 @@ int new_fchdir(int fd)
 {
   log_msg(MOD_MSG "fchdir\n");
   log_fd(fd, "fchdir");
+  region_t r = region_make();
+  int rc = -1;
+  plash_libc_lock();
   if(0 <= fd && fd < g_fds_size) {
     cap_t obj = g_fds[fd].fd_dir_obj;
     if(obj) {
       struct cap_args result;
-      region_t r = region_make();
       cap_t fs_op_server;
       if(libc_get_fs_op(&fs_op_server) < 0)
-	goto error;
+	goto exit;
       cap_call(fs_op_server, r,
 	       cap_args_dc(mk_int(r, METHOD_FSOP_FCHDIR),
 			   mk_caps1(r, inc_ref(obj))),
 	       &result);
-      {
-	seqf_t msg = flatten_reuse(r, result.data);
-	int ok = 1;
-	m_int_const(&ok, &msg, METHOD_OKAY);
-	m_end(&ok, &msg);
-	if(ok && result.fds.count == 0 && result.caps.size == 0) {
-	  region_free(r);
-	  return 0;
-	}
+      if(pl_unpack(r, result, METHOD_OKAY, "")) {
+	rc = 0;
       }
-      caps_free(result.caps);
-      close_fds(result.fds);
-      set_errno_from_result(r, result);
-    error:
-      region_free(r);
-      return -1;
+      else {
+	set_errno_from_result(r, result);
+	pl_args_free(&result);
+      }
+      goto exit;
     }
   }
   /* This should really return EBADF if there is no file descriptor in
      the slot `fd', but we don't have a good way of checking this.
      Return ENOTDIR to say that the FD is not for a directory. */
   __set_errno(ENOTDIR);
-  return -1;
+ exit:
+  plash_libc_unlock();
+  region_free(r);
+  return rc;
 }
 
 
@@ -941,15 +937,17 @@ int new_readlinkat(int dir_fd, const char *pathname,
   cap_t fs_op_server;
   cap_t dir_obj;
   struct cap_args result;
+  int result_val = -1;
   log_msg(MOD_MSG "readlink\n");
+  plash_libc_lock();
   if(!pathname || !buf) {
     __set_errno(EINVAL);
-    goto error;
+    goto exit;
   }
   if(libc_get_fs_op(&fs_op_server) < 0)
-    goto error;
+    goto exit;
   if(fds_get_dir_obj(dir_fd, &dir_obj) < 0)
-    goto error;
+    goto exit;
   cap_call(fs_op_server, r,
 	   pl_pack(r, METHOD_FSOP_READLINK, "dS",
 		   dir_obj, seqf_string(pathname)),
@@ -960,14 +958,17 @@ int new_readlinkat(int dir_fd, const char *pathname,
     if(count > buf_size)
       count = buf_size;
     memcpy(buf, link_dest.data, count);
-    region_free(r);
-    return count;
+    result_val = count;
+    goto exit;
   }
-  set_errno_from_result(r, result);
-  pl_args_free(&result);
- error:
+  else {
+    set_errno_from_result(r, result);
+    pl_args_free(&result);
+  }
+ exit:
+  plash_libc_unlock();
   region_free(r);
-  return -1;
+  return result_val;
 }
 
 
@@ -991,29 +992,33 @@ int new_faccessat(int dir_fd, const char *pathname, unsigned int mode,
   cap_t fs_op_server;
   cap_t dir_obj;
   struct cap_args result;
+  int rc = -1;
   log_msg(MOD_MSG "access\n");
+  plash_libc_lock();
   /* TODO: support AT_SYMLINK_NOFOLLOW and AT_EACCESS */
   if(!pathname || flags != 0) {
     __set_errno(EINVAL);
-    goto error;
+    goto exit;
   }
   if(libc_get_fs_op(&fs_op_server) < 0)
-    goto error;
+    goto exit;
   if(fds_get_dir_obj(dir_fd, &dir_obj) < 0)
-    goto error;
+    goto exit;
   cap_call(fs_op_server, r,
 	   pl_pack(r, METHOD_FSOP_ACCESS, "diS", dir_obj, mode,
 		   seqf_string(pathname)),
 	   &result);
   if(pl_unpack(r, result, METHOD_OKAY, "")) {
-    region_free(r);
-    return 0;
+    rc = 0;
   }
-  set_errno_from_result(r, result);
-  pl_args_free(&result);
- error:
+  else {
+    set_errno_from_result(r, result);
+    pl_args_free(&result);
+  }
+ exit:
+  plash_libc_unlock();
   region_free(r);
-  return -1;
+  return rc;
 }
 
 /* nofollow=0 for chmod, nofollow=1 for lchmod. */
@@ -1030,27 +1035,31 @@ int my_chmod(int dir_fd, int nofollow, const char *pathname, unsigned int mode)
   cap_t fs_op_server;
   cap_t dir_obj;
   struct cap_args result;
+  int rc = -1;
+  plash_libc_lock();
   if(!pathname) {
     __set_errno(EINVAL);
-    goto error;
+    goto exit;
   }
   if(libc_get_fs_op(&fs_op_server) < 0)
-    goto error;
+    goto exit;
   if(fds_get_dir_obj(dir_fd, &dir_obj) < 0)
-    goto error;
+    goto exit;
   cap_call(fs_op_server, r,
 	   pl_pack(r, METHOD_FSOP_CHMOD, "diiS",
 		   dir_obj, nofollow, mode, seqf_string(pathname)),
 	   &result);
   if(pl_unpack(r, result, METHOD_OKAY, "")) {
-    region_free(r);
-    return 0;
+    rc = 0;
   }
-  set_errno_from_result(r, result);
-  pl_args_free(&result);
- error:
+  else {
+    set_errno_from_result(r, result);
+    pl_args_free(&result);
+  }
+ exit:
+  plash_libc_unlock();
   region_free(r);
-  return -1;
+  return rc;
 }
 
 
@@ -1099,27 +1108,31 @@ static int my_chown(int dir_fd, int nofollow, const char *pathname,
   cap_t fs_op_server;
   cap_t dir_obj;
   struct cap_args result;
+  int rc = -1;
+  plash_libc_lock();
   if(!pathname) {
     __set_errno(EINVAL);
-    goto error;
+    goto exit;
   }
   if(libc_get_fs_op(&fs_op_server) < 0)
-    goto error;
+    goto exit;
   if(fds_get_dir_obj(dir_fd, &dir_obj) < 0)
-    goto error;
+    goto exit;
   cap_call(fs_op_server, r,
 	   pl_pack(r, METHOD_FSOP_CHOWN, "diiiS", dir_obj, nofollow,
 		   owner_uid, group_gid, seqf_string(pathname)),
 	   &result);
   if(pl_unpack(r, result, METHOD_OKAY, "")) {
-    region_free(r);
-    return 0;
+    rc = 0;
   }
-  set_errno_from_result(r, result);
-  pl_args_free(&result);
- error:
+  else {
+    set_errno_from_result(r, result);
+    pl_args_free(&result);
+  }
+ exit:
+  plash_libc_unlock();
   region_free(r);
-  return -1;
+  return rc;
 }
 
 
@@ -1183,19 +1196,21 @@ int new_renameat(int old_dir_fd, const char *oldpath,
   cap_t new_dir_obj;
   cap_t old_dir_obj;
   struct cap_args result;
+  int rc = -1;
+  plash_libc_lock();
   log_msg(MOD_MSG "rename\n");
   if(!oldpath || !newpath) {
     __set_errno(EINVAL);
-    goto error;
+    goto exit;
   }
   if(libc_get_fs_op(&fs_op_server) < 0)
-    goto error;
+    goto exit;
   if(fds_get_dir_obj(old_dir_fd, &old_dir_obj) < 0)
-    goto error;
+    goto exit;
   if(fds_get_dir_obj(new_dir_fd, &new_dir_obj) < 0) {
     if(old_dir_obj)
       filesys_obj_free(old_dir_obj);
-    goto error;
+    goto exit;
   }
   cap_call(fs_op_server, r,
 	   pl_pack(r, METHOD_FSOP_RENAME, "ddsS",
@@ -1203,14 +1218,16 @@ int new_renameat(int old_dir_fd, const char *oldpath,
 		   seqf_string(newpath), seqf_string(oldpath)),
 	   &result);
   if(pl_unpack(r, result, METHOD_OKAY, "")) {
-    region_free(r);
-    return 0;
+    rc = 0;
   }
-  set_errno_from_result(r, result);
-  pl_args_free(&result);
- error:
+  else {
+    set_errno_from_result(r, result);
+    pl_args_free(&result);
+  }
+ exit:
+  plash_libc_unlock();
   region_free(r);
-  return -1;
+  return rc;
 }
 
 
@@ -1235,19 +1252,21 @@ int new_linkat(int old_dir_fd, const char *oldpath,
   cap_t new_dir_obj;
   cap_t old_dir_obj;
   struct cap_args result;
+  int rc = -1;
+  plash_libc_lock();
   log_msg(MOD_MSG "link\n");
   if(!oldpath || !newpath || flags != 0) {
     __set_errno(EINVAL);
-    goto error;
+    goto exit;
   }
   if(libc_get_fs_op(&fs_op_server) < 0)
-    goto error;
+    goto exit;
   if(fds_get_dir_obj(old_dir_fd, &old_dir_obj) < 0)
-    goto error;
+    goto exit;
   if(fds_get_dir_obj(new_dir_fd, &new_dir_obj) < 0) {
     if(old_dir_obj)
       filesys_obj_free(old_dir_obj);
-    goto error;
+    goto exit;
   }
   cap_call(fs_op_server, r,
 	   pl_pack(r, METHOD_FSOP_LINK, "ddsS",
@@ -1255,14 +1274,16 @@ int new_linkat(int old_dir_fd, const char *oldpath,
 		   seqf_string(newpath), seqf_string(oldpath)),
 	   &result);
   if(pl_unpack(r, result, METHOD_OKAY, "")) {
-    region_free(r);
-    return 0;
+    rc = 0;
   }
-  set_errno_from_result(r, result);
-  pl_args_free(&result);
- error:
+  else {
+    set_errno_from_result(r, result);
+    pl_args_free(&result);
+  }
+ exit:
+  plash_libc_unlock();
   region_free(r);
-  return -1;
+  return rc;
 }
 
 
@@ -1285,28 +1306,32 @@ int new_symlinkat(const char *oldpath, int dir_fd, const char *newpath)
   cap_t fs_op_server;
   cap_t dir_obj;
   struct cap_args result;
+  int rc = -1;
+  plash_libc_lock();
   log_msg(MOD_MSG "symlink\n");
   if(!oldpath || !newpath) {
     __set_errno(EINVAL);
-    goto error;
+    goto exit;
   }
   if(libc_get_fs_op(&fs_op_server) < 0)
-    goto error;
+    goto exit;
   if(fds_get_dir_obj(dir_fd, &dir_obj) < 0)
-    goto error;
+    goto exit;
   cap_call(fs_op_server, r,
 	   pl_pack(r, METHOD_FSOP_SYMLINK, "dsS",
 		   dir_obj, seqf_string(newpath), seqf_string(oldpath)),
 	   &result);
   if(pl_unpack(r, result, METHOD_OKAY, "")) {
-    region_free(r);
-    return 0;
+    rc = 0;
   }
-  set_errno_from_result(r, result);
-  pl_args_free(&result);
- error:
+  else {
+    set_errno_from_result(r, result);
+    pl_args_free(&result);
+  }
+ exit:
+  plash_libc_unlock();
   region_free(r);
-  return -1;
+  return rc;
 }
 
 
@@ -1329,28 +1354,32 @@ int new_mkdirat(int dir_fd, const char *pathname, unsigned int mode)
   cap_t fs_op_server;
   cap_t dir_obj;
   struct cap_args result;
+  int rc = -1;
+  plash_libc_lock();
   log_msg(MOD_MSG "mkdir\n");
   if(!pathname) {
     __set_errno(EINVAL);
-    goto error;
+    goto exit;
   }
   if(libc_get_fs_op(&fs_op_server) < 0)
-    goto error;
+    goto exit;
   if(fds_get_dir_obj(dir_fd, &dir_obj) < 0)
-    goto error;
+    goto exit;
   cap_call(fs_op_server, r,
 	   pl_pack(r, METHOD_FSOP_MKDIR, "diS",
 		   dir_obj, mode, seqf_string(pathname)),
 	   &result);
   if(pl_unpack(r, result, METHOD_OKAY, "")) {
-    region_free(r);
-    return 0;
+    rc = 0;
   }
-  set_errno_from_result(r, result);
-  pl_args_free(&result);
- error:
+  else {
+    set_errno_from_result(r, result);
+    pl_args_free(&result);
+  }
+ exit:
+  plash_libc_unlock();
   region_free(r);
-  return -1;
+  return rc;
 }
 
 
@@ -1383,15 +1412,17 @@ int new_unlinkat(int dir_fd, const char *pathname, int flags)
   cap_t fs_op_server;
   cap_t dir_obj;
   struct cap_args result;
+  int rc = -1;
+  plash_libc_lock();
   log_msg(MOD_MSG "unlink\n");
   if(!pathname || (flags & ~AT_REMOVEDIR) != 0) {
     __set_errno(EINVAL);
-    goto error;
+    goto exit;
   }
   if(libc_get_fs_op(&fs_op_server) < 0)
-    goto error;
+    goto exit;
   if(fds_get_dir_obj(dir_fd, &dir_obj) < 0)
-    goto error;
+    goto exit;
   cap_call(fs_op_server, r,
 	   pl_pack(r, (flags & AT_REMOVEDIR
 		       ? METHOD_FSOP_RMDIR : METHOD_FSOP_UNLINK),
@@ -1399,14 +1430,16 @@ int new_unlinkat(int dir_fd, const char *pathname, int flags)
 		   dir_obj, seqf_string(pathname)),
 	   &result);
   if(pl_unpack(r, result, METHOD_OKAY, "")) {
-    region_free(r);
-    return 0;
+    rc = 0;
   }
-  set_errno_from_result(r, result);
-  pl_args_free(&result);
- error:
+  else {
+    set_errno_from_result(r, result);
+    pl_args_free(&result);
+  }
+ exit:
+  plash_libc_unlock();
   region_free(r);
-  return -1;
+  return rc;
 }
 
 

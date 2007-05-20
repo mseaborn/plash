@@ -129,6 +129,8 @@ int my_statat(int dir_fd, int nofollow, int type, const char *pathname,
   cap_t fs_op_server;
   cap_t dir_obj;
   struct cap_args result;
+  int rc = -1;
+  plash_libc_lock();
   log_msg(MOD_MSG "stat\n");
   if(!pathname || !buf) {
     __set_errno(EINVAL);
@@ -151,33 +153,37 @@ int my_statat(int dir_fd, int nofollow, int type, const char *pathname,
     m_stat_info(&ok, &msg, type, buf);
     m_end(&ok, &msg);
     if(ok) {
-      region_free(r);
-      return 0;
+      rc = 0;
+      goto error;
     }
   }
   set_errno_from_reply(reply);
  error:
+  plash_libc_unlock();
   region_free(r);
-  return -1;
+  return rc;
 }
 
 int my_fstat(int type, int fd, void *buf)
 {
   log_msg(MOD_MSG "fstat\n");
+  plash_libc_lock();
 
   if(0 <= fd && fd < g_fds_size && g_fds[fd].fd_dir_obj) {
     /* Handle directory FDs specially:  send a message. */
     cap_t dir_obj = g_fds[fd].fd_dir_obj;
     region_t r = region_make();
+    cap_t fs_op_server;
     struct cap_args result;
+    int rc = -1;
     log_fd(fd, "fstat on directory");
     if(!buf) {
       __set_errno(EINVAL);
-      goto error;
+      goto exit;
     }
-    if(plash_init() < 0) { goto error; }
-    if(!fs_server) { __set_errno(ENOSYS); goto error; }
-    cap_call(fs_server, r,
+    if(libc_get_fs_op(&fs_op_server) < 0)
+      goto exit;
+    cap_call(fs_op_server, r,
 	     cap_args_dc(mk_int(r, METHOD_FSOP_DIR_FSTAT),
 			 mk_caps1(r, inc_ref(dir_obj))),
 	     &result);
@@ -188,18 +194,20 @@ int my_fstat(int type, int fd, void *buf)
       m_stat_info(&ok, &msg, type, buf);
       m_end(&ok, &msg);
       if(ok && result.fds.count == 0 && result.caps.size == 0) {
-	region_free(r);
-	return 0;
+	rc = 0;
+	goto exit;
       }
     }
-    caps_free(result.caps);
-    close_fds(result.fds);
+    pl_args_free(&result);
     set_errno_from_reply(flatten_reuse(r, result.data));
-  error:
+  exit:
+    plash_libc_unlock();
     region_free(r);
-    return -1;
+    return rc;
   }
   else {
+    plash_libc_unlock();
+
     /* Use the normal fstat system call. */
     log_fd(fd, "normal fstat");
     if(type == TYPE_STAT) {

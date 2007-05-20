@@ -43,14 +43,16 @@ my_utimesat_nodefault(int dir_fd, int nofollow, const char *pathname,
   cap_t fs_op_server;
   cap_t dir_obj;
   struct cap_args result;
+  int rc = -1;
+  plash_libc_lock();
   if(!pathname || !atime || !mtime) {
     __set_errno(EINVAL);
-    goto error;
+    goto exit;
   }
   if(libc_get_fs_op(&fs_op_server) < 0)
-    goto error;
+    goto exit;
   if(fds_get_dir_obj(dir_fd, &dir_obj) < 0)
-    goto error;
+    goto exit;
   cap_call(fs_op_server, r,
 	   pl_pack(r, METHOD_FSOP_UTIME, "diiiiiS",
 		   dir_obj, nofollow,
@@ -59,14 +61,16 @@ my_utimesat_nodefault(int dir_fd, int nofollow, const char *pathname,
 		   seqf_string(pathname)),
 	   &result);
   if(pl_unpack(r, result, METHOD_OKAY, "")) {
-    region_free(r);
-    return 0;
+    rc = 0;
   }
-  set_errno_from_reply(flatten_reuse(r, result.data));
-  pl_args_free(&result);
- error:
+  else {
+    set_errno_from_reply(flatten_reuse(r, result.data));
+    pl_args_free(&result);
+  }
+ exit:
+  plash_libc_unlock();
   region_free(r);
-  return -1;
+  return rc;
 }
 
 

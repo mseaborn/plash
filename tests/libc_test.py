@@ -20,6 +20,7 @@
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -33,38 +34,7 @@ import plash.process
 prototypes = r"""
 #include <assert.h>
 
-void t_check_zero(int return_code);
-void t_check(int x);
-int get_dir_fd(const char *dir_pathname);
-"""
-
-shared_code = r"""
-#include <stdio.h>
-#include <stdlib.h>
-#include <fcntl.h>
-
-void t_check_zero(int return_code)
-{
-  if(return_code != 0) {
-    perror("system call");
-    exit(1);
-  }
-}
-
-void t_check(int x)
-{
-  if(!x) {
-    perror("system call");
-    exit(1);
-  }
-}
-
-int get_dir_fd(const char *dir_pathname)
-{
-  int dir_fd = open(dir_pathname, O_RDONLY);
-  t_check(dir_fd >= 0);
-  return dir_fd;
-}
+#include "test-util.h"
 """
 
 
@@ -162,9 +132,13 @@ int main()
   return 0;
 }
 """ % self.entry
-        write_file("test-case.c", prototypes + self.code + shared_code + main_func)
+        write_file("test-case.c", prototypes + self.code + main_func)
+        src_dir = os.path.dirname(__file__)
         rc = subprocess.call(["gcc", "-Wall", "-D_GNU_SOURCE",
-                              "test-case.c", "-o", "test-case"])
+                              "-I%s" % src_dir,
+                              os.path.join(src_dir, "test-util.c"),
+                              "test-case.c",
+                              "-o", "test-case"])
         assert rc == 0
         self._method_calls = []
 
@@ -1023,8 +997,11 @@ int main(int argc, char **argv)
   return 1;
 }
 """
-    write_file("test-cases.c", prototypes + code + shared_code + main_func)
+    write_file("test-cases.c", prototypes + code + main_func)
+    src_dir = os.path.dirname(__file__)
     rc = subprocess.call(["gcc", "-Wall", "-D_GNU_SOURCE",
+                          "-I%s" % src_dir,
+                          os.path.join(src_dir, "test-util.c"),
                           "test-cases.c"] + c_files +
                          ["-o", "test-case"])
     assert rc == 0
@@ -1054,4 +1031,8 @@ def run_tests(suite):
 
 
 if __name__ == "__main__":
-    run_tests(get_test_suite(__import__("__main__")))
+    if sys.argv[1:] == ["--slow"]:
+        sys.argv.pop(1)
+        unittest.main()
+    else:
+        run_tests(get_test_suite(__import__("__main__")))

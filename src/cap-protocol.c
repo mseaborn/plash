@@ -124,7 +124,8 @@ struct connection {
   int import_count;
 
 #ifdef PLASH_GLIB
-  GIOChannel *ch;
+  GIOChannel *g_channel;
+  int watch_id;
 #endif
 };
 
@@ -185,7 +186,9 @@ static void shut_down_connection(struct connection *conn)
   assert(conn->comm); /* Connection should not have been shut down already */
 
 #ifdef PLASH_GLIB
-  g_io_channel_unref(conn->ch);
+  g_io_channel_unref(conn->g_channel);
+  int removed_ok = g_source_remove(conn->watch_id);
+  assert(removed_ok);
 #endif
 
   /* Close socket and connection. */
@@ -212,7 +215,8 @@ static void shut_down_connection(struct connection *conn)
     conn->export_count = 0;
     conn->export_next = 0;
 #ifdef PLASH_GLIB
-    conn->ch = 0;
+    conn->g_channel = NULL;
+    conn->watch_id = -1;
 #endif
   }
   else {
@@ -764,9 +768,10 @@ cap_t *cap_make_connection(region_t r, int sock_fd,
   server_state.total_export_count += export.size;
 
 #ifdef PLASH_GLIB
-  conn->ch = g_io_channel_unix_new(sock_fd);
-  g_io_add_watch(conn->ch, G_IO_IN | G_IO_ERR | G_IO_HUP | G_IO_NVAL,
-		 event_handler, conn);
+  conn->g_channel = g_io_channel_unix_new(sock_fd);
+  conn->watch_id = g_io_add_watch(conn->g_channel,
+				  G_IO_IN | G_IO_ERR | G_IO_HUP | G_IO_NVAL,
+				  event_handler, conn);
 #endif
 
   /* Create imported object references. */

@@ -47,8 +47,11 @@ def make_process(app_dir):
     my_root = FileNamespace()
     caller_root = plash.env.get_root_dir()
     proc = Process()
-    proc.env = os.environ.copy()
     proc.cwd_path = "/"
+
+    for var in ["HOME"]:
+        if var in os.environ:
+            proc.env[var] = os.environ[var]
 
     state = plash.pola_run_args.ProcessSetup(proc)
     state.caller_root = caller_root

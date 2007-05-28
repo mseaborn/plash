@@ -180,7 +180,10 @@ class ProcessSetup(object):
         ns.resolve_populate(self.caller_root, self.proc.root_node,
                             "/tmp/.X11-unix/",
                             flags=ns.FS_FOLLOW_SYMLINKS | ns.FS_OBJECT_RW)
-        if 'XAUTHORITY' in os.environ:
+        if "DISPLAY" in os.environ:
+            self.proc.env["DISPLAY"] = os.environ["DISPLAY"]
+        if "XAUTHORITY" in os.environ:
+            self.proc.env["XAUTHORITY"] = os.environ["XAUTHORITY"]
             ns.resolve_populate(self.caller_root, self.proc.root_node,
                                 os.environ['XAUTHORITY'],
                                 flags=ns.FS_FOLLOW_SYMLINKS)

@@ -29,6 +29,7 @@ import gobject
 import os
 import sys
 
+import plash_core
 import plash.namespace as ns
 import plash.mainloop
 import plash.process
@@ -44,6 +45,35 @@ def restore_cwd_hack():
     os.chdir(cwd)
 
 
+STDIN_FILENO = 0
+STDOUT_FILENO = 1
+STDERR_FILENO = 2
+
+
+class InteractiveMode(object):
+
+    def __init__(self, proc, setup):
+        self._fd_forwarders = setup.grant_proxy_terminal_access()
+
+    def finished(self):
+        for forwarder in self._fd_forwarders:
+            forwarder.flush()
+
+
+class NoninteractiveMode(object):
+
+    def __init__(self, proc, setup):
+        output_fd, self._forwarder = \
+            plash.filedesc.proxy_output_fd(os.dup(STDOUT_FILENO))
+        proc.fds[STDIN_FILENO] = \
+            plash_core.wrap_fd(os.open("/dev/null", os.O_WRONLY))
+        proc.fds[STDOUT_FILENO] = output_fd
+        proc.fds[STDERR_FILENO] = output_fd
+
+    def finished(self):
+        self._forwarder.flush()
+
+
 def init_package(unpack_cache, app_dir, pkg, control_script, args):
     my_root = plash_pkg.launch.FileNamespace()
     restore_cwd_hack()
@@ -54,30 +84,29 @@ def init_package(unpack_cache, app_dir, pkg, control_script, args):
 
     restore_cwd_hack()
     if os.path.exists(script_path):
+        sys.stdout.write("-- %s_%s %s\n" %
+                         (pkg["package"], pkg["version"], control_script))
+        sys.stdout.flush()
         ns.attach_at_path(proc.root_node, "/script",
                           my_root.get_obj(script_path))
         proc.cmd = "/script"
         proc.args = args
-        fd_forwarders = setup.grant_proxy_terminal_access()
+        helper = NoninteractiveMode(proc, setup)
         pid = proc.spawn()
         reason_to_run = plash.mainloop.ReasonToRun()
         def child_exit_callback(pid_unused, status):
             reason_to_run.dispose()
-            for forwarder in fd_forwarders:
-                forwarder.flush()
+            helper.finished()
         gobject.child_watch_add(pid, child_exit_callback)
         # TODO: give error if process's exit status is non-zero
         # TODO: ensure we stop running server when child process exits
         plash.mainloop.run_server()
-    else:
-        print "  no %s" % control_script
 
 def init_packages(unpack_cache, app_dir):
     fh = open(os.path.join(app_dir, "package-list"), "r")
     try:
         for block in plash_pkg.control.file_blocks(fh):
             pkg = plash_pkg.control.block_fields(block)
-            print "%s_%s" % (pkg["package"], pkg["version"])
             init_package(unpack_cache, app_dir, pkg, "preinst", ["install"])
             init_package(unpack_cache, app_dir, pkg, "postinst", ["configure"])
     finally:

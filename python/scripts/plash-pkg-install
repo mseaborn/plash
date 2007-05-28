@@ -56,29 +56,39 @@ def look_up_in_path(name):
             return filename
     raise Exception("Executable not found in PATH: %s" % name)
 
-def run_cmd(*args):
-    rc = subprocess.call(args)
+def run_cmd(args, **kwargs):
+    rc = subprocess.call(args, **kwargs)
     if rc != 0:
         raise Exception("Command failed with code %i: %s"
                         % (rc, " ".join(args)))
 
 
+class Logger(object):
+
+    def log(self, msg):
+        print "-- %s" % msg
+
+
 class AppDir(object):
 
-    def __init__(self, dir):
+    def __init__(self, dir, logger):
         self.dir = dir
+        self._logger = logger
         self.config = read_config_file(os.path.join(dir, "config"))
 
     def choose_and_unpack(self):
-        run_cmd("plash-pkg-choose", self.dir, self.config["depends"])
-        run_cmd("plash-pkg-fetch", os.path.join(self.dir, "package-list"))
+        self._logger.log("choosing packages (following dependencies)")
+        run_cmd(["plash-pkg-choose", self.dir, self.config["depends"]])
+        self._logger.log("fetching .deb packages")
+        run_cmd(["plash-pkg-fetch", os.path.join(self.dir, "package-list")])
+        self._logger.log("unpacking")
         # Delete any existing unpacked tree
         unpack_dir = os.path.join(self.dir, "unpacked")
         if os.path.exists(unpack_dir):
-            run_cmd("rm", "-rf", unpack_dir)
-        run_cmd("plash-pkg-unpack",
-                os.path.join(self.dir, "package-list"),
-                unpack_dir)
+            run_cmd(["rm", "-rf", unpack_dir])
+        run_cmd(["plash-pkg-unpack",
+                 os.path.join(self.dir, "package-list"),
+                 unpack_dir])
 
     def init_write_layer(self):
         dest = os.path.join(self.dir, "write_layer")
@@ -125,11 +135,17 @@ class AppDir(object):
                         for key, value in fields])
 
     def write_desktop_file(self):
-        plash_pkg.utils.write_file(
-            os.path.join(plash_pkg.config.get_desktop_files_dir(),
-                         "plash-%s.desktop"
-                         % self.config["pet-id"]),
-            self.desktop_file())
+        dest_file = os.path.join(plash_pkg.config.get_desktop_files_dir(),
+                                 "plash-%s.desktop"
+                                 % self.config["pet-id"])
+        self._logger.log("writing desktop file: %s" % dest_file)
+        plash_pkg.utils.write_file(dest_file, self.desktop_file())
+
+    def run_debian_preinst_postinst_scripts(self):
+        self._logger.log("running deb preinst/postinst scripts")
+        log_file = open(os.path.join(self.dir, "deb-inst-log"), "w")
+        run_cmd(["plash-pkg-deb-inst", self.dir],
+                stdout=log_file, stderr=log_file)
 
 
 def main(args):
@@ -150,10 +166,11 @@ def main(args):
         print __doc__
         return 1
     
-    app = AppDir(app_dir)
+    app = AppDir(app_dir, Logger())
     app.choose_and_unpack()
     app.init_write_layer()
     app.write_desktop_file()
+    app.run_debian_preinst_postinst_scripts()
 
 
 if __name__ == "__main__":

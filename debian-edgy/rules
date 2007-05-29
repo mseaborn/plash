@@ -57,7 +57,7 @@ build:	stamp-dir/build-glibc configure
 	(cd web-site && ./make.pl)
 
 binary-arch:	checkroot build
-	sh ./make-package.sh
+	bash ./make-package.sh
 
 binary-indep:
 	# nothing

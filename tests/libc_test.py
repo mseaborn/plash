@@ -46,6 +46,21 @@ def write_file(filename, data):
         fh.close()
 
 
+class TempMaker(object):
+
+    def __init__(self):
+        self._dirs = []
+
+    def make_temp_dir(self):
+        tmp_dir = tempfile.mkdtemp(prefix="testcase-tmp")
+        self._dirs.append(tmp_dir)
+        return tmp_dir
+
+    def destroy(self):
+        for tmp_dir in self._dirs:
+            shutil.rmtree(tmp_dir)
+
+
 class ProcessExitError(Exception):
 
     pass
@@ -125,6 +140,14 @@ void test_base()
         pass
 
     def setUp(self):
+        self._temp_maker = TempMaker()
+        self._executable = self._compile_executable()
+
+    def tearDown(self):
+        self._temp_maker.destroy()
+
+    def _compile_executable(self):
+        tmp_dir = self._temp_maker.make_temp_dir()
         main_func = r"""
 int main()
 {
@@ -132,48 +155,49 @@ int main()
   return 0;
 }
 """ % self.entry
-        write_file("test-case.c", prototypes + self.code + main_func)
+        write_file(os.path.join(tmp_dir, "test-case.c"),
+                   prototypes + self.code + main_func)
         src_dir = os.path.dirname(__file__)
         rc = subprocess.call(["gcc", "-Wall", "-D_GNU_SOURCE",
                               "-I%s" % src_dir,
                               os.path.join(src_dir, "test-util.c"),
-                              "test-case.c",
-                              "-o", "test-case"])
+                              os.path.join(tmp_dir, "test-case.c"),
+                              "-o", os.path.join(tmp_dir, "test-case")])
         assert rc == 0
-        self._method_calls = []
+        return os.path.join(tmp_dir, "test-case")
 
     def _test_main(self, f):
-        if os.path.exists("tmp-dir"):
-            shutil.rmtree("tmp-dir")
-        os.mkdir("tmp-dir")
         start_dir = os.open(".", os.O_RDONLY)
+        tmp_dir = self._temp_maker.make_temp_dir()
         try:
-            os.chdir("tmp-dir")
+            os.chdir(tmp_dir)
             f()
         finally:
             os.fchdir(start_dir)
 
     def test_native(self):
         def run():
-            rc = subprocess.call(["../test-case"] + self.main_args)
+            rc = subprocess.call([self._executable] + self.main_args)
             assert rc == 0
         self._test_main(run)
 
     def test_pola_run(self):
         def run():
-            rc = subprocess.call(["pola-run", "-B", "-fw=.", "-f=../test-case",
-                                  "-e", "../test-case"] + self.main_args)
+            rc = subprocess.call(["pola-run", "-B", "-fw=.",
+                                  "-f", self._executable,
+                                  "-e", self._executable] + self.main_args)
             assert rc == 0
         self._test_main(run)
 
     def _run_plash_process(self, proc):
-        proc.cwd_path = os.getcwd()
+        tmp_dir = self._temp_maker.make_temp_dir()
+        proc.cwd_path = tmp_dir
         proc.env = os.environ.copy()
         state = plash.pola_run_args.ProcessSetup(proc)
         state.caller_root = plash.env.get_root_dir()
-        state.cwd = ns.resolve_dir(state.caller_root, proc.cwd_path)
-        state.handle_args(["-B", "-fw=.", "-f=../test-case",
-                           "-e", "../test-case"] + self.main_args)
+        state.handle_args(["-B", "-fw", tmp_dir,
+                           "-f", self._executable,
+                           "-e", self._executable] + self.main_args)
         if "PLASH_LIBRARY_DIR" in os.environ:
             state.handle_args(["-f", os.environ["PLASH_LIBRARY_DIR"]])
         pid = proc.spawn()
@@ -997,29 +1021,28 @@ int main(int argc, char **argv)
   return 1;
 }
 """
-    write_file("test-cases.c", prototypes + code + main_func)
+    write_file(os.path.join(tmp_dir, "test-cases.c"),
+               prototypes + code + main_func)
     src_dir = os.path.dirname(__file__)
     rc = subprocess.call(["gcc", "-Wall", "-D_GNU_SOURCE",
                           "-I%s" % src_dir,
                           os.path.join(src_dir, "test-util.c"),
-                          "test-cases.c"] + c_files +
-                         ["-o", "test-case"])
+                          os.path.join(tmp_dir, "test-cases.c")] + c_files +
+                         ["-o", os.path.join(tmp_dir, "test-case")])
     assert rc == 0
+    return os.path.join(tmp_dir, "test-case")
 
 
-def get_test_suite(module):
+def get_test_suite(module, temp_maker):
     cases = [x for x in module.__dict__.values()
              if isinstance(x, type) and issubclass(x, LibcTest)]
-    tmp_dir = tempfile.mkdtemp()
-    try:
-        compile_into_one_executable(cases, tmp_dir)
-    finally:
-        shutil.rmtree(tmp_dir)
+    tmp_dir = temp_maker.make_temp_dir()
+    executable = compile_into_one_executable(cases, tmp_dir)
     suite = unittest.TestSuite()
     for case in cases:
         class Case(case):
-            def setUp(self):
-                pass
+            def _compile_executable(self):
+                return executable
             main_args = [case.entry]
         Case.__name__ = case.__name__
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(Case))
@@ -1035,4 +1058,8 @@ if __name__ == "__main__":
         sys.argv.pop(1)
         unittest.main()
     else:
-        run_tests(get_test_suite(__import__("__main__")))
+        temp_maker = TempMaker()
+        try:
+            run_tests(get_test_suite(__import__("__main__"), temp_maker))
+        finally:
+            temp_maker.destroy()

@@ -41,21 +41,10 @@ DEST=$OUT/plash-$VERSION
 svn export . $DEST.first-orig
 ./get-svn-revision.pl > $DEST.first-orig/svn-revision
 
-(cd $DEST.first-orig
-
-echo -- autoconf
-autoconf
-rm -rv autom4te.cache
-
-# Large files for web site not needed
-rm -rv web-site/screenshot-*.png
-)
-
 if [ "$CREATE_ORIG" = yes ]; then
   # Create the .orig tarball without any debian directories in it
   echo "---- creating .orig tarball"
   cp -lr $DEST.first-orig $DEST.orig
-  rm $DEST.orig/debian
   rm -r $DEST.orig/debian-*
   tar -czf $OUT/plash_$VERSION.orig.tar.gz -C $OUT plash-$VERSION.orig
 else
@@ -73,7 +62,6 @@ for VARIANT in $@; do
   cp -lr $OUT/plash_$VERSION.orig.tar.gz $OUT/$VARIANT/
   
   cp -lr $DEST.first-orig $OUT/$VARIANT/plash-$VERSION
-  rm $OUT/$VARIANT/plash-$VERSION/debian
   rm -r $OUT/$VARIANT/plash-$VERSION/debian-*
   cp -lr $DEST.first-orig/$VARIANT $OUT/$VARIANT/plash-$VERSION/debian
   # The -ss option tells dpkg-source that both the directory

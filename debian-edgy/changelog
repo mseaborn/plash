@@ -1,9 +1,8 @@
-plash (1.17-2ubuntu1) unstable; urgency=low
+plash (1.18-1edgy1) unstable; urgency=low
 
-  * Lintian fix: Install changelog under correct name (use debhelper).
-  * Lintian fix: Ensure Python module plash.so is stripped (use debhelper).
+  * New release.  See SVN repository for details of changes.
 
- -- Mark Seaborn <mrs@mythic-beasts.com>  Fri, 29 Dec 2006 15:32:15 +0000
+ -- Mark Seaborn <mrs@mythic-beasts.com>  Fri, 01 Jun 2007 22:30:50 +0100
 
 plash (1.17-1ubuntu1) unstable; urgency=low
 

@@ -67,7 +67,7 @@ for VARIANT in $@; do
   # The -ss option tells dpkg-source that both the directory
   # and the tarfile are available.  It uses the directory for
   # the diff and the tar for the hash.
-  (cd $OUT/$VARIANT && dpkg-source -b -ss plash-$VERSION)
+  (cd $OUT/$VARIANT && dpkg-source -b -ss plash-$VERSION) || false
   
   # Tidy up: unpacked trees not needed
   rm -r $OUT/$VARIANT/plash-$VERSION.orig

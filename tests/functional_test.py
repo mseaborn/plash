@@ -19,6 +19,7 @@
 
 import os
 import shutil
+import signal
 import subprocess
 import tempfile
 import unittest
@@ -111,13 +112,10 @@ myecho 'Hello there'
     # TODO: shell_execobj_cwd_set
 
 
-pola_run = "pola-run-py"
-
-
-class PolaRunTests(TestCaseChdir):
+class PolaRunTestsMixin(object):
 
     def test_echo(self):
-        proc = subprocess.Popen([pola_run, "-B", "--prog", "/bin/echo",
+        proc = subprocess.Popen([self._pola_run, "-B", "--prog", "/bin/echo",
                                  "-a", "Hello world"],
                                 stdout=subprocess.PIPE)
         stdout, stderr = proc.communicate()
@@ -125,7 +123,7 @@ class PolaRunTests(TestCaseChdir):
 
     def test_echo_path(self):
         """Expects pola-run to look up the executable name in PATH."""
-        proc = subprocess.Popen([pola_run, "-B", "--prog", "echo",
+        proc = subprocess.Popen([self._pola_run, "-B", "--prog", "echo",
                                  "-a", "Hello world"],
                                 stdout=subprocess.PIPE)
         stdout, stderr = proc.communicate()
@@ -134,7 +132,7 @@ class PolaRunTests(TestCaseChdir):
     def test_nopath(self):
         """Expects pola-run *not* to look up the executable name in PATH.
         Expects pola-run to fail."""
-        proc = subprocess.Popen([pola_run, "-B", "--no-path-search",
+        proc = subprocess.Popen([self._pola_run, "-B", "--no-path-search",
                                  "--prog", "echo"],
                                 stdout=subprocess.PIPE)
         stdout, stderr = proc.communicate()
@@ -144,27 +142,27 @@ class PolaRunTests(TestCaseChdir):
         data = "Hello world!\nThis is test data."
         write_file("file", data)
         proc = subprocess.Popen(
-            [pola_run, "-B", "--prog", "cat", "-fa", "file"],
+            [self._pola_run, "-B", "--prog", "cat", "-fa", "file"],
             stdout=subprocess.PIPE)
         self.assertEquals(proc.communicate()[0], data)
 
     def test_bash_exec(self):
         proc = subprocess.Popen(
-            [pola_run, "-B", "--cwd", "/",
+            [self._pola_run, "-B", "--cwd", "/",
              "-e", "/bin/bash", "-c", "/bin/echo yeah"],
             stdout=subprocess.PIPE)
         self.assertEquals(proc.communicate()[0], "yeah\n")
 
     def test_bash_fork(self):
         proc = subprocess.Popen(
-            [pola_run, "-B", "--cwd", "/",
+            [self._pola_run, "-B", "--cwd", "/",
              "-e", "/bin/bash", "-c", "/bin/echo yeah; /bin/true"],
             stdout=subprocess.PIPE)
         self.assertEquals(proc.communicate()[0], "yeah\n")
 
     def test_strace(self):
         proc = subprocess.Popen(
-            [pola_run, "-B", "-e", "strace", "-c",
+            [self._pola_run, "-B", "-e", "strace", "-c",
              "/bin/echo", "Hello world"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE)
@@ -177,7 +175,7 @@ class PolaRunTests(TestCaseChdir):
 echo "script output"
 """)
         proc = subprocess.Popen(
-            [pola_run, "-B", "-f", ".", "-e", "./script"],
+            [self._pola_run, "-B", "-f", ".", "-e", "./script"],
             stdout=subprocess.PIPE)
         self.assertEquals(proc.communicate()[0], "script output\n")
 
@@ -187,7 +185,7 @@ echo "script output"
 echo "this does not get used"
 """)
         proc = subprocess.Popen(
-            [pola_run, "-B", "-f", ".", "-e", "./script"],
+            [self._pola_run, "-B", "-f", ".", "-e", "./script"],
             stdout=subprocess.PIPE)
         self.assertEquals(proc.communicate()[0],
                           "argument-to-interpreter ./script\n")
@@ -195,42 +193,66 @@ echo "this does not get used"
     def test_script_arg_space(self):
         write_file("script", """#!/bin/echo  args with spaces  \n""")
         proc = subprocess.Popen(
-            [pola_run, "-B", "-f", ".", "-e", "./script"],
+            [self._pola_run, "-B", "-f", ".", "-e", "./script"],
             stdout=subprocess.PIPE)
         self.assertEquals(proc.communicate()[0],
                           "args with spaces   ./script\n")
 
-    def test_tmp_arg(self):
-        proc = subprocess.Popen([pola_run, "--cwd", "/", "-B", "--tmp",
-                                 "-e", "sh", "-c", "> /tmp/test-tmp-file"])
-        self.assertEquals(proc.wait(), 0)
-        proc = subprocess.Popen([pola_run, "--cwd", "/", "-B",
-                                 "--tmpdir", "/foo",
-                                 "-e", "sh", "-c", "> /foo/test-tmp-file"])
-        self.assertEquals(proc.wait(), 0)
-
     def test_return_code_exited(self):
-        proc = subprocess.Popen([pola_run, "--cwd", "/", "-B", "-e",
+        proc = subprocess.Popen([self._pola_run, "--cwd", "/", "-B", "-e",
                                  "sh", "-c", "exit 123"])
         self.assertEquals(proc.wait(), 123)
 
     def test_return_code_signalled_sigsegv(self):
-        proc = subprocess.Popen([pola_run, "--cwd", "/", "-B", "-e",
+        proc = subprocess.Popen([self._pola_run, "--cwd", "/", "-B", "-e",
                                  "sh", "-c", "kill -SEGV $$"])
-        self.assertEquals(proc.wait(), 101)
+        self.assertEquals(proc.wait(),
+                          self._return_code_for_signal(signal.SIGSEGV))
 
     def test_return_code_signalled_sigint(self):
-        proc = subprocess.Popen([pola_run, "--cwd", "/", "-B", "-e",
+        proc = subprocess.Popen([self._pola_run, "--cwd", "/", "-B", "-e",
                                  "sh", "-c", "kill -INT $$"])
-        self.assertEquals(proc.wait(), 101)
+        self.assertEquals(proc.wait(),
+                          self._return_code_for_signal(signal.SIGINT))
 
     def test_return_code_stopped(self):
         # Check that pola-run is not catching stop signals from child.
         proc = subprocess.Popen([
-            pola_run, "--cwd", "/", "-B", "-e", "sh", "-c",
+            self._pola_run, "--cwd", "/", "-B", "-e", "sh", "-c",
             "PID=$$; (sleep 0.1s; kill -CONT $PID) & kill -STOP $PID; "
             "exit 124"])
         self.assertEquals(proc.wait(), 124)
+
+
+class PolaRunCTests(PolaRunTestsMixin, TestCaseChdir):
+
+    def setUp(self):
+        super(PolaRunCTests, self).setUp()
+        self._pola_run = "pola-run-c"
+
+    def _return_code_for_signal(self, signal):
+        return -signal
+
+
+class PolaRunPythonTests(PolaRunTestsMixin, TestCaseChdir):
+
+    def setUp(self):
+        super(PolaRunPythonTests, self).setUp()
+        self._pola_run = "pola-run"
+
+    def test_tmp_arg(self):
+        proc = subprocess.Popen([self._pola_run, "--cwd", "/", "-B", "--tmp",
+                                 "-e", "sh", "-c", "> /tmp/test-tmp-file"])
+        self.assertEquals(proc.wait(), 0)
+        proc = subprocess.Popen([self._pola_run, "--cwd", "/", "-B",
+                                 "--tmpdir", "/foo",
+                                 "-e", "sh", "-c", "> /foo/test-tmp-file"])
+        self.assertEquals(proc.wait(), 0)
+
+    def _return_code_for_signal(self, signal):
+        # Python pola-run's exit code does not tell you which signal
+        # was raised.
+        return 101
 
 
 if __name__ == "__main__":

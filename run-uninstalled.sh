@@ -16,15 +16,15 @@ source set-env.sh
 (
  echo "#!/bin/sh"
  echo "exec $DIR/bin/pola-run -fl \$PLASH_LIBRARY_DIR \"\$@\""
-) > lib/pola-run
-chmod +x lib/pola-run
+) > lib/pola-run-c
+chmod +x lib/pola-run-c
 
 # Wrapper for Python pola-run
 (
  echo "#!/bin/sh"
  echo "exec $DIR/python/scripts/pola-run -fl \$PLASH_LIBRARY_DIR \"\$@\""
-) > lib/pola-run-py
-chmod +x lib/pola-run-py
+) > lib/pola-run
+chmod +x lib/pola-run
 
 export PLASH_SANDBOX_PROG=$DIR/tests/wrapper.sh
 export PLASH_P_SANDBOX_PROG=$DIR/shobj/ld.so

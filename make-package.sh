@@ -63,6 +63,13 @@ function install_man_pages
   #  ln -s plash-opts.1 plash-opts-gtk.1 ) || false
 }
 
+function install_examples
+{
+  mkdir -p $DEST/usr/share/doc/$PACKAGE/examples
+  cp -pv packaging/examples/*.pkg $DEST/usr/share/doc/$PACKAGE/examples/
+  cp -pv packaging/examples/sources.list $DEST/usr/share/doc/$PACKAGE/examples/
+}
+
 function install_python_modules
 {
   # Delete build dir in case it contains old *.py modules
@@ -88,6 +95,7 @@ function install_python_script
 
 install_html_docs
 install_man_pages
+install_examples
 
 ./install.sh debian/plash/
 

@@ -71,6 +71,9 @@ def main(args):
     except BadArgException, msg:
         print "pola-run: error:", msg
         return 1
+    except plash.pola_run_args.UsageException:
+        usage()
+        return 0
 
     if state.namespace_empty:
         print "pola-run: warning: namespace empty, try -B for default namespace"

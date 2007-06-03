@@ -72,6 +72,13 @@ class TestEnvironment(unittest.TestCase):
         tmpdir = plash.namespace.resolve_obj(root_dir, "/foo")
         tmpdir.dir_create_file(os.O_WRONLY, 0666, "temp-file")
 
+    def test_help_arg(self):
+        setup = pola_run_args.ProcessSetup(None)
+        self.assertRaises(pola_run_args.UsageException,
+                          lambda: setup.handle_args(["--help"]))
+        self.assertRaises(pola_run_args.UsageException,
+                          lambda: setup.handle_args(["-h"]))
+
 
 if __name__ == '__main__':
     unittest.main()

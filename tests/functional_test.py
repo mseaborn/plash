@@ -254,6 +254,12 @@ class PolaRunPythonTests(PolaRunTestsMixin, TestCaseChdir):
         # was raised.
         return 101
 
+    def test_help_arg(self):
+        for arg in ("--help", "-h"):
+            proc = subprocess.Popen([self._pola_run, arg],
+                                    stdout=subprocess.PIPE)
+            self.assertEquals(proc.wait(), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

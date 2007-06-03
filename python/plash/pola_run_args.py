@@ -34,6 +34,12 @@ STDERR_FILENO = 2
 
 
 class BadArgException(Exception):
+
+    pass
+
+
+class UsageException(Exception):
+
     pass
 
 
@@ -226,8 +232,7 @@ class ProcessSetup(object):
         self.powerbox = True
 
     def help(self, args):
-        usage()
-        sys.exit(0)
+        raise UsageException()
 
     options = {}
 

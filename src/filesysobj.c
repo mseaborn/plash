@@ -198,7 +198,7 @@ void marshal_cap_call(struct filesys_obj *obj, region_t r,
   case METHOD_FSOBJ_TYPE:
   {
     if(unpack_fsobj_type(r, args) < 0) goto bad_msg;
-    *result = pack_fsobj_type_result(r, obj->vtable->type(obj));
+    *result = pack_fsobj_type_result(r, obj->vtable->fsobj_type(obj));
     return;
   }
   case METHOD_FSOBJ_STAT:
@@ -209,7 +209,7 @@ void marshal_cap_call(struct filesys_obj *obj, region_t r,
       struct stat stat;
       result->caps = caps_empty;
       result->fds = fds_empty;
-      if(obj->vtable->stat(obj, &stat, &err) < 0) {
+      if(obj->vtable->fsobj_stat(obj, &stat, &err) < 0) {
 	result->data = cat2(r, mk_int(r, METHOD_FAIL), mk_int(r, err));
 	return;
       }
@@ -246,7 +246,7 @@ void marshal_cap_call(struct filesys_obj *obj, region_t r,
       atime.tv_usec = atime_usec;
       mtime.tv_sec = mtime_sec;
       mtime.tv_usec = mtime_usec;
-      if(obj->vtable->utimes(obj, &atime, &mtime, &err) < 0) {
+      if(obj->vtable->fsobj_utimes(obj, &atime, &mtime, &err) < 0) {
 	*result = pack_fail(r, err);
 	return;
       }
@@ -262,7 +262,7 @@ void marshal_cap_call(struct filesys_obj *obj, region_t r,
     int mode;
     int err;
     if(unpack_fsobj_chmod(r, args, &mode) < 0) goto bad_msg;
-    if(obj->vtable->chmod(obj, mode, &err) < 0) {
+    if(obj->vtable->fsobj_chmod(obj, mode, &err) < 0) {
       *result = pack_fail(r, err);
       return;
     }

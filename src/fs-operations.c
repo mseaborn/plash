@@ -110,7 +110,7 @@ int process_open_d(struct filesys_obj *root, struct dir_stack *cwd,
       return -1;
     }
     else {
-      switch(obj->vtable->type(obj)) {
+      switch(obj->vtable->fsobj_type(obj)) {
         case OBJT_FILE:
 	  {
 	    int fd = obj->vtable->open(obj, flags, err);
@@ -263,7 +263,7 @@ int process_chmod(struct filesys_obj *root, struct dir_stack *cwd,
     resolve_obj_simple(root, cwd, pathname, SYMLINK_LIMIT,
 		       nofollow, err);
   if(!obj) return -1;
-  rc = obj->vtable->chmod(obj, mode, err);
+  rc = obj->vtable->fsobj_chmod(obj, mode, err);
   filesys_obj_free(obj);
   return rc;
 }
@@ -302,7 +302,7 @@ int process_utimes(struct filesys_obj *root, struct dir_stack *cwd,
     resolve_obj_simple(root, cwd, pathname, SYMLINK_LIMIT,
 		       nofollow, err);
   if(!obj) return -1;
-  rc = obj->vtable->utimes(obj, atime, mtime, err);
+  rc = obj->vtable->fsobj_utimes(obj, atime, mtime, err);
   filesys_obj_free(obj);
   return rc;
 }
@@ -318,7 +318,7 @@ int process_readlink(region_t r,
   region_free(r2);
   if(rc == RESOLVED_FILE_OR_SYMLINK) {
     struct filesys_obj *obj = result;
-    if(obj->vtable->type(obj) == OBJT_SYMLINK) {
+    if(obj->vtable->fsobj_type(obj) == OBJT_SYMLINK) {
       int x = obj->vtable->readlink(obj, r, result_dest, err);
       filesys_obj_free(obj);
       return x;
@@ -675,7 +675,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
       if(!obj) {
 	return err;
       }
-      if(obj->vtable->stat(obj, &stat, &err) < 0) {
+      if(obj->vtable->fsobj_stat(obj, &stat, &err) < 0) {
 	filesys_obj_free(obj);
 	return err;
       }
@@ -1204,7 +1204,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
 	int err;
 	struct stat st;
 	n->hdr.refcount++;
-	if(n->dir->vtable->stat(n->dir, &st, &err) < 0) {
+	if(n->dir->vtable->fsobj_stat(n->dir, &st, &err) < 0) {
 	  *reply = cat2(r, mk_int(r, METHOD_FAIL),
 			mk_int(r, ENOTDIR));
 	  *log_reply = mk_string(r, "fail");

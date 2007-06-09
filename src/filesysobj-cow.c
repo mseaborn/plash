@@ -132,7 +132,7 @@ int cow_dir_stat(struct filesys_obj *obj, struct stat *buf, int *err)
   struct filesys_obj *stat_dir =
     dir->dir_write ? dir->dir_write : dir->dir_read;
 
-  if(stat_dir->vtable->stat(stat_dir, buf, err) < 0) return -1;
+  if(stat_dir->vtable->fsobj_stat(stat_dir, buf, err) < 0) return -1;
   buf->st_nlink = 0; /* FIXME: this can be used to count the number of child directories */
   return 0;
 }
@@ -145,7 +145,8 @@ int cow_dir_utimes(struct filesys_obj *obj, const struct timeval *atime,
   if(realize(dir, err) < 0) {
     return -1;
   }
-  return dir->dir_write->vtable->utimes(dir->dir_write, atime, mtime, err);
+  return dir->dir_write->vtable->fsobj_utimes(dir->dir_write, atime, mtime,
+					      err);
 }
 
 int cow_dir_chmod(struct filesys_obj *obj, int mode, int *err)
@@ -155,7 +156,7 @@ int cow_dir_chmod(struct filesys_obj *obj, int mode, int *err)
   if(realize(dir, err) < 0) {
     return -1;
   }
-  return dir->dir_write->vtable->chmod(dir->dir_write, mode, err);
+  return dir->dir_write->vtable->fsobj_chmod(dir->dir_write, mode, err);
 }
 
 static struct filesys_obj *
@@ -211,7 +212,7 @@ struct filesys_obj *cow_dir_traverse(struct filesys_obj *obj, const char *leaf)
   if(dir->dir_write) {
     child1 = dir->dir_write->vtable->traverse(dir->dir_write, leaf);
     if(child1) {
-      type1 = child1->vtable->type(child1);
+      type1 = child1->vtable->fsobj_type(child1);
     }
   }
   else {
@@ -220,7 +221,7 @@ struct filesys_obj *cow_dir_traverse(struct filesys_obj *obj, const char *leaf)
   
   child2 = dir->dir_read->vtable->traverse(dir->dir_read, leaf);
   if(child2) {
-    type2 = child2->vtable->type(child2);
+    type2 = child2->vtable->fsobj_type(child2);
   }
 
   /* If not present in write layer: */
@@ -283,7 +284,7 @@ static int realize(struct cow_dir *dir, int *err)
     /* Stat the directory in the read layer, just to find out its
        permissions mode, so that we can create the new directory with
        the same permissions. */
-    if(dir->dir_read->vtable->stat(dir->dir_read, &st, err) < 0) {
+    if(dir->dir_read->vtable->fsobj_stat(dir->dir_read, &st, err) < 0) {
       return -1;
     }
 

@@ -333,7 +333,7 @@ int fs_resolve_populate_aux
 	  /* NB. Carry on using name1 -- should be live. */
 	  obj = dirstack->dir->vtable->traverse(dirstack->dir, name1);
 	  if(obj) {
-	    obj_type = obj->vtable->type(obj);
+	    obj_type = obj->vtable->fsobj_type(obj);
 	    if(obj_type == OBJT_SYMLINK) {
 	      seqf_t link_dest;
 	      if(obj->vtable->readlink(obj, r, &link_dest, err) >= 0) {
@@ -363,7 +363,7 @@ int fs_resolve_populate_aux
       
       next_node = tree_traverse(dirstack->node, name1);
 
-      obj_type = obj->vtable->type(obj);
+      obj_type = obj->vtable->fsobj_type(obj);
       if(obj_type == OBJT_DIR) {
 	struct dirnode_stack *new_d = amalloc(sizeof(struct dirnode_stack));
 	new_d->refcount = 1;

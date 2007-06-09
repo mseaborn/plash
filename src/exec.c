@@ -39,7 +39,7 @@ int open_executable_file(struct filesys_obj *obj, seqf_t cmd_filename, int *err)
      it's subject to a race condition. */
   {
     struct stat st;
-    if(obj->vtable->stat(obj, &st, err) >= 0) {
+    if(obj->vtable->fsobj_stat(obj, &st, err) >= 0) {
       if((st.st_mode & S_IROTH) == 0) {
 	read_perm_missing = TRUE;
       }

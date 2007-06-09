@@ -269,7 +269,7 @@ int comb_dir_list(struct filesys_obj *obj1, region_t r, seqt_t *result, int *err
 	{
 	  struct stat st;
 	  int err;
-	  if(obj->vtable->stat(obj, &st, &err) >= 0) {
+	  if(obj->vtable->fsobj_stat(obj, &st, &err) >= 0) {
 	    type = IFTODT(st.st_mode);
 	    inode = st.st_ino;
 	  }

@@ -63,7 +63,7 @@ void union_dir_mark(struct filesys_obj *obj)
 int union_dir_stat(struct filesys_obj *obj, struct stat *buf, int *err)
 {
   struct union_dir *dir = (void *) obj;
-  if(dir->dir1->vtable->stat(dir->dir1, buf, err) < 0) return -1;
+  if(dir->dir1->vtable->fsobj_stat(dir->dir1, buf, err) < 0) return -1;
   buf->st_nlink = 0; /* FIXME: this can be used to count the number of child directories */
   return 0;
 }
@@ -79,7 +79,7 @@ struct filesys_obj *union_dir_traverse(struct filesys_obj *obj, const char *leaf
   if(!child1) return dir->dir2->vtable->traverse(dir->dir2, leaf);
 
   /* If dir1's entry is not a directory, it overrides any entry from dir2. */
-  type1 = child1->vtable->type(child1);
+  type1 = child1->vtable->fsobj_type(child1);
   if(type1 != OBJT_DIR) return child1;
 
   /* If the entry is not present in dir2, return entry from dir1. */
@@ -87,7 +87,7 @@ struct filesys_obj *union_dir_traverse(struct filesys_obj *obj, const char *leaf
   if(!child2) return child1;
 
   /* If dir2's entry is not a directory, dir1's entry overrides it. */
-  type2 = child2->vtable->type(child2);
+  type2 = child2->vtable->fsobj_type(child2);
   if(type2 != OBJT_DIR) {
     filesys_obj_free(child2);
     return child1;

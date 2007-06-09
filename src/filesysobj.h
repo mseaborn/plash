@@ -105,12 +105,12 @@ struct filesys_obj_vtable {
   int single_use; /* A hint to cap-protocol.c */
 
   /* Files, directories and symlinks: */
-  int (*type)(struct filesys_obj *obj); /* returns an OBJT_* value */
-  int (*stat)(struct filesys_obj *obj, struct stat *buf, int *err);
-  int (*utimes)(struct filesys_obj *obj, const struct timeval *atime,
-		const struct timeval *mtime, int *err);
+  int (*fsobj_type)(struct filesys_obj *obj); /* returns an OBJT_* value */
+  int (*fsobj_stat)(struct filesys_obj *obj, struct stat *buf, int *err);
+  int (*fsobj_utimes)(struct filesys_obj *obj, const struct timeval *atime,
+		      const struct timeval *mtime, int *err);
   /* Files and directories only, not symlinks: */
-  int (*chmod)(struct filesys_obj *obj, int mode, int *err);
+  int (*fsobj_chmod)(struct filesys_obj *obj, int mode, int *err);
   
   /* Files only: */
   int (*open)(struct filesys_obj *obj, int flags, int *err);

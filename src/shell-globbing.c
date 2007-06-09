@@ -366,7 +366,7 @@ void glob_aux2(region_t r,
     seqf_t name = seqf_string(name1);
     
     if(slash) {
-      int obj_type = obj->vtable->type(obj);
+      int obj_type = obj->vtable->fsobj_type(obj);
       /* Check that it's a directory. */
       if(obj_type == OBJT_SYMLINK) {
 	/* Check that the symlink destination resolves to a directory. */
@@ -406,7 +406,7 @@ void glob_aux2(region_t r,
   else {
     seqf_t name = region_dup_seqf(r, seqf_string(name1));
     
-    int obj_type = obj->vtable->type(obj);
+    int obj_type = obj->vtable->fsobj_type(obj);
     if(obj_type == OBJT_DIR) {
       dirstack = dir_stack_make(obj, dirstack, name1);
     }

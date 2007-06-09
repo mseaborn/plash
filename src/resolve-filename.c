@@ -154,7 +154,7 @@ struct dir_stack *resolve_dir
 	*err = ENOENT;
 	return 0; /* Error */
       }
-      obj_type = obj->vtable->type(obj);
+      obj_type = obj->vtable->fsobj_type(obj);
       if(obj_type == OBJT_DIR) {
 	dirstack = dir_stack_make(obj, dirstack, name1);
       }
@@ -253,7 +253,7 @@ struct filesys_obj *resolve_file
 	*err = ENOENT;
 	return 0;
       }
-      obj_type = obj->vtable->type(obj);
+      obj_type = obj->vtable->fsobj_type(obj);
       if(obj_type == OBJT_DIR) {
 	if(MOD_DEBUG) fprintf(LOG, "dir\n");
 	if(end) {
@@ -431,7 +431,7 @@ int resolve_obj(region_t r, struct filesys_obj *root, struct dir_stack *cwd,
 	  return 0;
 	}
       }
-      obj_type = obj->vtable->type(obj);
+      obj_type = obj->vtable->fsobj_type(obj);
       if(obj_type == OBJT_DIR) {
 	if(MOD_DEBUG) fprintf(LOG, "dir\n");
 	dirstack = dir_stack_make(obj, dirstack, name1);

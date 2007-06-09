@@ -62,13 +62,13 @@ void readonly_mark(struct filesys_obj *obj1)
 int readonly_type(struct filesys_obj *obj1)
 {
   struct readonly_obj *obj = (void *) obj1;
-  return obj->x->vtable->type(obj->x);
+  return obj->x->vtable->fsobj_type(obj->x);
 }
 
 int readonly_stat(struct filesys_obj *obj1, struct stat *buf, int *err)
 {
   struct readonly_obj *obj = (void *) obj1;
-  return obj->x->vtable->stat(obj->x, buf, err);
+  return obj->x->vtable->fsobj_stat(obj->x, buf, err);
 }
 
 int readonly_open(struct filesys_obj *obj1, int flags, int *err)

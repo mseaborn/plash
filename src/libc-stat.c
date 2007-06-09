@@ -42,6 +42,18 @@
 #define TYPE_STAT64 2 /* struct stat64 */
 
 
+int new_xstat(int vers, const char *pathname, struct stat *buf);
+int new_xstat64(int vers, const char *pathname, struct stat64 *buf);
+int new_lxstat(int vers, const char *pathname, struct stat *buf);
+int new_lxstat64(int vers, const char *pathname, struct stat64 *buf);
+int new_fxstat(int vers, int fd, struct stat *buf);
+int new_fxstat64(int vers, int fd, struct stat64 *buf);
+int new_fxstatat(int vers, int dir_fd, const char *filename,
+		 struct stat *buf, int flags);
+int new_fxstatat64(int vers, int dir_fd, const char *filename,
+		   struct stat64 *buf, int flags);
+
+
 static void m_stat_info(int *ok, seqf_t *msg, int type, void *buf)
 {
   int myst_dev, myst_ino, myst_mode, myst_nlink, myst_uid, myst_gid, myst_rdev,
@@ -228,7 +240,7 @@ int my_fstat(int type, int fd, void *buf)
 export(new_xstat, __xstat);
 export(new_xstat, __GI___xstat);
 
-int new_xstat(int vers, const char *pathname, void *buf)
+int new_xstat(int vers, const char *pathname, struct stat *buf)
 {
   int type;
   if(vers == _STAT_VER) type = TYPE_STAT;
@@ -251,7 +263,7 @@ export_compat_symbol(libc, new_xstat64, __xstat64, GLIBC_2_1);
 #endif
 export(new_xstat64, __GI___xstat64);
 
-int new_xstat64(int vers, const char *pathname, void *buf)
+int new_xstat64(int vers, const char *pathname, struct stat64 *buf)
 {
   int type;
   if(vers == _STAT_VER) type = TYPE_STAT64;
@@ -270,7 +282,7 @@ int new_xstat64(int vers, const char *pathname, void *buf)
 export(new_lxstat, __lxstat);
 export(new_lxstat, __GI___lxstat);
 
-int new_lxstat(int vers, const char *pathname, void *buf)
+int new_lxstat(int vers, const char *pathname, struct stat *buf)
 {
   int type;
   if(vers == _STAT_VER) type = TYPE_STAT;
@@ -293,7 +305,7 @@ export_compat_symbol(libc, new_lxstat64, __lxstat64, GLIBC_2_1);
 #endif
 export(new_lxstat64, __GI___lxstat64);
 
-int new_lxstat64(int vers, const char *pathname, void *buf)
+int new_lxstat64(int vers, const char *pathname, struct stat64 *buf)
 {
   int type;
   if(vers == _STAT_VER) type = TYPE_STAT64;
@@ -312,7 +324,7 @@ int new_lxstat64(int vers, const char *pathname, void *buf)
 export(new_fxstat, __fxstat);
 export(new_fxstat, __GI___fxstat);
 
-int new_fxstat(int vers, int fd, void *buf)
+int new_fxstat(int vers, int fd, struct stat *buf)
 {
   int type;
   if(vers == _STAT_VER) type = TYPE_STAT;
@@ -335,7 +347,7 @@ export_compat_symbol(libc, new_fxstat64, __fxstat64, GLIBC_2_1);
 #endif
 export(new_fxstat64, __GI___fxstat64);
 
-int new_fxstat64(int vers, int fd, void *buf)
+int new_fxstat64(int vers, int fd, struct stat64 *buf)
 {
   int type;
   if(vers == _STAT_VER) type = TYPE_STAT64;
@@ -355,7 +367,7 @@ export(new_fxstatat, __fxstatat);
 export(new_fxstatat, __GI___fxstatat);
 
 int new_fxstatat(int vers, int dir_fd, const char *filename,
-		 void *buf, int flags)
+		 struct stat *buf, int flags)
 {
   int nofollow = (flags & AT_SYMLINK_NOFOLLOW) ? TRUE : FALSE;
   int type;
@@ -377,7 +389,7 @@ export(new_fxstatat64, __fxstatat64);
 export(new_fxstatat64, __GI___fxstatat64);
 
 int new_fxstatat64(int vers, int dir_fd, const char *filename,
-		   void *buf, int flags)
+		   struct stat64 *buf, int flags)
 {
   int nofollow = (flags & AT_SYMLINK_NOFOLLOW) ? TRUE : FALSE;
   int type;

@@ -60,18 +60,77 @@ static void log_msg(const char *msg)
 #endif
 
 
+struct dirstream;
+typedef struct dirstream DIR;
+
+int new_open(const char *filename, int flags, ...);
 int new_openat(int dir_fd, const char *filename, int flags, ...);
-int new_symlinkat(const char *oldpath, int dir_fd, const char *newpath);
-int new_mkdirat(int dir_fd, const char *pathname, unsigned int mode);
+int new_close(int fd);
+int new_dup2(int source_fd, int dest_fd);
+int new_fchdir(int fd);
+int new_open64(const char *filename, int flags, ...);
+int new_openat64(int dir_fd, const char *filename, int flags, ...);
+int new_creat(const char *filename, mode_t mode);
+int new_creat64(const char *filename, mode_t mode);
+char *new_getcwd(char *buf, size_t size);
+int new_chdir(const char *pathname);
+DIR *new_opendir(const char *pathname);
+DIR *new_fdopendir(int fd);
+struct dirent *new_readdir(DIR *dir);
+int new_readdir_r(DIR *dir, struct dirent *ent, struct dirent **result);
+struct dirent64 *new_readdir64(DIR *dir);
+int new_readdir64_r(DIR *dir, struct dirent64 *ent, struct dirent64 **result);
+int new_closedir(DIR *dir);
+int new_dirfd(DIR *dir);
+void new_rewinddir(DIR *dir);
+off_t new_telldir(DIR *dir);
+void new_seekdir(DIR *dir, off_t offset);
+int new_getdents(int fd, struct dirent *buf, unsigned count);
+int new_getdents64(int fd, struct dirent *buf, unsigned count);
+int new_xmknod(int ver, const char *path, mode_t mode, dev_t *dev);
+int new_readlink(const char *pathname, char *buf, size_t buf_size);
 int new_readlinkat(int dir_fd, const char *pathname,
 		   char *buf, size_t buf_size);
-int new_faccessat(int dir_fd, const char *pathname, unsigned int mode,
+int new_access(const char *pathname, int mode);
+int new_faccessat(int dir_fd, const char *pathname, int mode,
 		  int flags);
+int new_chmod(const char *pathname, unsigned int mode);
+int new_lchmod(const char *pathname, unsigned int mode);
+int new_fchmodat(int dir_fd, const char *pathname, unsigned int mode,
+		 int flags);
+int new_chown(const char *pathname, unsigned int owner, unsigned int group);
+int new_lchown(const char *pathname, unsigned int owner, unsigned int group);
+int new_fchownat(int dir_fd, const char *pathname,
+		 unsigned int owner_uid,
+		 unsigned int group_gid,
+		 int flags);
+int new_rename(const char *oldpath, const char *newpath);
 int new_renameat(int old_dir_fd, const char *oldpath,
 		 int new_dir_fd, const char *newpath);
+int new_link(const char *oldpath, const char *newpath);
 int new_linkat(int old_dir_fd, const char *oldpath,
 	       int new_dir_fd, const char *newpath, int flags);
+int new_symlink(const char *oldpath, const char *newpath);
+int new_symlinkat(const char *oldpath, int dir_fd, const char *newpath);
+int new_mkdir(const char *pathname, unsigned int mode);
+int new_mkdirat(int dir_fd, const char *pathname, unsigned int mode);
+int new_mkfifo(const char *pathname, unsigned int mode);
+int new_unlink(const char *pathname);
 int new_unlinkat(int dir_fd, const char *pathname, int flags);
+int new_rmdir(const char *pathname);
+int new_statfs(const char *path, struct statfs *buf);
+int new_setxattr(const char *path, const char *name,
+		 const void *value, size_t size, int flags);
+ssize_t new_getxattr(const char *path, const char *name,
+		     void *value, size_t size);
+ssize_t new_listxattr(const char *path, char *list, size_t size);
+int new_removexattr(const char *path, const char *name);
+int new_lsetxattr(const char *path, const char *name,
+		  const void *value, size_t size, int flags);
+ssize_t new_lgetxattr(const char *path, const char *name,
+		      void *value, size_t size);
+ssize_t new_llistxattr(const char *path, char *list, size_t size);
+int new_lremovexattr(const char *path, const char *name);
 
 
 struct libc_fd *g_fds = NULL; /* Array allocated with malloc() */
@@ -429,7 +488,7 @@ export(new_creat, __libc_creat);
 export(new_creat, __GI_creat);
 export(new_creat, __GI___libc_creat);
 
-int new_creat(const char *filename, int mode)
+int new_creat(const char *filename, mode_t mode)
 {
   log_msg(MOD_MSG "creat\n");
   return new_open(filename, O_WRONLY | O_CREAT | O_TRUNC, mode);
@@ -438,7 +497,7 @@ int new_creat(const char *filename, int mode)
 
 export(new_creat64, creat64);
 
-int new_creat64(const char *filename, int mode)
+int new_creat64(const char *filename, mode_t mode)
 {
   log_msg(MOD_MSG "creat64\n");
   return new_open64(filename, O_WRONLY | O_CREAT | O_TRUNC, mode);
@@ -536,7 +595,6 @@ struct dirstream {
   seqf_t data;
   int offset; /* Current offset */
 };
-typedef struct dirstream DIR;
 
 /* d_ino: inode number (same as returned by stat)
    d_off: not really sure what this is for.  The man page for getdents
@@ -908,7 +966,7 @@ int new_getdents64(int fd, struct dirent *buf, unsigned count)
 export(new_xmknod, __xmknod);
 export(new_xmknod, __GI___xmknod);
 
-int new_xmknod(int ver, const char *path, mode_t mode, dev_t dev)
+int new_xmknod(int ver, const char *path, mode_t mode, dev_t *dev)
 {
   log_msg(MOD_MSG "xmknod\n");
   __set_errno(ENOSYS);
@@ -977,7 +1035,7 @@ export(new_access, __access);
 export(new_access, __GI_access);
 export(new_access, __GI___access);
 
-int new_access(const char *pathname, unsigned int mode)
+int new_access(const char *pathname, int mode)
 {
   return new_faccessat(AT_FDCWD, pathname, mode, 0 /* flags */);
 }
@@ -985,7 +1043,7 @@ int new_access(const char *pathname, unsigned int mode)
 
 export(new_faccessat, faccessat);
 
-int new_faccessat(int dir_fd, const char *pathname, unsigned int mode,
+int new_faccessat(int dir_fd, const char *pathname, int mode,
 		  int flags)
 {
   region_t r = region_make();

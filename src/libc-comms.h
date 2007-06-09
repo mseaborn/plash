@@ -113,7 +113,7 @@ weak_extern(pthread_mutex_lock)
 weak_extern(pthread_mutex_unlock)
 weak_extern(pthread_mutex_trylock)
 
-inline static void plash_libc_lock()
+inline static void plash_libc_lock(void)
 {
 #if 0
   if(pthread_mutex_trylock && pthread_mutex_trylock(&libc_lock) == EBUSY) {
@@ -127,7 +127,7 @@ inline static void plash_libc_lock()
   if(pthread_mutex_lock) pthread_mutex_lock(&libc_lock);
 }
 
-inline static void plash_libc_unlock()
+inline static void plash_libc_unlock(void)
 {
   if(pthread_mutex_unlock) {
     pthread_mutex_unlock(&libc_lock);

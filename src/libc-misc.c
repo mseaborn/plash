@@ -902,9 +902,9 @@ int new_closedir(DIR *dir)
 }
 
 
-export(dirfd, dirfd);
+export(new_dirfd, dirfd);
 
-int dirfd(DIR *dir)
+int new_dirfd(DIR *dir)
 {
   log_msg(MOD_MSG "dirfd\n");
   if(!dir) { __set_errno(EBADF); return -1; }
@@ -913,9 +913,9 @@ int dirfd(DIR *dir)
 }
 
 
-export(rewinddir, rewinddir);
+export(new_rewinddir, rewinddir);
 
-void rewinddir(DIR *dir)
+void new_rewinddir(DIR *dir)
 {
   log_msg(MOD_MSG "rewinddir\n");
   if(!dir) return; /* No way to return an error */
@@ -923,9 +923,9 @@ void rewinddir(DIR *dir)
 }
 
 
-export(telldir, telldir);
+export(new_telldir, telldir);
 
-off_t telldir(DIR *dir)
+off_t new_telldir(DIR *dir)
 {
   log_msg(MOD_MSG "telldir\n");
   if(!dir) { __set_errno(EBADF); return -1; }
@@ -933,9 +933,9 @@ off_t telldir(DIR *dir)
 }
 
 
-export(seekdir, seekdir);
+export(new_seekdir, seekdir);
 
-void seekdir(DIR *dir, off_t offset)
+void new_seekdir(DIR *dir, off_t offset)
 {
   log_msg(MOD_MSG "seekdir\n");
   if(!dir) return; /* We can't return an error */

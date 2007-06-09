@@ -32,6 +32,10 @@
 #include "marshal.h"
 
 
+void new_plash_libc_reset_connection(void);
+int new_plash_libc_duplicate_connection(void);
+
+
 /* Read a non-negative integer from a string.
    If str is NULL, returns -1.
    If str does not contain a non-negative integer, returns -1. */
@@ -149,11 +153,11 @@ static void free_slot(cap_t *x) {
 }
 
 
-export(plash_libc_reset_connection, plash_libc_reset_connection);
+export(new_plash_libc_reset_connection, plash_libc_reset_connection);
 
 /* Calling this will force the code to look at PLASH_COMM_FD and
    PLASH_CAPS again. */
-void plash_libc_reset_connection()
+void new_plash_libc_reset_connection(void)
 {
   if(initialised) {
     cap_close_all_connections();
@@ -237,9 +241,9 @@ void libc_log(const char *msg)
   region_free(r);
 }
 
-export(plash_libc_duplicate_connection, plash_libc_duplicate_connection);
+export(new_plash_libc_duplicate_connection, plash_libc_duplicate_connection);
 
-int plash_libc_duplicate_connection()
+int new_plash_libc_duplicate_connection(void)
 {
   region_t r;
   int fd;

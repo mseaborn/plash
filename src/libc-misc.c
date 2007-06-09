@@ -35,6 +35,7 @@
 
 #include "region.h"
 #include "comms.h"
+#include "kernel-fd-ops.h"
 #include "libc-comms.h"
 #include "libc-fds.h"
 #include "marshal.h"
@@ -359,7 +360,7 @@ int new_close(int fd)
     return -1;
   }
   fds_slot_clear(fd);
-  return close(fd);
+  return kernel_close(fd);
 }
 
 
@@ -390,7 +391,7 @@ int new_dup2(int source_fd, int dest_fd)
     return -1;
   }
   
-  rc = dup2(source_fd, dest_fd);
+  rc = kernel_dup2(source_fd, dest_fd);
   if(rc >= 0) {
     /* Make sure our entry for the destination FD is removed. */
     fds_slot_clear(dest_fd);

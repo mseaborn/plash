@@ -22,6 +22,7 @@
 #include <unistd.h>
 
 #include "region.h"
+#include "kernel-fd-ops.h"
 
 
 /* Region:  A storage area from which blocks can be allocated quickly.
@@ -269,5 +270,6 @@ int seqf_compare(seqf_t x1, seqf_t x2)
 void close_fds(fds_t fds)
 {
   int i;
-  for(i = 0; i < fds.count; i++) close(fds.fds[i]);
+  for(i = 0; i < fds.count; i++)
+    kernel_close(fds.fds[i]);
 }

@@ -27,6 +27,7 @@
 #endif
 
 #include "comms.h"
+#include "kernel-fd-ops.h"
 #include "region.h"
 #include "filesysobj.h"
 #include "cap-protocol.h"
@@ -192,7 +193,7 @@ static void shut_down_connection(struct connection *conn)
 #endif
 
   /* Close socket and connection. */
-  if(close(conn->sock_fd) < 0) { /* perror("close"); */ }
+  if(kernel_close(conn->sock_fd) < 0) { /* perror("close"); */ }
   comm_free(conn->comm);
   server_state.total_ready_to_read -= conn->ready_to_read;
 

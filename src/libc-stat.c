@@ -28,6 +28,7 @@
 #include "libc-errno.h"
 #include "libc-comms.h"
 #include "libc-fds.h"
+#include "kernel-fd-ops.h"
 #include "cap-utils.h"
 #include "marshal.h"
 #include "marshal-pack.h"
@@ -223,10 +224,10 @@ int my_fstat(int type, int fd, void *buf)
     /* Use the normal fstat system call. */
     log_fd(fd, "normal fstat");
     if(type == TYPE_STAT) {
-      return fstat(fd, (struct stat *) buf);
+      return kernel_fstat(fd, (struct stat *) buf);
     }
     else if(type == TYPE_STAT64) {
-      return fstat64(fd, (struct stat64 *) buf);
+      return kernel_fstat64(fd, (struct stat64 *) buf);
     }
     else {
       /* Don't recognise ABI version requested. */

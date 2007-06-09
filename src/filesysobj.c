@@ -22,6 +22,7 @@
 #include <fcntl.h>
 
 #include "region.h"
+#include "kernel-fd-ops.h"
 #include "filesysobj.h"
 #include "cap-utils.h"
 #include "marshal.h"
@@ -64,7 +65,7 @@ void free_fd(struct file_desc *desc)
     desc->prev->next = desc->next;
     desc->next->prev = desc->prev;
     
-    close(desc->fd);
+    kernel_close(desc->fd);
     free(desc);
   }
 }
@@ -75,7 +76,7 @@ void close_our_fds()
 {
   struct file_desc *node;
   for(node = fd_list.next; node != &fd_list; node = node->next) {
-    close(node->fd);
+    kernel_close(node->fd);
   }
 }
 
@@ -290,11 +291,11 @@ void marshal_cap_call(struct filesys_obj *obj, region_t r,
     if(unpack_file_socket_connect(r, args, &sock) < 0) goto bad_msg;
     if(obj->vtable->socket_connect(obj, sock, &err) < 0) {
       *result = pack_fail(r, err);
-      close(sock);
+      kernel_close(sock);
       return;
     }
     *result = pack_file_socket_connect_result(r);
-    close(sock);
+    kernel_close(sock);
     return;
   }
   case METHOD_DIR_TRAVERSE:
@@ -434,11 +435,11 @@ void marshal_cap_call(struct filesys_obj *obj, region_t r,
     if(unpack_dir_socket_bind(r, args, &leaf, &sock) < 0) goto bad_msg;
     if(obj->vtable->socket_bind(obj, region_strdup_seqf(r, leaf), sock, &err) < 0) {
       *result = pack_fail(r, err);
-      close(sock);
+      kernel_close(sock);
       return;
     }
     *result = pack_dir_socket_bind_result(r);
-    close(sock);
+    kernel_close(sock);
     return;
   }
   case METHOD_SYMLINK_READLINK:
@@ -638,7 +639,7 @@ int marshal_socket_connect(struct filesys_obj *obj, int sock_fd, int *err)
   int rc;
   region_t r = region_make();
   struct cap_args result;
-  cap_call(obj, r, pack_file_socket_connect(r, dup(sock_fd)), &result);
+  cap_call(obj, r, pack_file_socket_connect(r, kernel_dup(sock_fd)), &result);
   if(unpack_file_socket_connect_result(r, result) >= 0) { rc = 0; }
   else if(unpack_fail(r, result, err) >= 0) { rc = -1; }
   else {
@@ -827,7 +828,7 @@ int marshal_socket_bind(struct filesys_obj *obj, const char *leaf, int sock_fd, 
   region_t r = region_make();
   struct cap_args result;
   cap_call(obj, r, pack_dir_socket_bind(r, mk_string(r, leaf),
-					dup(sock_fd)), &result);
+					kernel_dup(sock_fd)), &result);
   if(unpack_dir_socket_bind_result(r, result) >= 0) { rc = 0; }
   else if(unpack_fail(r, result, err) >= 0) { rc = -1; }
   else {
@@ -1028,7 +1029,7 @@ int dummy_make_conn(struct filesys_obj *obj, region_t r, cap_seq_t export,
 int dummy_make_conn2(struct filesys_obj *obj, region_t r, int sock_fd,
 		     cap_seq_t export, int import_count, cap_t **import)
 {
-  close(sock_fd);
+  kernel_close(sock_fd);
   return -1;
 }
 

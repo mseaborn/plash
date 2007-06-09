@@ -133,7 +133,7 @@ class GccTarget(BuildTarget):
         if not os.path.exists(self._get_deps_file()):
             return False
         input_files = read_gcc_deps_makefile(self._get_deps_file(), self._dest)
-        assert self._src in input_files
+        assert self._src in input_files, self._src
         return not needs_rebuilding(self._dest, input_files)
 
     def _get_warn_file(self):

@@ -723,6 +723,7 @@ void test_connect()
   t_check_zero(bind(fd, (struct sockaddr *) &addr,
                     sizeof(struct sockaddr_un)));
   t_check_zero(listen(fd, 1));
+
   fd2 = socket(PF_UNIX, SOCK_STREAM, 0);
   t_check(fd >= 0);
   t_check_zero(connect(fd2, (struct sockaddr *) &addr,
@@ -731,6 +732,75 @@ void test_connect()
 """
     def check(self):
         self.assertCalledPattern("fsop_connect", WildcardNotNone(), "socket")
+
+
+class TestGetsocknameBind(LibcTest):
+    entry = "test_getsockname_bind"
+    code = r"""
+#include <stddef.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+void test_getsockname_bind()
+{
+  const char *pathname = "./socket";
+  int fd;
+  struct sockaddr_un addr, addr2;
+  socklen_t len, len2;
+
+  fd = socket(PF_UNIX, SOCK_STREAM, 0);
+  t_check(fd >= 0);
+  addr.sun_family = AF_UNIX;
+  strcpy(addr.sun_path, pathname);
+  len = offsetof(struct sockaddr_un, sun_path) + strlen(pathname) + 1;
+  t_check_zero(bind(fd, (struct sockaddr *) &addr, len));
+
+  len2 = sizeof(struct sockaddr_un);
+  t_check_zero(getsockname(fd, &addr2, &len2));
+  assert(len == len2);
+  assert(memcmp(&addr, &addr2, len2) == 0);
+}
+"""
+
+
+class TestGetsocknameConnect(LibcTest):
+    entry = "test_getsockname_connect"
+    code = r"""
+#include <stddef.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+void test_getsockname_connect()
+{
+  const char *pathname = "./socket";
+  int fd, fd2;
+  struct sockaddr_un addr, addr2;
+  socklen_t len, len2;
+
+  fd = socket(PF_UNIX, SOCK_STREAM, 0);
+  t_check(fd >= 0);
+  addr.sun_family = AF_UNIX;
+  strcpy(addr.sun_path, pathname);
+  len = offsetof(struct sockaddr_un, sun_path) + strlen(pathname) + 1;
+  t_check_zero(bind(fd, (struct sockaddr *) &addr, len));
+  t_check_zero(listen(fd, 1));
+
+  fd2 = socket(PF_UNIX, SOCK_STREAM, 0);
+  t_check(fd >= 0);
+  t_check_zero(connect(fd2, (struct sockaddr *) &addr, len));
+
+  len2 = sizeof(struct sockaddr_un);
+  t_check_zero(getsockname(fd2, &addr2, &len2));
+  assert(len == len2);
+  assert(memcmp(&addr, &addr2, len2) == 0);
+}
+"""
+    def test_native(self):
+        # The code fails when run on Linux natively because Linux
+        # returns a sockaddr without a filename for the FD set up by
+        # connect().  It returns a length of 2 (equal to
+        # offsetof(struct sockaddr_un, sun_path)).
+        # Perhaps PlashGlibc should be changed to do the same, and
+        # store the socket pathname on bind() but not connect().
+        pass
 
 
 class TestRename(LibcTest):
@@ -1013,6 +1083,29 @@ void test_futimesat()
                                  123, 321, 456, 654, "test_file")
 
 
+class TestTruncate(LibcTest):
+    entry = "test_truncate"
+    code = r"""
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+void test_truncate()
+{
+  int fd = open("test_file", O_CREAT, 0777);
+  t_check(fd >= 0);
+  t_check_zero(truncate("test_file", 123));
+
+  struct stat st;
+  t_check_zero(fstat(fd, &st));
+  assert(st.st_size == 123);
+  t_check_zero(close(fd));
+}
+"""
+    def check(self):
+        self.assertCalled("fsop_open", None, os.O_CREAT, 0777, "test_file")
+        self.assertCalled("fsop_open", None, os.O_WRONLY, 0, "test_file")
+
+
 def compile_into_one_executable(cases, tmp_dir):
     entry_points = [case.entry for case in cases]
     test_case_prototypes = ""
@@ -1082,7 +1175,7 @@ def run_tests(suite):
 
 
 if __name__ == "__main__":
-    if sys.argv[1:] == ["--slow"]:
+    if sys.argv[1:2] == ["--slow"]:
         sys.argv.pop(1)
         unittest.main()
     else:

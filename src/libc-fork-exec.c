@@ -40,6 +40,14 @@
 #include "cap-utils.h"
 #include "marshal.h"
 #include "marshal-pack.h"
+#include "kernel-fd-ops.h"
+
+
+pid_t new_fork(void);
+int new_plash_libc_kernel_execve(const char *cmd_filename, char *argv[],
+				 char *envp[]);
+int new_execve(const char *cmd_filename, char *const argv[],
+	       char *const envp[]);
 
 
 export_weak_alias(new_fork, fork);
@@ -108,7 +116,7 @@ pid_t new_fork(void)
   {
     pid_t pid;
     region_free(r);
-    pid = fork();
+    pid = kernel_fork();
     if(pid == 0) {
       int comm_sock_saved = comm_sock;
       /* This sets comm_sock to -1.  We save comm_sock and restore it. */
@@ -299,11 +307,12 @@ static int exec_object(cap_t obj, int argc, const char **argv,
 }
 
 
-export(plash_libc_kernel_execve, plash_libc_kernel_execve);
+export(new_plash_libc_kernel_execve, plash_libc_kernel_execve);
 
-int plash_libc_kernel_execve(const char *cmd_filename, char *argv[], char *envp[])
+int new_plash_libc_kernel_execve(const char *cmd_filename, char *argv[],
+				 char *envp[])
 {
-  return execve(cmd_filename, argv, envp);
+  return kernel_execve(cmd_filename, argv, envp);
 }
 
 
@@ -378,7 +387,7 @@ int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
       }
       argv2[argc] = 0;
       
-      execve(region_strdup_seqf(r, cmd_filename2), argv2, envp);
+      kernel_execve(region_strdup_seqf(r, cmd_filename2), argv2, envp);
       goto error;
     }
   }

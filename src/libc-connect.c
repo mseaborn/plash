@@ -35,6 +35,12 @@
 #include "libc-comms.h"
 #include "libc-fds.h"
 #include "marshal.h"
+#include "kernel-fd-ops.h"
+
+
+int new_connect(int sock_fd, const struct sockaddr *addr, socklen_t addr_len);
+int new_bind(int sock_fd, const struct sockaddr *addr, socklen_t addr_len);
+int new_getsockname(int sock_fd, struct sockaddr *name, socklen_t *name_len);
 
 
 static int is_filename_socket_addr(struct sockaddr_un *addr)
@@ -118,7 +124,7 @@ int new_connect(int sock_fd, const struct sockaddr *addr, socklen_t addr_len)
       libc_log("connect AF_?");
     }
     
-    return connect(sock_fd, addr, addr_len);
+    return kernel_connect(sock_fd, addr, addr_len);
   }
 }
 
@@ -126,7 +132,7 @@ int new_connect(int sock_fd, const struct sockaddr *addr, socklen_t addr_len)
 export(new_bind, bind);
 export_weak_alias(new_bind, __bind);
 
-int new_bind(int sock_fd, struct sockaddr *addr, socklen_t addr_len)
+int new_bind(int sock_fd, const struct sockaddr *addr, socklen_t addr_len)
 {
   struct sockaddr_un *addr2 = (void *) addr;
   if(!addr) { __set_errno(EINVAL); return -1; }
@@ -195,15 +201,15 @@ int new_bind(int sock_fd, struct sockaddr *addr, socklen_t addr_len)
       libc_log("bind AF_?");
     }
     
-    return bind(sock_fd, addr, addr_len);
+    return kernel_bind(sock_fd, addr, addr_len);
   }
 }
 
 
-export(my_getsockname, getsockname);
-export_weak_alias(my_getsockname, __getsockname);
+export(new_getsockname, getsockname);
+export_weak_alias(new_getsockname, __getsockname);
 
-int my_getsockname(int sock_fd, struct sockaddr *name, socklen_t *name_len)
+int new_getsockname(int sock_fd, struct sockaddr *name, socklen_t *name_len)
 {
   /* Try return a filename stored by connect() or bind(). */
   if(0 <= sock_fd && sock_fd < g_fds_size) {
@@ -223,5 +229,5 @@ int my_getsockname(int sock_fd, struct sockaddr *name, socklen_t *name_len)
     }
   }
   
-  return getsockname(sock_fd, name, name_len);
+  return kernel_getsockname(sock_fd, name, name_len);
 }

@@ -23,3 +23,8 @@
 #define kernel_dup2 dup2
 #define kernel_fstat fstat
 #define kernel_fstat64 fstat64
+#define kernel_connect connect
+#define kernel_bind bind
+#define kernel_getsockname getsockname
+#define kernel_execve execve
+#define kernel_fork fork

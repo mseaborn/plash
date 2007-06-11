@@ -195,7 +195,8 @@ int main()
         proc.env = os.environ.copy()
         state = plash.pola_run_args.ProcessSetup(proc)
         state.caller_root = plash.env.get_root_dir()
-        state.handle_args(["-B", "-fw", tmp_dir,
+        state.handle_args(["--fd", "1", "--fd", "2",
+                           "-B", "-fw", tmp_dir,
                            "-f", self._executable,
                            "-e", self._executable] + self.main_args)
         if "PLASH_LIBRARY_DIR" in os.environ:
@@ -703,6 +704,33 @@ void test_bind_abstract()
 """
     def check(self):
         self.assertNotCalled("fsop_bind")
+
+
+class TestConnect(LibcTest):
+    entry = "test_connect"
+    code = r"""
+#include <sys/socket.h>
+#include <sys/un.h>
+void test_connect()
+{
+  int fd, fd2;
+  struct sockaddr_un addr;
+
+  fd = socket(PF_UNIX, SOCK_STREAM, 0);
+  t_check(fd >= 0);
+  addr.sun_family = AF_UNIX;
+  strcpy(addr.sun_path, "socket");
+  t_check_zero(bind(fd, (struct sockaddr *) &addr,
+                    sizeof(struct sockaddr_un)));
+  t_check_zero(listen(fd, 1));
+  fd2 = socket(PF_UNIX, SOCK_STREAM, 0);
+  t_check(fd >= 0);
+  t_check_zero(connect(fd2, (struct sockaddr *) &addr,
+                       sizeof(struct sockaddr_un)));
+}
+"""
+    def check(self):
+        self.assertCalledPattern("fsop_connect", WildcardNotNone(), "socket")
 
 
 class TestRename(LibcTest):

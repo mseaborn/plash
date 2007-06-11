@@ -33,11 +33,18 @@
 
 #include "libc-comms.h"
 #include "libc-fds.h"
+#include "kernel-fd-ops.h"
+
+
+int new_utime(const char *path, const struct utimbuf *buf);
+int new_utimes(const char *path, const struct timeval times[2]);
+int new_lutimes(const char *path, const struct timeval times[2]);
+int new_futimesat(int dir_fd, const char *path, const struct timeval times[2]);
 
 
 static int
 my_utimesat_nodefault(int dir_fd, int nofollow, const char *pathname,
-		      struct timeval *atime, struct timeval *mtime)
+		      const struct timeval *atime, const struct timeval *mtime)
 {
   region_t r = region_make();
   cap_t fs_op_server;
@@ -78,7 +85,7 @@ export_weak_alias(new_utime, utime);
 export(new_utime, __utime);
 export(new_utime, __GI_utime);
 
-int new_utime(const char *path, struct utimbuf *buf)
+int new_utime(const char *path, const struct utimbuf *buf)
 {
   if(buf) {
     struct timeval atime, mtime;
@@ -100,7 +107,7 @@ int new_utime(const char *path, struct utimbuf *buf)
 
 
 static int my_utimesat(int dir_fd, int nofollow, const char *path,
-		       struct timeval times[2])
+		       const struct timeval times[2])
 {
   if(times) {
     return my_utimesat_nodefault(dir_fd, nofollow, path,
@@ -118,7 +125,7 @@ static int my_utimesat(int dir_fd, int nofollow, const char *path,
 export_weak_alias(new_utimes, utimes);
 export(new_utimes, __utimes);
 
-int new_utimes(const char *path, struct timeval times[2])
+int new_utimes(const char *path, const struct timeval times[2])
 {
   return my_utimesat(AT_FDCWD, FALSE /* nofollow */, path, times);
 }
@@ -127,7 +134,7 @@ int new_utimes(const char *path, struct timeval times[2])
 export_weak_alias(new_lutimes, lutimes);
 export(new_lutimes, __lutimes);
 
-int new_lutimes(const char *path, struct timeval times[2])
+int new_lutimes(const char *path, const struct timeval times[2])
 {
   return my_utimesat(AT_FDCWD, TRUE /* nofollow */, path, times);
 }
@@ -135,7 +142,7 @@ int new_lutimes(const char *path, struct timeval times[2])
 
 export(new_futimesat, futimesat);
 
-int new_futimesat(int dir_fd, const char *path, struct timeval times[2])
+int new_futimesat(int dir_fd, const char *path, const struct timeval times[2])
 {
   return my_utimesat(dir_fd, FALSE /* nofollow */, path, times);
 }

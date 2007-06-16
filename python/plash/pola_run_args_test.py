@@ -59,7 +59,7 @@ class TestEnvironment(unittest.TestCase):
         setup = pola_run_args.ProcessSetup(proc)
         setup._make_temp_dir = self.get_temp_dir
         setup.handle_args(["--tmp"])
-        root_dir = plash.namespace.dir_of_node(proc.root_node)
+        root_dir = proc.get_namespace().get_root_dir()
         tmpdir = plash.namespace.resolve_obj(root_dir, "/tmp")
         tmpdir.dir_create_file(os.O_WRONLY, 0666, "temp-file")
 
@@ -68,7 +68,7 @@ class TestEnvironment(unittest.TestCase):
         setup = pola_run_args.ProcessSetup(proc)
         setup._make_temp_dir = self.get_temp_dir
         setup.handle_args(["--tmpdir", "/foo"])
-        root_dir = plash.namespace.dir_of_node(proc.root_node)
+        root_dir = proc.get_namespace().get_root_dir()
         tmpdir = plash.namespace.resolve_obj(root_dir, "/foo")
         tmpdir.dir_create_file(os.O_WRONLY, 0666, "temp-file")
 

@@ -92,6 +92,22 @@ def dir_of_node(node):
     return call(plash_core.fs_dir_of_node, 'r_cap',
                 'fs_dir_of_node', node)
 
+
+class Namespace(object):
+
+    def __init__(self):
+        self._root_node = make_node()
+
+    def get_root_dir(self):
+        return dir_of_node(self._root_node)
+
+    def attach_at_path(self, pathname, obj):
+        attach_at_path(self._root_node, pathname, obj)
+
+    def resolve_populate(self, root_dir, pathname, cwd=None, flags=0):
+        resolve_populate(root_dir, self._root_node, pathname, cwd, flags)
+
+
 FS_READ_ONLY        = 0x0
 FS_SLOT_RWC         = 0x1
 FS_OBJECT_RW        = 0x2

@@ -95,14 +95,14 @@ def launch_app(app_dir, files, args):
 
     # TODO: grant read-only access to apps configured as viewers
     for filename in files:
-        ns.resolve_populate(state.caller_root, proc.root_node,
-                            filename,
-                            flags=ns.FS_FOLLOW_SYMLINKS | ns.FS_SLOT_RWC)
+        proc.get_namespace().resolve_populate(
+            state.caller_root, filename,
+            flags=ns.FS_FOLLOW_SYMLINKS | ns.FS_SLOT_RWC)
         proc.args.append(filename)
 
     proc.caps["powerbox_req_filename"] = \
         plash.powerbox.Powerbox(user_namespace = state.caller_root,
-                                app_namespace = proc.root_node,
+                                app_namespace = proc.get_namespace(),
                                 pet_name = config["pet-name"])
     plash.mainloop.use_gtk_mainloop()
 

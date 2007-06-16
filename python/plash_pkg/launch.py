@@ -70,13 +70,13 @@ def make_process(app_dir):
     for dir_entry in lib_dir.dir_list():
         leafname = dir_entry["name"]
         file_obj = lib_dir.dir_traverse(leafname)
-        ns.attach_at_path(proc.root_node, os.path.join("/lib", leafname),
-                          file_obj)
+        proc.get_namespace().attach_at_path(os.path.join("/lib", leafname),
+                                            file_obj)
 
     root_dir = ns.make_cow_dir(my_root.get_obj(
                                  os.path.join(app_dir, "write_layer")),
                                my_root.get_obj(
                                  os.path.join(app_dir, "unpacked")))
-    ns.attach_at_path(proc.root_node, "/", root_dir)
+    proc.get_namespace().attach_at_path("/", root_dir)
 
     return (proc, state)

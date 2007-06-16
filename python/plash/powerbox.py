@@ -107,9 +107,8 @@ class Powerbox(plash.marshal.Pyobj_demarshal):
             if response_id == gtk.RESPONSE_ACCEPT:
                 pathname = dialog.get_filename()
                 print "response =", response_id, pathname
-                plash.namespace.resolve_populate(self.user_namespace,
-                                                 self.app_namespace,
-                                                 pathname)
+                self.app_namespace.resolve_populate(self.user_namespace,
+                                                    pathname)
                 cont.cap_invoke(plash.marshal.pack('powerbox_result_filename',
                                                    pathname))
             else:

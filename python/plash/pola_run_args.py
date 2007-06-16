@@ -92,8 +92,8 @@ class ProcessSetup(object):
         else:
             filename = get_arg(args, "-f")
         flags = handle_flags(flags_arg)
-        ns.resolve_populate(self.caller_root, self.proc.root_node,
-                            filename, cwd=self.cwd, flags=flags['build_fs'])
+        self.proc.get_namespace().resolve_populate(
+            self.caller_root, filename, cwd=self.cwd, flags=flags['build_fs'])
         self.namespace_empty = False
         if flags['a']:
             self.proc.args.append(filename)
@@ -109,7 +109,7 @@ class ProcessSetup(object):
         if not ((flags['build_fs'] & ns.FS_OBJECT_RW != 0) or
                 (flags['build_fs'] & ns.FS_SLOT_RWC != 0)):
             obj = ns.make_read_only_proxy(obj)
-        ns.attach_at_path(self.proc.root_node, dest_filename, obj)
+        self.proc.get_namespace().attach_at_path(dest_filename, obj)
         self.namespace_empty = False
         if flags['a']:
             self.proc.args.append(dest_filename)
@@ -183,16 +183,16 @@ class ProcessSetup(object):
 
     # --x11: Grant access to X Window System displays
     def grant_x11_access(self, args):
-        ns.resolve_populate(self.caller_root, self.proc.root_node,
-                            "/tmp/.X11-unix/",
-                            flags=ns.FS_FOLLOW_SYMLINKS | ns.FS_OBJECT_RW)
+        self.proc.get_namespace().resolve_populate(
+            self.caller_root, "/tmp/.X11-unix/",
+            flags=ns.FS_FOLLOW_SYMLINKS | ns.FS_OBJECT_RW)
         if "DISPLAY" in os.environ:
             self.proc.env["DISPLAY"] = os.environ["DISPLAY"]
         if "XAUTHORITY" in os.environ:
             self.proc.env["XAUTHORITY"] = os.environ["XAUTHORITY"]
-            ns.resolve_populate(self.caller_root, self.proc.root_node,
-                                os.environ['XAUTHORITY'],
-                                flags=ns.FS_FOLLOW_SYMLINKS)
+            self.proc.get_namespace().resolve_populate(
+                self.caller_root, os.environ['XAUTHORITY'],
+                flags=ns.FS_FOLLOW_SYMLINKS)
 
     def grant_network_access(self, args):
         self.handle_args(
@@ -205,12 +205,12 @@ class ProcessSetup(object):
         return plash.env.get_dir_from_path(dir_path)
 
     def grant_tmp(self, args):
-        ns.attach_at_path(self.proc.root_node, "/tmp", self._make_temp_dir())
+        self.proc.get_namespace().attach_at_path("/tmp", self._make_temp_dir())
 
     def grant_tmp_dir(self, args):
         dest_path = get_arg(args, "--tmpdir")
-        ns.attach_at_path(self.proc.root_node, dest_path,
-                          self._make_temp_dir())
+        self.proc.get_namespace().attach_at_path(dest_path,
+                                                 self._make_temp_dir())
 
     def enable_logging(self, args):
         fd = plash_core.wrap_fd(os.dup(2))

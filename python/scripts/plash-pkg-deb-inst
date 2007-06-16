@@ -87,8 +87,8 @@ def init_package(unpack_cache, app_dir, pkg, control_script, args):
         sys.stdout.write("-- %s_%s %s\n" %
                          (pkg["package"], pkg["version"], control_script))
         sys.stdout.flush()
-        ns.attach_at_path(proc.root_node, "/script",
-                          my_root.get_obj(script_path))
+        proc.get_namespace().attach_at_path("/script",
+                                            my_root.get_obj(script_path))
         proc.cmd = "/script"
         proc.args = args
         helper = NoninteractiveMode(proc, setup)

@@ -23,6 +23,7 @@ import os
 import string
 
 import plash_core
+import plash.namespace
 import plash.namespace as ns
 import plash.env
 
@@ -206,10 +207,13 @@ class ProcessSpecWithNamespace(ProcessSpec):
     def __init__(self):
         super(ProcessSpecWithNamespace, self).__init__()
         self.caps["conn_maker"] = self.conn_maker
-        self.root_node = ns.make_node()
+        self._namespace = plash.namespace.Namespace()
         self.root_dir = None
         self.cwd_path = None
         self.logger = None
+
+    def get_namespace(self):
+        return self._namespace
 
     def _resolve_obj(self, pathname):
         if self.cwd_path is None:
@@ -258,7 +262,7 @@ class ProcessSpecWithNamespace(ProcessSpec):
         return ns.make_fs_op(root_dir, logger)
 
     def plash_setup(self):
-        self.root_dir = ns.dir_of_node(self.root_node)
+        self.root_dir = self._namespace.get_root_dir()
         self._resolve_executable()
         self._set_up_script()
         fs_op = self.make_fs_op(self.root_dir, self.logger)

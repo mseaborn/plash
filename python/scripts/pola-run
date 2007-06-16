@@ -90,7 +90,7 @@ def main(args):
             state.pet_name = proc.cmd
         proc.caps['powerbox_req_filename'] = \
             powerbox.Powerbox(user_namespace = state.caller_root,
-                              app_namespace = proc.root_node,
+                              app_namespace = proc.get_namespace(),
                               pet_name = state.pet_name)
         plash.mainloop.use_gtk_mainloop()
 

@@ -19,12 +19,193 @@
 
 import os
 import shutil
+import socket
 import tempfile
 import unittest
 
+import plash_core
 import plash.env
 import plash.marshal
+import plash.marshal as marshal
 import plash.namespace
+
+
+def make_unix_socket():
+    sock = socket.socket(socket.AF_UNIX)
+    return plash_core.wrap_fd(os.dup(sock.fileno()))
+
+
+class FsObjRealTests(unittest.TestCase):
+
+    def setUp(self):
+        self.dir_path = tempfile.mkdtemp(prefix="plash-test")
+        fh = open(os.path.join(self.dir_path, "file"), "w")
+        fh.close()
+        os.symlink("dest_path", os.path.join(self.dir_path, "symlink"))
+        os.mkdir(os.path.join(self.dir_path, "subdir"))
+        self.dir_obj = plash.env.get_dir_from_path(self.dir_path)
+
+    def tearDown(self):
+        shutil.rmtree(self.dir_path)
+
+    def assert_cwd_unchanged(self, func):
+        saved_dir_fd = os.open(".", os.O_RDONLY)
+        try:
+            cwd_path_before = os.getcwd()
+            func()
+            cwd_path_after = os.getcwd()
+            self.assertEquals(cwd_path_before, cwd_path_after)
+        finally:
+            # Restore cwd so that other tests can run normally.
+            # getcwd() fails if the cwd has been deleted.
+            os.fchdir(saved_dir_fd)
+            os.close(saved_dir_fd)
+
+    def test_type(self):
+        self.assertEquals(self.dir_obj.fsobj_type(), marshal.OBJT_DIR)
+
+    def test_traverse_file(self):
+        def f():
+            obj = self.dir_obj.dir_traverse("file")
+            self.assertEquals(obj.fsobj_type(), marshal.OBJT_FILE)
+        self.assert_cwd_unchanged(f)
+
+    def test_traverse_dir(self):
+        def f():
+            obj = self.dir_obj.dir_traverse("subdir")
+            self.assertEquals(obj.fsobj_type(), marshal.OBJT_DIR)
+        self.assert_cwd_unchanged(f)
+
+    def test_traverse_symlink(self):
+        def f():
+            obj = self.dir_obj.dir_traverse("symlink")
+            self.assertEquals(obj.fsobj_type(), marshal.OBJT_SYMLINK)
+        self.assert_cwd_unchanged(f)
+
+    def test_traverse_nonexistent(self):
+        def f():
+            # FIXME: should return or raise something reasonable
+            self.assertRaises(
+                marshal.UnmarshalError,
+                lambda: self.dir_obj.dir_traverse("notexist"))
+        self.assert_cwd_unchanged(f)
+
+    def test_traverse_dot_path(self):
+        self.assertRaises(
+            marshal.UnmarshalError,
+            lambda: self.dir_obj.dir_traverse("."))
+
+    def test_traverse_dot_dot_path(self):
+        self.assertRaises(
+            marshal.UnmarshalError,
+            lambda: self.dir_obj.dir_traverse(".."))
+
+    def test_file_open(self):
+        def f():
+            self.dir_obj.dir_traverse("file").file_open(os.O_RDONLY)
+        self.assert_cwd_unchanged(f)
+
+    def test_symlink_readlink(self):
+        def f():
+            self.assertEquals(
+                self.dir_obj.dir_traverse("symlink").symlink_readlink(),
+                "dest_path")
+        self.assert_cwd_unchanged(f)
+
+    def test_dir_list(self):
+        def f():
+            listing = self.dir_obj.dir_list()
+            self.assertEquals(set([entry["name"] for entry in listing]),
+                              set(["file", "subdir", "symlink"]))
+        self.assert_cwd_unchanged(f)
+
+    def test_multiple_dir_list(self):
+        # Re-using a directory FD without resetting its position can
+        # potentially cause dir_list to return an empty list.
+        def f():
+            listing = self.dir_obj.dir_list()
+            self.assertEquals(set([entry["name"] for entry in listing]),
+                              set(["file", "subdir", "symlink"]))
+        self.assert_cwd_unchanged(f)
+        self.assert_cwd_unchanged(f)
+
+    def test_dir_create_file(self):
+        def f():
+            self.dir_obj.dir_create_file(os.O_WRONLY, 0666, "new_file")
+        self.assert_cwd_unchanged(f)
+
+    def test_dir_mkdir(self):
+        def f():
+            self.dir_obj.dir_mkdir(0666, "test_dir")
+        self.assert_cwd_unchanged(f)
+
+    def test_dir_symlink(self):
+        def f():
+            self.dir_obj.dir_symlink("test_symlink", "dest_path")
+        self.assert_cwd_unchanged(f)
+
+    def test_dir_unlink(self):
+        def f():
+            self.dir_obj.dir_unlink("file")
+        self.assert_cwd_unchanged(f)
+
+    def test_dir_rmdir(self):
+        def f():
+            self.dir_obj.dir_rmdir("subdir")
+        self.assert_cwd_unchanged(f)
+
+    def test_dir_socket_bind(self):
+        def f():
+            self.dir_obj.dir_socket_bind("socket", make_unix_socket())
+        self.assert_cwd_unchanged(f)
+
+    def test_dir_socket_connect(self):
+        def f():
+            sock = socket.socket(socket.AF_UNIX)
+            fd = plash_core.wrap_fd(os.dup(sock.fileno()))
+            self.dir_obj.dir_socket_bind("socket", fd)
+            sock.listen(1)
+            self.dir_obj.dir_traverse("socket").file_socket_connect(
+                make_unix_socket())
+        self.assert_cwd_unchanged(f)
+
+    def test_dir_socket_connect_on_non_socket(self):
+        def f():
+            self.assertRaises(
+                marshal.UnmarshalError,
+                lambda: self.dir_obj.dir_traverse("file").
+                            file_socket_connect(make_unix_socket()))
+        self.assert_cwd_unchanged(f)
+
+    def test_file_chmod(self):
+        def f():
+            self.dir_obj.dir_traverse("file").fsobj_chmod(0777)
+        self.assert_cwd_unchanged(f)
+
+    def test_dir_chmod(self):
+        def f():
+            self.dir_obj.fsobj_chmod(0777)
+        self.assert_cwd_unchanged(f)
+
+    def test_file_utimes(self):
+        def f():
+            self.dir_obj.dir_traverse("file").fsobj_utimes(123, 456, 789, 123)
+        self.assert_cwd_unchanged(f)
+
+    def test_dir_utimes(self):
+        def f():
+            self.dir_obj.fsobj_utimes(123, 456, 789, 123)
+        self.assert_cwd_unchanged(f)
+
+    def test_rename(self):
+        def f():
+            self.dir_obj.dir_rename("file", self.dir_obj, "file2")
+        self.assert_cwd_unchanged(f)
+
+    def test_link(self):
+        def f():
+            self.dir_obj.dir_link("file", self.dir_obj, "file2")
+        self.assert_cwd_unchanged(f)
 
 
 class TestDirMixin(object):

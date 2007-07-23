@@ -50,64 +50,38 @@
 static FILE *server_log = 0; /* FIXME */
 
 
-static int tested_for_proc = FALSE;
-static int cached_have_proc = FALSE;
-
 static int
-have_proc(void)
+proc_connectat(int dir_fd, int sock_fd, const char *filename)
 {
-  if(!tested_for_proc) {
-    struct stat st;
-    cached_have_proc = stat("/proc/self/fd", &st) >= 0;
-    tested_for_proc = TRUE;
-  }
-  return cached_have_proc;
-}
+  struct sockaddr_un name;
+  int path_len;
 
-static int
-make_proc_fd_path(char **path, int dir_fd, const char *filename, int *err)
-{
-  if(asprintf(path, "/proc/self/fd/%i/%s", dir_fd, filename) < 0) {
-    *err = ENOMEM;
+  name.sun_family = AF_LOCAL;
+  path_len = snprintf(name.sun_path, sizeof(name.sun_path),
+		      "/proc/self/fd/%i/%s", dir_fd, filename);
+  if(path_len >= sizeof(name.sun_path) || path_len < 0) {
+    errno = ENAMETOOLONG;
     return -1;
   }
-  return 0;
+  return connect(sock_fd, &name,
+		 offsetof(struct sockaddr_un, sun_path) + path_len + 1);
 }
 
 static int
-proc_linkat(int dir_fd1, const char *filename1,
-	    int dir_fd2, const char *filename2, int *err)
+proc_bindat(int dir_fd, int sock_fd, const char *filename)
 {
-  char *path1 = NULL, *path2 = NULL;
-  int rc = -1;
-  if(make_proc_fd_path(&path1, dir_fd1, filename1, err) < 0)
-    goto error;
-  if(make_proc_fd_path(&path2, dir_fd2, filename2, err) < 0)
-    goto error;
-  rc = link(path1, path2);
-  *err = errno;
- error:
-  free(path1);
-  free(path2);
-  return rc;
-}
+  struct sockaddr_un name;
+  int path_len;
 
-static int
-proc_renameat(int dir_fd1, const char *filename1,
-	      int dir_fd2, const char *filename2, int *err)
-{
-  char *path1 = NULL, *path2 = NULL;
-  int rc = -1;
-  if(make_proc_fd_path(&path1, dir_fd1, filename1, err) < 0)
-    goto error;
-  if(make_proc_fd_path(&path2, dir_fd2, filename2, err) < 0)
-    goto error;
-  rc = rename(path1, path2);
-  *err = errno;
- error:
-  free(path1);
-  free(path2);
-  return rc;
+  name.sun_family = AF_LOCAL;
+  path_len = snprintf(name.sun_path, sizeof(name.sun_path),
+		      "/proc/self/fd/%i/%s", dir_fd, filename);
+  if(path_len >= sizeof(name.sun_path) || path_len < 0) {
+    errno = ENAMETOOLONG;
+    return -1;
+  }
+  return bind(sock_fd, &name,
+	      offsetof(struct sockaddr_un, sun_path) + path_len + 1);
 }
 
 
@@ -182,13 +156,18 @@ int real_file_chmod(struct filesys_obj *obj, int mode, int *err)
   
   /* Couldn't open the directory; we don't have an FD for it. */
   if(!file->dir_fd) { *err = EIO; return -1; }
-  if(fchdir(file->dir_fd->fd) < 0) { *err = errno; return -1; }
 
-#if 1
-  if(chmod(file->leaf, mode) < 0) { *err = errno; return -1; }
-  return 0;
-#else
-  {
+  if(1) {
+    /* Note that this is vulnerable to symlink race conditions.
+       Would like to pass AT_SYMLINK_NOFOLLOW as the flags argument but
+       the kernel does not implement this yet. */
+    if(fchmodat(file->dir_fd->fd, file->leaf, mode, 0) < 0) {
+      *err = errno;
+      return -1;
+    }
+    return 0;
+  }
+  else {
     int inode_fd;
     int rc;
     /* We can't use chmod() because it follows symlinks, which would
@@ -199,15 +178,17 @@ int real_file_chmod(struct filesys_obj *obj, int mode, int *err)
     /* Problem:  open() fails if read permissions aren't set (even if the
        user owns the file).  So this call can't re-enable read
        permissions. */
-    inode_fd = open(file->leaf, O_RDONLY | O_NOFOLLOW);
-    if(inode_fd < 0) { *err = errno; return -1; }
-    if(fchmod(inode_fd, mode) < 0) { *err = errno; rc = -1; }
-    else { rc = 0; }
-  
+    inode_fd = openat(file->dir_fd->fd, file->leaf, O_RDONLY | O_NOFOLLOW);
+    if(inode_fd < 0) {
+      *err = errno;
+      return -1;
+    }
+    rc = fchmod(inode_fd, mode);
+    if(rc < 0)
+      *err = errno;
     close(inode_fd);
     return rc;
   }
-#endif
 }
 
 int real_dir_chmod(struct filesys_obj *obj, int mode, int *err)
@@ -230,42 +211,19 @@ int real_file_utimes(struct filesys_obj *obj, const struct timeval *atime,
 
   /* Couldn't open the directory; we don't have an FD for it. */
   if(!file->dir_fd) { *err = EIO; return -1; }
-  if(fchdir(file->dir_fd->fd) < 0) { *err = errno; return -1; }
 
-#if 1
   /* Note that glibc's futimes() call does utime() on /proc/self/fd/N.
      Linux does not have a utimes() syscall. */
-  {
-    int rc;
-    int inode_fd = open(file->leaf, O_RDONLY | O_NOFOLLOW);
-    if(inode_fd < 0) { *err = errno; return -1; }
-    rc = futimes(inode_fd, times);
-    if(rc < 0) { *err = errno; }
-    close(inode_fd);
-    return rc;
-  }
-#else
-  /* NB. This is vulnerable to race conditions.  The utimes() syscall will
-     follow symlinks, so someone could replace a file with a symlink.
-     This is not a serious problem, as it won't grant access to files
-     (except under contrived circumstances).
-     This could be fixed by using lutimes(), but that syscall is not
-     implemented in glibc: it just returns ENOSYS. */
-# ifdef HAVE_LUTIMES
-  if(lutimes(file->leaf, times) < 0) {
-    if(errno == ENOSYS) {
-      if(utimes(file->leaf, times) < 0) { *err = errno; return -1; }
-      return 0;
-    }
+  int inode_fd = openat(file->dir_fd->fd, file->leaf, O_RDONLY | O_NOFOLLOW);
+  if(inode_fd < 0) {
     *err = errno;
     return -1;
   }
-# else
-  if(utimes(file->leaf, times) < 0) { *err = errno; return -1; }
-  return 0;
-# endif
-#endif
-  return 0;
+  int rc = futimes(inode_fd, times);
+  if(rc < 0)
+    *err = errno;
+  close(inode_fd);
+  return rc;
 }
 
 int real_dir_utimes(struct filesys_obj *obj, const struct timeval *atime,
@@ -275,31 +233,26 @@ int real_dir_utimes(struct filesys_obj *obj, const struct timeval *atime,
   struct timeval times[2];
   /* Couldn't open the directory; we don't have an FD for it. */
   if(!dir->fd) { *err = EIO; return -1; }
-  if(fchdir(dir->fd->fd) < 0) { *err = errno; return -1; }
   times[0] = *atime;
   times[1] = *mtime;
-  if(utimes(".", times) < 0) { *err = errno; return -1; }
-  return 0;
+  int rc = futimes(dir->fd->fd, times);
+  if(rc < 0)
+    *err = errno;
+  return rc;
 }
 
 /* Won't work in practice, because lutimes() is not implemented. */
 int real_symlink_utimes(struct filesys_obj *obj, const struct timeval *atime,
 			const struct timeval *mtime, int *err)
 {
-#ifdef HAVE_LUTIMES
-  struct real_symlink *symlink = (void *) obj;
-  struct timeval times[2];
-  /* Couldn't open the directory; we don't have an FD for it. */
-  if(!symlink->dir_fd) { *err = EIO; return -1; }
-  if(fchdir(symlink->dir_fd->fd) < 0) { *err = errno; return -1; }
-  times[0] = atime;
-  times[1] = mtime;
-  if(lutimes(symlink->leaf, times) < 0) { *err = errno; return -1; }
-  return 0;
-#else
   *err = ENOSYS;
   return -1;
-#endif
+}
+
+static int special_leafname(const char *leaf)
+{
+  return (strcmp(leaf, ".") == 0 ||
+	  strcmp(leaf, "..") == 0);
 }
 
 /* Check that leafnames don't contain '/', and aren't "." or "..".
@@ -314,7 +267,8 @@ int leafname_ok(const char *leaf)
   /* Disallow the leaf names "." and "..".  In practice, these are
      treated specially by the pathname resolver functions, and will
      never get passed here. */
-  if(leaf[0] == '.' && (!leaf[1] || (leaf[1] == '.' && !leaf[2]))) return 0;
+  if(special_leafname(leaf))
+    return FALSE;
 
   for(c = leaf; *c; c++) {
     if(*c == '/') return 0;
@@ -332,8 +286,9 @@ struct filesys_obj *real_dir_traverse(struct filesys_obj *obj, const char *leaf)
   /* Couldn't open the directory; we don't have an FD for it. */
   if(!dir->fd) { return 0; }
   
-  if(fchdir(dir->fd->fd) < 0) { return 0; }
-  if(lstat(leaf, &stat) < 0) { return 0; }
+  /* FIXME: errno not used */
+  if(fstatat(dir->fd->fd, leaf, &stat, AT_SYMLINK_NOFOLLOW) < 0)
+    return NULL;
 
   if(S_ISDIR(stat.st_mode)) {
     /* We open the directory presumptively, on the basis that the common
@@ -343,7 +298,8 @@ struct filesys_obj *real_dir_traverse(struct filesys_obj *obj, const char *leaf)
        if the open fails.  We can open it because there's only one way
        to open directories -- read only.  The same is not true for files,
        and we can't open symlinks themselves. */
-    int fd = open(leaf, O_RDONLY | O_NOFOLLOW | O_DIRECTORY);
+    int fd = openat(dir->fd->fd, leaf,
+		    O_RDONLY | O_NOFOLLOW | O_DIRECTORY, 0);
     /* If O_NOFOLLOW doesn't work, we can fstat here. */
     struct real_dir *new_obj;
     if(fd < 0 && errno == ELOOP) {
@@ -391,17 +347,28 @@ int real_dir_list(struct filesys_obj *obj, region_t r, seqt_t *result, int *err)
   /* Couldn't open the directory; we don't have an FD for it. */
   if(!dir->fd) { *err = EIO; return -1; }
   
-  if(fchdir(dir->fd->fd) < 0) { *err = errno; return -1; }
-  dh = opendir(".");
-  if(!dh) { *err = errno; return -1; }
+  /* dup() is not good enough here: we need to get an FD with its
+     position at the beginning of the directory. */
+  int dir_fd = openat(dir->fd->fd, ".", O_RDONLY);
+  if(dir_fd < 0) {
+    *err = errno;
+    return -1;
+  }
+  dh = fdopendir(dir_fd);
+  if(!dh) {
+    *err = errno;
+    close(dir_fd);
+    return -1;
+  }
+
   while(1) {
     ent = readdir64(dh);
-    if(!ent) break;
+    if(!ent)
+      break;
     /* Don't list "." and ".." here.  These are added to the listing in
        another part of the code.  Since the directory may be reparented,
        we don't want to give the inode number here. */
-    if(!(ent->d_name[0] == '.' &&
-	 (!ent->d_name[1] || (ent->d_name[1] == '.' && !ent->d_name[2])))) {
+    if(!special_leafname(ent->d_name)) {
       seqf_t name = seqf_string(ent->d_name);
       cbuf_put_int(buf, ent->d_ino);
       cbuf_put_int(buf, ent->d_type);
@@ -424,9 +391,10 @@ int real_dir_mkdir(struct filesys_obj *obj, const char *leaf, int mode, int *err
   /* Couldn't open the directory; we don't have an FD for it. */
   if(!dir->fd) { *err = EIO; return -1; }
   
-  if(fchdir(dir->fd->fd) < 0) { *err = errno; return -1; }
-  if(mkdir(leaf, mode) < 0) { *err = errno; return -1; }
-  return 0;
+  int rc = mkdirat(dir->fd->fd, leaf, mode);
+  if(rc < 0)
+    *err = errno;
+  return rc;
 }
 
 int real_dir_symlink(struct filesys_obj *obj, const char *leaf,
@@ -439,27 +407,10 @@ int real_dir_symlink(struct filesys_obj *obj, const char *leaf,
   /* Couldn't open the directory; we don't have an FD for it. */
   if(!dir->fd) { *err = EIO; return -1; }
   
-  if(fchdir(dir->fd->fd) < 0) { *err = errno; return -1; }
-  if(symlink(oldpath, leaf) < 0) { *err = errno; return -1; }
-  return 0;
-}
-
-/* Tests whether dir2 is the same as dir.
-   This is used for the "rename" and "link" operations.
-   First we do a simple pointer comparison:  that works for cases
-   like rename("foo.temp", "foo").
-   Then we try comparing the inode and device numbers:  that works for
-   cases like rename("dir/foo.temp", "dir/foo").  In this case, the
-   path "dir" will be looked up twice.  Because we do no caching of
-   "struct real_dir" objects, it would create two new objects. */
-static int same_directory(struct real_dir *dir,
-			  struct filesys_obj *dir2)
-{
-  return
-    dir == (void *) dir2 ||
-    (dir2->vtable == &real_dir_vtable &&
-     dir->stat.st_dev == ((struct real_dir *) dir2)->stat.st_dev &&
-     dir->stat.st_ino == ((struct real_dir *) dir2)->stat.st_ino);
+  int rc = symlinkat(oldpath, dir->fd->fd, leaf);
+  if(rc < 0)
+    *err = errno;
+  return rc;
 }
 
 int real_dir_rename(struct filesys_obj *obj, const char *leaf,
@@ -470,19 +421,13 @@ int real_dir_rename(struct filesys_obj *obj, const char *leaf,
 
   if(!leafname_ok(leaf) || !leafname_ok(dest_leaf)) { *err = ENOENT; return -1; }
 
-  if(have_proc() && dest_dir->vtable == &real_dir_vtable) {
+  if(dest_dir->vtable == &real_dir_vtable) {
     struct real_dir *real_dest_dir = (struct real_dir *) dest_dir;
-    return proc_renameat(dir->fd->fd, leaf,
-			 real_dest_dir->fd->fd, dest_leaf, err);
-  }
-  /* Handle the same-directory case only. */
-  if(same_directory(dir, dest_dir)) {
-    /* Couldn't open the directory; we don't have an FD for it. */
-    if(!dir->fd) { *err = EIO; return -1; }
-    
-    if(fchdir(dir->fd->fd) < 0) { *err = errno; return -1; }
-    if(rename(leaf, dest_leaf) < 0) { *err = errno; return -1; }
-    return 0;
+    int rc = renameat(dir->fd->fd, leaf,
+		      real_dest_dir->fd->fd, dest_leaf);
+    if(rc < 0)
+      *err = errno;
+    return rc;
   }
   *err = EXDEV;
   return -1;
@@ -496,19 +441,13 @@ int real_dir_link(struct filesys_obj *obj, const char *leaf,
 
   if(!leafname_ok(leaf) || !leafname_ok(dest_leaf)) { *err = ENOENT; return -1; }
 
-  if(have_proc() && dest_dir->vtable == &real_dir_vtable) {
+  if(dest_dir->vtable == &real_dir_vtable) {
     struct real_dir *real_dest_dir = (struct real_dir *) dest_dir;
-    return proc_linkat(dir->fd->fd, leaf,
-		       real_dest_dir->fd->fd, dest_leaf, err);
-  }
-  /* Handle the same-directory case only. */
-  if(same_directory(dir, dest_dir)) {
-    /* Couldn't open the directory; we don't have an FD for it. */
-    if(!dir->fd) { *err = EIO; return -1; }
-    
-    if(fchdir(dir->fd->fd) < 0) { *err = errno; return -1; }
-    if(link(leaf, dest_leaf) < 0) { *err = errno; return -1; }
-    return 0;
+    int rc = linkat(dir->fd->fd, leaf,
+		    real_dest_dir->fd->fd, dest_leaf, 0);
+    if(rc < 0)
+      *err = errno;
+    return rc;
   }
   *err = EXDEV;
   return -1;
@@ -523,9 +462,10 @@ int real_dir_unlink(struct filesys_obj *obj, const char *leaf, int *err)
   /* Couldn't open the directory; we don't have an FD for it. */
   if(!dir->fd) { *err = EIO; return -1; }
   
-  if(fchdir(dir->fd->fd) < 0) { *err = errno; return -1; }
-  if(unlink(leaf) < 0) { *err = errno; return -1; }
-  return 0;
+  int rc = unlinkat(dir->fd->fd, leaf, 0);
+  if(rc < 0)
+    *err = errno;
+  return rc;
 }
 
 int real_dir_rmdir(struct filesys_obj *obj, const char *leaf, int *err)
@@ -537,9 +477,10 @@ int real_dir_rmdir(struct filesys_obj *obj, const char *leaf, int *err)
   /* Couldn't open the directory; we don't have an FD for it. */
   if(!dir->fd) { *err = EIO; return -1; }
   
-  if(fchdir(dir->fd->fd) < 0) { *err = errno; return -1; }
-  if(rmdir(leaf) < 0) { *err = errno; return -1; }
-  return 0;
+  int rc = unlinkat(dir->fd->fd, leaf, AT_REMOVEDIR);
+  if(rc < 0)
+    *err = errno;
+  return rc;
 }
 
 /* Irrelevant flags:
@@ -582,8 +523,7 @@ int real_dir_create_file(struct filesys_obj *obj, const char *leaf,
   /* Couldn't open the directory; we don't have an FD for it. */
   if(!dir->fd) { *err = EIO; return -1; }
   
-  if(fchdir(dir->fd->fd) < 0) { *err = errno; return -1; }
-  fd = open(leaf, flags | O_CREAT | O_EXCL | O_NOFOLLOW, mode);
+  fd = openat(dir->fd->fd, leaf, flags | O_CREAT | O_EXCL | O_NOFOLLOW, mode);
   if(fd < 0) {
     *err = errno;
     return -1;
@@ -623,8 +563,7 @@ int real_file_open(struct filesys_obj *obj, int flags, int *err)
   }
 
   /* FIXME: check to see if we're already in dir_fd */
-  if(fchdir(file->dir_fd->fd) < 0) { *err = errno; return -1; }
-  fd = open(file->leaf, (flags | O_NOFOLLOW) & ~O_CREAT);
+  fd = openat(file->dir_fd->fd, file->leaf, (flags | O_NOFOLLOW) & ~O_CREAT);
   if(fd < 0) {
     *err = errno;
     return -1;
@@ -647,7 +586,6 @@ int real_file_open(struct filesys_obj *obj, int flags, int *err)
 int real_file_socket_connect(struct filesys_obj *obj, int sock_fd, int *err)
 {
   struct real_file *file = (void *) obj;
-  struct sockaddr_un name;
 
   /* First, don't go through the hassle below if the object is not a
      Unix domain socket.  We don't really want to hard link ordinary
@@ -657,154 +595,35 @@ int real_file_socket_connect(struct filesys_obj *obj, int sock_fd, int *err)
     return -1;
   }
 
-#if 0
-  {
-    /* We assume that the absolute pathname /tmp/plash-sock-XXXXXX is
-       safe, and that neither this directory nor its contents can be
-       replaced with symlinks by programs running under Plash.
-       This may not be true if a program is given access to /tmp. */
-    char tmp_dir[] = "/tmp/plash-sock-XXXXXX";
-    char tmp_filename[100];
-    int len;
-    int result;
-    struct stat st;
-
-    if(!mkdtemp(tmp_dir)) { *err = errno; return -1; }
-    
-    /* Create a temporary directory.  Hard link the Unix domain socket
-       into it, and check that it was linked correctly. */
-    if(fchdir(file->dir_fd->fd) < 0) {
-      *err = errno;
-      result = -1;
-      goto remove_dir;
-    }
-
-    len = snprintf(tmp_filename, sizeof(tmp_filename),
-		   "%s/socket", tmp_dir);
-    assert(len >= 0 && len + 1 <= sizeof(tmp_filename));
-
-    if(link(file->leaf, tmp_filename) < 0) {
-      if(0) {
-	struct stat st;
-	if(stat(tmp_dir, &st) >= 0) {
-	  fprintf(stderr, MOD_MSG "connect: tmp dev=0x%x\n", file->stat.st_dev);
-	}
-	fprintf(stderr, MOD_MSG "connect: link() failed: %s\n", strerror(errno));
-	fprintf(stderr, MOD_MSG "connect: socket dev=0x%x\n", file->stat.st_dev);
-      }
-      result = -1;
-      *err = errno;
-      goto remove_dir;
-    }
-    if(stat(tmp_filename, &st) < 0) {
-      if(0) fprintf(stderr, MOD_MSG "connect: stat() failed: %s\n", strerror(errno));
-      result = -1;
-      *err = errno;
-      goto remove_both;
-    }
-    if(!(st.st_dev == file->stat.st_dev &&
-	 st.st_ino == file->stat.st_ino)) {
-      /* We hard linked the wrong object.  This was presumably the
-	 result of a race condition.  Should log a warning somewhere. */
-      if(0) fprintf(stderr, MOD_MSG "connect: dev/ino info does not match\n");
-      result = -1;
-      *err = EIO; /* Any better error codes? */
-      goto remove_both;
-    }
-    
-    name.sun_family = AF_LOCAL;
-    memcpy(name.sun_path, tmp_filename, len + 1);
-    if(connect(sock_fd, &name,
-	       offsetof(struct sockaddr_un, sun_path) + len + 1) < 0) {
-      result = -1;
-      *err = errno;
-      goto remove_both;
-    }
-    result = 0;
-
-  remove_both:
-    unlink(tmp_filename);
-  remove_dir:
-    rmdir(tmp_dir);
-    return result;
+  /* Couldn't open the directory; we don't have an FD for it. */
+  if(!file->dir_fd) {
+    *err = EIO;
+    return -1;
   }
-#else
-  {
-    /* This code is vulnerable to symlink race conditions. */
-    int len = strlen(file->leaf);
-    if(len + 1 > sizeof(name.sun_path)) {
-      *err = ENAMETOOLONG;
-      return -1;
-    }
-  
-    if(fchdir(file->dir_fd->fd) < 0) { *err = errno; return -1; }
-    name.sun_family = AF_LOCAL;
-    memcpy(name.sun_path, file->leaf, len);
-    name.sun_path[len] = 0;
-    if(connect(sock_fd, &name,
-	       offsetof(struct sockaddr_un, sun_path) + len + 1) < 0) {
-      *err = errno;
-      return -1;
-    }
-  }
-#endif
-  
-#if 0
-  /* This code doesn't work. */
-  {
-    int inode_fd, rc;
-    if(fchdir(file->dir_fd->fd) < 0) { *err = errno; return -1; }
-    inode_fd = open(file->leaf, O_RDONLY | O_NOFOLLOW);
-    if(inode_fd < 0) { *err = errno; return -1; }
-    set_close_on_exec_flag(inode_fd, 1);
 
-    name.sun_family = AF_LOCAL;
-    rc = snprintf(name.sun_path, sizeof(name.sun_path),
-		  "/proc/self/fd/%i", inode_fd);
-    assert(rc >= 0 && rc + 1 <= sizeof(name.sun_path));
-    if(connect(sock_fd, &name,
-	       offsetof(struct sockaddr_un, sun_path)
-	       + strlen(name.sun_path) + 1) < 0) {
-      *err = errno;
-      close(inode_fd);
-      return -1;
-    }
-    close(inode_fd);
-  }
-#endif
-  
-  return 0;
+  /* This code is vulnerable to symlink race conditions. */
+  int rc = proc_connectat(file->dir_fd->fd, sock_fd, file->leaf);
+  if(rc < 0)
+    *err = errno;
+  return rc;
 }
 
 int real_dir_socket_bind(struct filesys_obj *obj, const char *leaf,
 			 int sock_fd, int *err)
 {
   struct real_dir *dir = (void *) obj;
-  struct sockaddr_un name;
-
-  int len = strlen(leaf);
-  if(len + 1 > sizeof(name.sun_path)) {
-    *err = ENAMETOOLONG;
-    return -1;
-  }
 
   if(!leafname_ok(leaf)) { *err = ENOENT; return -1; }
   
   /* Couldn't open the directory; we don't have an FD for it. */
   if(!dir->fd) { *err = EIO; return -1; }
-  
-  if(fchdir(dir->fd->fd) < 0) { *err = errno; return -1; }
-  name.sun_family = AF_LOCAL;
-  memcpy(name.sun_path, leaf, len);
-  name.sun_path[len] = 0;
+
   /* Note that bind() should not follow symlinks when creating the
      Unix domain socket, so there should be no symlink race condition. */
-  if(bind(sock_fd, &name,
-	  offsetof(struct sockaddr_un, sun_path) + len + 1) < 0) {
+  int rc = proc_bindat(dir->fd->fd, sock_fd, leaf);
+  if(rc < 0)
     *err = errno;
-    return -1;
-  }
-  return 0;
+  return rc;
 }
 
 int real_symlink_readlink(struct filesys_obj *obj, region_t r, seqf_t *result, int *err)
@@ -814,13 +633,7 @@ int real_symlink_readlink(struct filesys_obj *obj, region_t r, seqf_t *result, i
   char *link;
   char buf[10*1024];
 
-  /* FIXME: check to see if we're already in dir_fd */
-  if(fchdir(sym->dir_fd->fd) < 0) {
-    if(MOD_DEBUG) fprintf(server_log, MOD_MSG "can't fchdir\n");
-    *err = EIO;
-    return -1;
-  }
-  got = readlink(sym->leaf, buf, sizeof(buf));
+  got = readlinkat(sym->dir_fd->fd, sym->leaf, buf, sizeof(buf));
   if(got < 0) {
     if(MOD_DEBUG) fprintf(server_log, MOD_MSG "can't readlink\n");
     if(errno == EINVAL || errno == ENOENT) {

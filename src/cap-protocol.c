@@ -871,7 +871,7 @@ int cap_run_server_step()
   cap_print_connections_info(stderr);
   */
 
-#ifdef IN_RTLD
+#if defined(IN_RTLD) || defined(IS_IN_rtld) || defined(IS_IN_libc)
   /* In ld.so, select() is not available. */
   listen_on_connection(state->list.next);
   return 1;

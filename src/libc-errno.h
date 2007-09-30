@@ -21,6 +21,8 @@
 #define INC_PLASH_LIBC_ERRNO_H
 
 
+#ifdef GLIBC_SEPARATE_BUILD
+
 /* This must come before we redefine errno. */
 #include <errno.h>
 
@@ -32,6 +34,8 @@ extern int rtld_errno;
 #endif
 
 #define __set_errno(x) (errno = (x))
+
+#endif
 
 
 #endif

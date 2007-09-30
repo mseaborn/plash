@@ -53,6 +53,8 @@ int req_and_reply(region_t r, seqt_t msg, seqf_t *reply);
 void libc_log(const char *msg);
 
 
+#ifdef GLIBC_SEPARATE_BUILD
+
 #define weak_extern(symbol) \
   extern typeof(symbol) symbol __attribute((weak));
 #define weak_alias(name, aliasname) \
@@ -100,8 +102,39 @@ void libc_log(const char *msg);
    (!(ABI_##lib##_##obsoleted - 0) \
     || ((ABI_##lib##_##introduced - 0) < (ABI_##lib##_##obsoleted - 0)))
 
+#else
 
-#define offsetof(s, f) ((int) &((s *) 0)->f)
+#include "abi-versions.h"
+#include "libc-symbols.h"
+#include "shlib-compat.h"
+
+#define export_weak_alias(name, aliasname) \
+  weak_alias(name, aliasname)
+
+#define export(name, aliasname) \
+  strong_alias(name, aliasname)
+
+
+#if !defined(IS_IN_rtld)
+
+/* A simpler definition would be:
+     versioned_symbol(lib, local, symbol, version)
+   but the assembler complains that a symbol has more than one version,
+   so as a workaround, define the versioned symbol via a temporary alias. */
+#define export_versioned_symbol(lib, local, symbol, version) \
+  strong_alias(local, __workaround_##local##_##version); \
+  versioned_symbol(lib, __workaround_##local##_##version, symbol, version)
+#define export_compat_symbol(lib, local, symbol, version) \
+  compat_symbol(lib, local, symbol, version)
+
+#else
+
+#define export_versioned_symbol(lib, local, symbol, version) \
+  strong_alias(local, symbol)
+
+#endif
+
+#endif /* GLIBC_SEPARATE_BUILD */
 
 
 #include <pthread.h>

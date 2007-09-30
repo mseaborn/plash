@@ -23,6 +23,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <unistd.h>
 /* #include <dirent.h> We have our own types */
@@ -335,7 +336,9 @@ export(new_close, __GI___close);
 export(new_close, __GI___libc_close);
 export(new_close, close_not_cancel);
 export(new_close, close_not_cancel_no_status);
+#ifdef GLIBC_SEPARATE_BUILD
 export(new_close, __close_nocancel);
+#endif
 
 int new_close(int fd)
 {

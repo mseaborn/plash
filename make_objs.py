@@ -198,7 +198,8 @@ def get_targets():
     # Defining _GNU_SOURCE is necessary for making headers define symbols
     # including AT_FDCWD, PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP,
     # getpgid(), RTLD_NEXT.
-    opts_c = c_flags + ["-D_REENTRANT", "-fPIC", "-D_GNU_SOURCE"]
+    opts_c = c_flags + ["-D_REENTRANT", "-fPIC", "-D_GNU_SOURCE",
+                        "-DGLIBC_SEPARATE_BUILD"]
 
     def build_lib(name):
         o_file = gcc("src/%s.c" % name, "obj/%s.o" % name, opts_s)

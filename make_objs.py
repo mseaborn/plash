@@ -190,12 +190,15 @@ def get_targets():
 
     c_flags = ["-O1", "-Wall", "-Igensrc", "-Isrc"]
 
-    opts_s = c_flags[:]
+    opts_s = c_flags + ["-DENABLE_LOGGING"]
     if config["USE_GTK"] == "yes":
         opts_s.append("-DPLASH_GLIB")
         opts_s.extend(get_pkg_config_args())
 
-    opts_c = c_flags + ["-D_REENTRANT", "-fPIC"]
+    # Defining _GNU_SOURCE is necessary for making headers define symbols
+    # including AT_FDCWD, PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP,
+    # getpgid(), RTLD_NEXT.
+    opts_c = c_flags + ["-D_REENTRANT", "-fPIC", "-D_GNU_SOURCE"]
 
     def build_lib(name):
         o_file = gcc("src/%s.c" % name, "obj/%s.o" % name, opts_s)
@@ -268,35 +271,36 @@ def get_targets():
 
     # Build object files to be linked into libc.so and ld.so (ld-linux.so)
 
-    gcc("src/comms.c", "obj/rtld-comms.os", opts_c + ["-DIN_RTLD"])
-    # gcc("src/region.c", "obj/region.os", opts_c)
-    # gcc("src/serialise.c", "obj/serialise.os", opts_c)
-    gcc("src/cap-protocol.c", "obj/libc-cap-protocol.os", opts_c +
-        ["-DIN_LIBC"])
-    gcc("src/cap-protocol.c", "obj/rtld-cap-protocol.os", opts_c +
-        ["-DIN_RTLD"])
-    # gcc("src/cap-call-return.c", "obj/cap-call-return.os", opts_c)
-    # gcc("src/cap-utils.c", "obj/cap-utils.os", opts_c)
-    # gcc("src/marshal-pack.c", "obj/marshal-pack.os", opts_c)
-    gcc("src/dont-free.c", "obj/dont-free.os", opts_c)
-    # gcc("src/filesysobj.c", "obj/filesysobj.os", opts_c)
+    common_libc_modules = [
+        "libc-misc",
+        "libc-stat",
+        "libc-getuid",
+        "libc-comms",
+        "cap-utils",
+        "cap-call-return",
+        "cap-protocol",
+        "marshal-pack",
+        "filesysobj",
+        "comms",
+        "region"]
+    libc_so_modules = common_libc_modules + [
+        "libc-fork-exec",
+        "libc-connect",
+        "libc-getsockopt",
+        "libc-utime",
+        "libc-truncate",
+        "libc-at-calls",
+        "libc-inotify",
+        "serialise"]
+    rtld_modules = common_libc_modules + ["dont-free"]
+
     gcc("src/libc-preload-import.c", "obj/libc-preload-import.os", opts_c)
-    gcc("src/libc-misc.c", "obj/libc-misc.os", opts_c +
-        ["-DIN_LIBC"])
-    gcc("src/libc-misc.c", "obj/rtld-libc-misc.os", opts_c +
-        ["-DIN_RTLD"])
-    gcc("src/libc-stat.c", "obj/libc-stat.os", opts_c + ["-DIN_LIBC"])
-    gcc("src/libc-stat.c", "obj/rtld-libc-stat.os", opts_c + ["-DIN_RTLD"])
-    gcc("src/libc-comms.c", "obj/libc-comms.os", opts_c + ["-DIN_LIBC"])
-    gcc("src/libc-comms.c", "obj/rtld-libc-comms.os", opts_c + ["-DIN_RTLD"])
-    gcc("src/libc-fork-exec.c", "obj/libc-fork-exec.os", opts_c)
-    gcc("src/libc-connect.c", "obj/libc-connect.os", opts_c)
-    gcc("src/libc-getsockopt.c", "obj/libc-getsockopt.os", opts_c)
-    gcc("src/libc-getuid.c", "obj/libc-getuid.os", opts_c)
-    gcc("src/libc-utime.c", "obj/libc-utime.os", opts_c)
-    gcc("src/libc-truncate.c", "obj/libc-truncate.os", opts_c)
-    gcc("src/libc-at-calls.c", "obj/libc-at-calls.os", opts_c)
-    gcc("src/libc-inotify.c", "obj/libc-inotify.os", opts_c)
+    for name in libc_so_modules:
+        gcc("src/%s.c" % name, "obj/%s_libc.os" % name,
+            opts_c + ["-DIN_LIBC", "-DENABLE_LOGGING"])
+    for name in rtld_modules:
+        gcc("src/%s.c" % name, "obj/%s_rtld.os" % name,
+            opts_c + ["-DIN_RTLD"])
 
     # Build powerbox for Gtk
 

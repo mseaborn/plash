@@ -20,9 +20,6 @@
 /* Needed to get O_LARGEFILE */
 #define _LARGEFILE64_SOURCE
 
-/* Get AT_FDCWD */
-#define _GNU_SOURCE
-
 #include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
@@ -353,7 +350,7 @@ int new_close(int fd)
        application is just closing all file descriptor numbers in a
        range.  Giving an error is the correct response in that
        case. */
-#if !defined(IN_RTLD)
+#ifdef ENABLE_LOGGING
     if(libc_debug) fprintf(stderr, "libc: close(): refused to clobber fd %i\n", fd);
 #endif
     __set_errno(EBADF);
@@ -384,7 +381,7 @@ int new_dup2(int source_fd, int dest_fd)
        going any further, assuming they check the return value for an
        error.  This should be better than clobbering the socket and
        getting a failure later. */
-#if !defined(IN_RTLD)
+#ifdef ENABLE_LOGGING
     if(libc_debug) fprintf(stderr, "libc: dup2(): refused to clobber fd %i\n", dest_fd);
 #endif
     __set_errno(EINVAL);

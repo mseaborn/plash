@@ -17,9 +17,6 @@
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
    USA.  */
 
-/* Get AT_FDCWD */
-#define _GNU_SOURCE
-
 #include <errno.h>
 #include <utime.h>
 #include <sys/time.h>

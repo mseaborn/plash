@@ -25,6 +25,9 @@
 #include "libc-comms.h"
 
 
+int new_truncate(const char *path, off_t length);
+
+
 export(new_truncate, truncate);
 export(new_truncate, __GI_truncate);
 export(new_truncate, __truncate);

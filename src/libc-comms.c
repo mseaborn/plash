@@ -17,9 +17,6 @@
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
    USA.  */
 
-/* For PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP */
-#define _GNU_SOURCE
-
 #include <errno.h>
 #include <pthread.h>
 #include <unistd.h>
@@ -86,20 +83,20 @@ int plash_init()
     
     var = getenv("PLASH_COMM_FD");
     if(!var) {
-#ifndef IN_RTLD
+#ifdef ENABLE_LOGGING
       if(libc_debug) fprintf(stderr, "libc: PLASH_COMM_FD not set\n");
 #endif
       __set_errno(ENOSYS);
       return -1;
     }
     comm_sock = my_atoi(var);
-#ifndef IN_RTLD
+#ifdef ENABLE_LOGGING
     if(libc_debug) fprintf(stderr, "libc: init: comm_sock=%i\n", comm_sock);
 #endif
 
     var = getenv("PLASH_CAPS");
     if(!var) {
-#ifndef IN_RTLD
+#ifdef ENABLE_LOGGING
       if(libc_debug) fprintf(stderr, "libc: PLASH_CAPS not set\n");
 #endif
       __set_errno(ENOSYS);

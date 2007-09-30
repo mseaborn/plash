@@ -34,11 +34,12 @@ mkdir -p $OUT bin obj gensrc
 STRIP_EARLY=1
 
 
-# These are object files from glibc that the Plash-libc code links to.
-# They are not to be visible outside of the Plash-libc code.
-# These are linked into the combined-*.os files below.
-# Their symbols are hidden by use of "objcopy".
-OBJS_FOR_LIBC="
+setup_glibc_build () {
+  # These are object files from glibc that the Plash-libc code links to.
+  # They are not to be visible outside of the Plash-libc code.
+  # These are linked into the combined-*.os files below.
+  # Their symbols are hidden by use of "objcopy".
+  OBJS_FOR_LIBC="
 	posix/getuid.os
 	posix/getgid.os
 	posix/geteuid.os
@@ -51,10 +52,10 @@ OBJS_FOR_LIBC="
 	socket/getsockopt.os
 	io/close.os
 	io/dup2.os
-	io/fstat.oS io/fxstat.os
-	io/fstat64.oS io/fxstat64.os
+	io/fxstat.os
+	io/fxstat64.os
 	io/xstat64.os io/xstatconv.os"
-OBJS_FOR_RTLD="
+  OBJS_FOR_RTLD="
 	socket/rtld-recvmsg.os
 	socket/rtld-sendmsg.os
 	socket/rtld-send.os
@@ -68,21 +69,21 @@ OBJS_FOR_RTLD="
 	io/rtld-fstat64.os io/rtld-fxstat64.os
 	io/rtld-xstat64.os io/rtld-xstatconv.os"
 
-# These are object files that are removed from the normal glibc (from
-# libc_pic.a) before creating libc.so.  They are system calls related
-# to the filesystem namespace.
-#  * NB. We didn't have to exclude the symbols defined by
-#    fxstat{,64}.os.  However, unfortunately these files depend on
-#    __have_no_stat64, which is defined by xstat64.os.  Rather than
-#    mess around with linking to xstat64.os but hiding its other
-#    symbols, I have just reimplemented fstat{,64}.
-#  * open64.os used to be okay to leave in for glibc 2.2.5, because it
-#    was defined in terms of open().  But in 2.3.3 it includes a
-#    syscall.
-# The following operate on filenames and could be excluded, but are not
-# because they are privileged and so not usable from Plash anyway:
-#   misc/mount.os misc/umount.os misc/chroot.os misc/pivot_root.os
-EXCLUDE="io/open.os io/open64.os io/creat.os io/creat64.os
+  # These are object files that are removed from the normal glibc (from
+  # libc_pic.a) before creating libc.so.  They are system calls related
+  # to the filesystem namespace.
+  #  * NB. We didn't have to exclude the symbols defined by
+  #    fxstat{,64}.os.  However, unfortunately these files depend on
+  #    __have_no_stat64, which is defined by xstat64.os.  Rather than
+  #    mess around with linking to xstat64.os but hiding its other
+  #    symbols, I have just reimplemented fstat{,64}.
+  #  * open64.os used to be okay to leave in for glibc 2.2.5, because it
+  #    was defined in terms of open().  But in 2.3.3 it includes a
+  #    syscall.
+  # The following operate on filenames and could be excluded, but are not
+  # because they are privileged and so not usable from Plash anyway:
+  #   misc/mount.os misc/umount.os misc/chroot.os misc/pivot_root.os
+  EXCLUDE="io/open.os io/open64.os io/creat.os io/creat64.os
 	io/not-cancel-open.os
 	io/close.os
 	io/not-cancel-close.os
@@ -123,8 +124,8 @@ EXCLUDE="io/open.os io/open64.os io/creat.os io/creat64.os
 	posix/setresuid.os posix/setresgid.os
 	misc/seteuid.os misc/setegid.os
 	misc/setreuid.os misc/setregid.os"
-if [ $GLIBC_VERSION -ge 240 ]; then
-  EXCLUDE="$EXCLUDE
+  if [ $GLIBC_VERSION -ge 240 ]; then
+    EXCLUDE="$EXCLUDE
 	dirent/fdopendir.os
 	io/fxstatat.os
 	io/fxstatat64.os
@@ -143,14 +144,15 @@ if [ $GLIBC_VERSION -ge 240 ]; then
 	io/symlinkat.os
 	io/unlinkat.os
 	misc/inotify_add_watch.os"
-fi
+  fi
 
-if [ ! -d "$GLIBC" ]; then
-  echo "Warning: glibc object files directory \"$GLIBC\" does not exist"
-fi
+  if [ ! -d "$GLIBC" ]; then
+    echo "Warning: glibc object files directory \"$GLIBC\" does not exist"
+  fi
 
-# Used by the SHLIB_COMPAT macro
-cp -av $GLIBC/abi-versions.h gensrc/
+  # Used by the SHLIB_COMPAT macro
+  cp -av $GLIBC/abi-versions.h gensrc/
+}
 
 
 
@@ -183,25 +185,25 @@ build_libc_ldso_extras () {
   # newer versions this was renamed to "--relocatable".
 
   OBJS_FOR_LIBC2=`for F in $OBJS_FOR_LIBC; do echo $GLIBC/$F; done`
-  LIBC_OBJS="obj/libc-misc.os \
-	obj/libc-stat.os \
-	obj/libc-fork-exec.os \
-	obj/libc-connect.os \
-	obj/libc-getuid.os \
-	obj/libc-getsockopt.os \
-	obj/libc-utime.os \
-	obj/libc-truncate.os \
-	obj/libc-comms.os \
-	obj/libc-at-calls.os \
-	obj/libc-inotify.os \
-	obj/cap-utils.os \
-	obj/cap-call-return.os \
-	obj/libc-cap-protocol.os \
-	obj/marshal-pack.os \
-	obj/filesysobj.os \
-	obj/comms.os \
-	obj/serialise.os \
-	obj/region.os"
+  LIBC_OBJS="obj/libc-misc_libc.os \
+	obj/libc-stat_libc.os \
+	obj/libc-fork-exec_libc.os \
+	obj/libc-connect_libc.os \
+	obj/libc-getuid_libc.os \
+	obj/libc-getsockopt_libc.os \
+	obj/libc-utime_libc.os \
+	obj/libc-truncate_libc.os \
+	obj/libc-comms_libc.os \
+	obj/libc-at-calls_libc.os \
+	obj/libc-inotify_libc.os \
+	obj/cap-utils_libc.os \
+	obj/cap-call-return_libc.os \
+	obj/cap-protocol_libc.os \
+	obj/marshal-pack_libc.os \
+	obj/filesysobj_libc.os \
+	obj/comms_libc.os \
+	obj/serialise_libc.os \
+	obj/region_libc.os"
   echo Linking $OUT/combined-libc.os
   ld -r $LIBC_OBJS \
 	$OBJS_FOR_LIBC2 \
@@ -213,18 +215,18 @@ build_libc_ldso_extras () {
 	-o $OUT/preload-libc.os
 
   echo Linking $OUT/combined-rtld.os
-  ld -r obj/rtld-libc-misc.os \
-	obj/rtld-libc-stat.os \
-	obj/libc-getuid.os \
-	obj/rtld-libc-comms.os \
-	obj/cap-utils.os \
-	obj/cap-call-return.os \
-	obj/rtld-cap-protocol.os \
-	obj/marshal-pack.os \
-	obj/filesysobj.os \
-	obj/rtld-comms.os \
-	obj/region.os \
-	obj/dont-free.os \
+  ld -r obj/libc-misc_rtld.os \
+	obj/libc-stat_rtld.os \
+	obj/libc-getuid_rtld.os \
+	obj/libc-comms_rtld.os \
+	obj/cap-utils_rtld.os \
+	obj/cap-call-return_rtld.os \
+	obj/cap-protocol_rtld.os \
+	obj/marshal-pack_rtld.os \
+	obj/filesysobj_rtld.os \
+	obj/comms_rtld.os \
+	obj/region_rtld.os \
+	obj/dont-free_rtld.os \
 	`for F in $OBJS_FOR_RTLD; do echo $GLIBC/$F; done` \
 	-o $OUT/combined-rtld.os
 
@@ -618,6 +620,7 @@ if [ "$1" != "--include" ]; then
 build_small_bits
 (export CC; cd setuid && ./make-setuid.sh)
 ./make_objs.py
+setup_glibc_build
 build_libc_ldso_extras
 # Building ld.so first is useful because libc.so and libpthread.so link against it.
 build_ldso

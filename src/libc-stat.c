@@ -17,9 +17,6 @@
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
    USA.  */
 
-/* Get AT_FDCWD */
-#define _GNU_SOURCE
-
 /* To get "struct stat64" defined */
 #define _LARGEFILE64_SOURCE
 #include <sys/stat.h>
@@ -224,10 +221,10 @@ int my_fstat(int type, int fd, void *buf)
     /* Use the normal fstat system call. */
     log_fd(fd, "normal fstat");
     if(type == TYPE_STAT) {
-      return kernel_fstat(fd, (struct stat *) buf);
+      return kernel_fxstat(_STAT_VER, fd, (struct stat *) buf);
     }
     else if(type == TYPE_STAT64) {
-      return kernel_fstat64(fd, (struct stat64 *) buf);
+      return kernel_fxstat64(_STAT_VER, fd, (struct stat64 *) buf);
     }
     else {
       /* Don't recognise ABI version requested. */
@@ -246,7 +243,7 @@ int new_xstat(int vers, const char *pathname, struct stat *buf)
   int type;
   if(vers == _STAT_VER) type = TYPE_STAT;
   else {
-#ifndef IN_RTLD
+#ifdef ENABLE_LOGGING
     plash_init();
     if(libc_debug)
       fprintf(stderr, "libc: __xstat version %i, `%s'\n", vers, pathname);
@@ -269,7 +266,7 @@ int new_xstat64(int vers, const char *pathname, struct stat64 *buf)
   int type;
   if(vers == _STAT_VER) type = TYPE_STAT64;
   else {
-#ifndef IN_RTLD
+#ifdef ENABLE_LOGGING
     plash_init();
     if(libc_debug)
       fprintf(stderr, "libc: __xstat64 version %i, `%s'\n", vers, pathname);
@@ -288,7 +285,7 @@ int new_lxstat(int vers, const char *pathname, struct stat *buf)
   int type;
   if(vers == _STAT_VER) type = TYPE_STAT;
   else {
-#ifndef IN_RTLD
+#ifdef ENABLE_LOGGING
     plash_init();
     if(libc_debug)
       fprintf(stderr, "libc: __lxstat version %i, `%s'\n", vers, pathname);
@@ -311,7 +308,7 @@ int new_lxstat64(int vers, const char *pathname, struct stat64 *buf)
   int type;
   if(vers == _STAT_VER) type = TYPE_STAT64;
   else {
-#ifndef IN_RTLD
+#ifdef ENABLE_LOGGING
     plash_init();
     if(libc_debug)
       fprintf(stderr, "libc: __lxstat64 version %i, `%s'\n", vers, pathname);
@@ -330,7 +327,7 @@ int new_fxstat(int vers, int fd, struct stat *buf)
   int type;
   if(vers == _STAT_VER) type = TYPE_STAT;
   else {
-#ifndef IN_RTLD
+#ifdef ENABLE_LOGGING
     plash_init();
     if(libc_debug)
       fprintf(stderr, "libc: __fxstat version %i, fd %i\n", vers, fd);
@@ -353,7 +350,7 @@ int new_fxstat64(int vers, int fd, struct stat64 *buf)
   int type;
   if(vers == _STAT_VER) type = TYPE_STAT64;
   else {
-#ifndef IN_RTLD
+#ifdef ENABLE_LOGGING
     plash_init();
     if(libc_debug)
       fprintf(stderr, "libc: __fxstat64 version %i, fd %i\n", vers, fd);

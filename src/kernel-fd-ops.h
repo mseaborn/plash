@@ -21,10 +21,17 @@
 #define kernel_close close
 #define kernel_dup dup
 #define kernel_dup2 dup2
-#define kernel_fstat fstat
-#define kernel_fstat64 fstat64
+#define kernel_fxstat __fxstat
+#define kernel_fxstat64 __fxstat64
 #define kernel_connect connect
 #define kernel_bind bind
 #define kernel_getsockname getsockname
 #define kernel_execve execve
 #define kernel_fork fork
+
+
+struct stat;
+struct stat64;
+
+int kernel_fxstat(int vers, int fd, struct stat *buf);
+int kernel_fxstat64(int vers, int fd, struct stat64 *buf);

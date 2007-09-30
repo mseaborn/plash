@@ -34,7 +34,7 @@
 #define MOD_DEBUG 0
 #define MOD_MSG "comm: "
 
-#ifdef IN_RTLD
+#ifndef ENABLE_LOGGING
 
 static int my_printf(const char *fmt, ...)
 {

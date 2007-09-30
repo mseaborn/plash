@@ -66,7 +66,7 @@
    ie. if any illegal IDs are seen. */
 #define STRICT_PROTOCOL 1
 
-#ifndef IN_RTLD
+#ifdef ENABLE_LOGGING
 
 #define DO_LOG
 #define MOD_DEBUG 0
@@ -1043,7 +1043,7 @@ void cap_mark_exported_objects(void)
 
 
 /* For debugging: */
-#ifndef IN_RTLD
+#ifdef ENABLE_LOGGING
 void cap_print_cap(FILE *fp, cap_t obj)
 {
   fprintf(fp, "%p=", obj);

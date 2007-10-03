@@ -77,8 +77,11 @@ class ForwardFD(object):
         if fd_condition & gobject.IO_IN:
             assert len(self._buf) == 0
             data = os.read(self._src_fd, self._buf_size)
-            self._buf += data
-            self._set_flags()
+            if len(data) == 0:
+                self._tidy_up()
+            else:
+                self._buf += data
+                self._set_flags()
         elif fd_condition & gobject.IO_HUP:
             self._tidy_up()
         else:

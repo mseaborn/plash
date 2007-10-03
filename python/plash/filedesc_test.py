@@ -234,6 +234,15 @@ class ForwardTest(unittest.TestCase):
         pids.wait()
         os.close(pipe_write)
 
+    def test_forwarding_dev_null(self):
+        pids = ProcSet()
+        read_fd = os.open("/dev/null", os.O_RDONLY)
+        proc, fd = forward(read_fd)
+        os.close(fd)
+        pids.add(proc.pid)
+        proc.start()
+        pids.wait()
+
     # TODO: check that the forwarder does not block when the pipe's
     # reader is not reading
 

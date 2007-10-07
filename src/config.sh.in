@@ -32,6 +32,7 @@ GLIBC_NONSHARED_DIR=$GLIBC
 GLIBC_SO_DIR=$GLIBC
 # glibc version as an integer, e.g. 236 for 2.3.6 and 240 for 2.4
 GLIBC_VERSION=@GLIBC_VERSION@
+GLIBC_BUILD_TYPE=@GLIBC_BUILD_TYPE@
 
 # For Debian, require libc6-pic, libc6, and libc6-dev
 #GLIBC=/usr/lib/libc_pic

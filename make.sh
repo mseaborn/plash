@@ -152,9 +152,67 @@ setup_glibc_build () {
 
   # Used by the SHLIB_COMPAT macro
   cp -av $GLIBC/abi-versions.h gensrc/
+
+  LIBC_OBJS="obj/libc-misc_libc.os \
+	obj/libc-stat_libc.os \
+	obj/libc-fork-exec_libc.os \
+	obj/libc-connect_libc.os \
+	obj/libc-getuid_libc.os \
+	obj/libc-getsockopt_libc.os \
+	obj/libc-utime_libc.os \
+	obj/libc-truncate_libc.os \
+	obj/libc-comms_libc.os \
+	obj/libc-at-calls_libc.os \
+	obj/libc-inotify_libc.os \
+	obj/cap-utils_libc.os \
+	obj/cap-call-return_libc.os \
+	obj/cap-protocol_libc.os \
+	obj/marshal-pack_libc.os \
+	obj/filesysobj_libc.os \
+	obj/comms_libc.os \
+	obj/serialise_libc.os \
+	obj/region_libc.os"
 }
 
 
+build_preload_library () {
+  echo Linking $OUT/preload-libc.os
+  ld -r $LIBC_OBJS \
+	obj/libc-preload-import.os \
+	-o $OUT/preload-libc.os
+}
+
+
+# With -G, all other symbols are converted to be local
+# With -K, all other symbols are removed
+# We need two passes here.  Firstly we need to hide all the symbols that
+# dietlibc defines, such as "fork".  Then we need to rename our symbols,
+# such as "new_fork" to "fork".
+# If you try to do this in one pass with "objcopy", it renames "new_fork"
+# to "fork" and *then* keeps "fork", which leaves us with *two* definitions
+# of "fork", our one and dietlibc's.
+
+prepare_combined_obj () {
+  # Hide all symbols except those to be exported to the rest of glibc.
+    
+  # errno:  this can be removed?
+  # __fork_block:  exported by glibc's fork.os.
+  # __pthread_fork:  imported weakly by glibc's fork.os.
+  # __i686.get_pc_thunk.*:  some linker magic (necessary for gcc >=3.3).
+  # __libc_missing_32bit_uids:  defined in posix/getuid.os but used by
+  #     other UID/GID-related files.
+    
+  objcopy --wildcard \
+      -G "export_*" \
+      -G "exportver_*" \
+      -G errno \
+      -G __fork_block \
+      -G __pthread_fork \
+      -G __i686.get_pc_thunk.bx \
+      -G __i686.get_pc_thunk.cx \
+      -G __libc_missing_32bit_uids \
+      $1
+}
 
 # This links the plash-libc code that is to be linked into libc.so and
 # ld.so.  This involves some linker trickery: we want to link to
@@ -185,34 +243,10 @@ build_libc_ldso_extras () {
   # newer versions this was renamed to "--relocatable".
 
   OBJS_FOR_LIBC2=`for F in $OBJS_FOR_LIBC; do echo $GLIBC/$F; done`
-  LIBC_OBJS="obj/libc-misc_libc.os \
-	obj/libc-stat_libc.os \
-	obj/libc-fork-exec_libc.os \
-	obj/libc-connect_libc.os \
-	obj/libc-getuid_libc.os \
-	obj/libc-getsockopt_libc.os \
-	obj/libc-utime_libc.os \
-	obj/libc-truncate_libc.os \
-	obj/libc-comms_libc.os \
-	obj/libc-at-calls_libc.os \
-	obj/libc-inotify_libc.os \
-	obj/cap-utils_libc.os \
-	obj/cap-call-return_libc.os \
-	obj/cap-protocol_libc.os \
-	obj/marshal-pack_libc.os \
-	obj/filesysobj_libc.os \
-	obj/comms_libc.os \
-	obj/serialise_libc.os \
-	obj/region_libc.os"
   echo Linking $OUT/combined-libc.os
   ld -r $LIBC_OBJS \
 	$OBJS_FOR_LIBC2 \
 	-o $OUT/combined-libc.os
-
-  echo Linking $OUT/preload-libc.os
-  ld -r $LIBC_OBJS \
-	obj/libc-preload-import.os \
-	-o $OUT/preload-libc.os
 
   echo Linking $OUT/combined-rtld.os
   ld -r obj/libc-misc_rtld.os \
@@ -230,37 +264,6 @@ build_libc_ldso_extras () {
 	`for F in $OBJS_FOR_RTLD; do echo $GLIBC/$F; done` \
 	-o $OUT/combined-rtld.os
 
-  # With -G, all other symbols are converted to be local
-  # With -K, all other symbols are removed
-  # We need two passes here.  Firstly we need to hide all the symbols that
-  # dietlibc defines, such as "fork".  Then we need to rename our symbols,
-  # such as "new_fork" to "fork".
-  # If you try to do this in one pass with "objcopy", it renames "new_fork"
-  # to "fork" and *then* keeps "fork", which leaves us with *two* definitions
-  # of "fork", our one and dietlibc's.
-
-  prepare_combined_obj () {
-    # Hide all symbols except those to be exported to the rest of glibc.
-    
-    # errno:  this can be removed?
-    # __fork_block:  exported by glibc's fork.os.
-    # __pthread_fork:  imported weakly by glibc's fork.os.
-    # __i686.get_pc_thunk.*:  some linker magic (necessary for gcc >=3.3).
-    # __libc_missing_32bit_uids:  defined in posix/getuid.os but used by
-    #     other UID/GID-related files.
-    
-    objcopy --wildcard \
-      -G "export_*" \
-      -G "exportver_*" \
-      -G errno \
-      -G __fork_block \
-      -G __pthread_fork \
-      -G __i686.get_pc_thunk.bx \
-      -G __i686.get_pc_thunk.cx \
-      -G __libc_missing_32bit_uids \
-      $1
-  }
-  
   echo Hiding and renaming symbols in $OUT/combined-libc.os
   ./src/get-export-syms.pl $OUT/combined-libc.os >$OUT/symbol-list-libc
   prepare_combined_obj $OUT/combined-libc.os
@@ -270,7 +273,9 @@ build_libc_ldso_extras () {
   ./src/get-export-syms.pl $OUT/combined-rtld.os >$OUT/symbol-list-rtld
   prepare_combined_obj $OUT/combined-rtld.os
   objcopy `./src/export-renames.pl --rtld <$OUT/symbol-list-rtld` $OUT/combined-rtld.os
+}
 
+link_preload_library () {
   echo Building $OUT/preload-libc.so
   ./src/get-export-syms.pl $OUT/preload-libc.os >$OUT/symbol-list-libc-preload
   prepare_combined_obj $OUT/preload-libc.os
@@ -621,11 +626,16 @@ build_small_bits
 (export CC; cd setuid && ./make-setuid.sh)
 setup_glibc_build
 ./make_objs.py
-build_libc_ldso_extras
-# Building ld.so first is useful because libc.so and libpthread.so link against it.
-build_ldso
-build_libc
-build_libpthread
+build_preload_library
+link_preload_library
+if [ "$GLIBC_BUILD_TYPE" = separate ]; then
+  build_libc_ldso_extras
+  # Building ld.so first is useful because libc.so and libpthread.so
+  # link against it.
+  build_ldso
+  build_libc
+  build_libpthread
+fi
 build_shell_etc
 build_gtk_powerbox
 build_python_module

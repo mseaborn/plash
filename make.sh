@@ -620,25 +620,35 @@ install_libs_for_testing () {
 }
 
 
-if [ "$1" != "--include" ]; then
+all_steps () {
+  build_small_bits
+  (export CC; cd setuid && ./make-setuid.sh)
+  setup_glibc_build
+  ./make_objs.py
+  build_preload_library
+  link_preload_library
+  if [ "$GLIBC_BUILD_TYPE" = separate ]; then
+    build_libc_ldso_extras
+    # Building ld.so first is useful because libc.so and libpthread.so
+    # link against it.
+    build_ldso
+    build_libc
+    build_libpthread
+  fi
+  build_shell_etc
+  build_gtk_powerbox
+  build_python_module
+  install_libs_for_testing
+}
 
-build_small_bits
-(export CC; cd setuid && ./make-setuid.sh)
-setup_glibc_build
-./make_objs.py
-build_preload_library
-link_preload_library
-if [ "$GLIBC_BUILD_TYPE" = separate ]; then
-  build_libc_ldso_extras
-  # Building ld.so first is useful because libc.so and libpthread.so
-  # link against it.
-  build_ldso
-  build_libc
-  build_libpthread
-fi
-build_shell_etc
-build_gtk_powerbox
-build_python_module
-install_libs_for_testing
 
+if [ "$1" == "--include" ]; then
+  # nothing
+  true
+elif [ $# -gt 0 ]; then
+  for ACTION in "$@"; do
+    $ACTION
+  done
+else
+  all_steps
 fi

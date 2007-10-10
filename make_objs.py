@@ -178,7 +178,10 @@ class ArArchiveTarget(BuildTarget):
         run_command(["ar", "-cr", self._dest] + self._obj_files)
 
 
-def get_targets():
+c_flags = ["-O1", "-Wall", "-Igensrc", "-Isrc"]
+
+
+def get_non_libc_targets():
     targets = []
     lib_objs_o = []
     lib_objs_os = []
@@ -188,18 +191,10 @@ def get_targets():
         targets.append(target)
         return target
 
-    c_flags = ["-O1", "-Wall", "-Igensrc", "-Isrc"]
-
     opts_s = c_flags + ["-DENABLE_LOGGING"]
     if config["USE_GTK"] == "yes":
         opts_s.append("-DPLASH_GLIB")
         opts_s.extend(get_pkg_config_args())
-
-    # Defining _GNU_SOURCE is necessary for making headers define symbols
-    # including AT_FDCWD, PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP,
-    # getpgid(), RTLD_NEXT.
-    opts_c = c_flags + ["-D_REENTRANT", "-fPIC", "-D_GNU_SOURCE",
-                        "-DGLIBC_SEPARATE_BUILD"]
 
     def build_lib(name):
         o_file = gcc("src/%s.c" % name, "obj/%s.o" % name, opts_s)
@@ -269,8 +264,23 @@ def get_targets():
     gcc("src/pola-run.c", "obj/pola-run.o", opts_s)
     gcc("src/powerbox-req.c", "obj/powerbox-req.o", opts_s)
 
+    return targets
 
+
+def get_libc_targets():
     # Build object files to be linked into libc.so and ld.so (ld-linux.so)
+    targets = []
+
+    def gcc(*args):
+        target = GccTarget(*args)
+        targets.append(target)
+        return target
+
+    # Defining _GNU_SOURCE is necessary for making headers define symbols
+    # including AT_FDCWD, PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP,
+    # getpgid(), RTLD_NEXT.
+    opts_c = c_flags + ["-D_REENTRANT", "-fPIC", "-D_GNU_SOURCE",
+                        "-DGLIBC_SEPARATE_BUILD"]
 
     common_libc_modules = [
         "libc-misc",
@@ -315,6 +325,10 @@ def get_targets():
             opts_gtk_pb)
 
     return targets
+
+
+def get_targets():
+    return get_non_libc_targets() + get_libc_targets()
 
 
 def check_no_duplicates(targets):
@@ -400,6 +414,8 @@ def main(args):
 
     if args == []:
         build(targets, logger)
+    elif args == ["non_libc"]:
+        build(get_non_libc_targets(), logger)
     elif args == ["full_build"]:
         if build(targets, logger):
             os.system("./make.sh")

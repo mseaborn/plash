@@ -82,9 +82,17 @@ class LogProxy(plash.marshal.Pyobj_marshal):
         self._obj = obj
         self._calls = call_list
 
+    def fsop_copy(self):
+        return LogProxy(self._obj.fsop_copy(), self._calls)
+
     def cap_call(self, args):
-        self._calls.append(plash.marshal.unpack(args))
-        return self._obj.cap_call(args)
+        args_unpacked = plash.marshal.unpack(args)
+        self._calls.append(args_unpacked)
+        if args_unpacked[0] == "fsop_copy":
+            return plash.marshal.pack("r_cap", self.fsop_copy())
+        else:
+            return self._obj.cap_call(args)
+
 
 class ProcessWithLogging(plash.process.ProcessSpecWithNamespace):
     """Process constructor that logs the calls the process makes."""
@@ -97,6 +105,7 @@ class ProcessWithLogging(plash.process.ProcessSpecWithNamespace):
         fs_op = super(ProcessWithLogging, self).\
                 make_fs_op(root_dir, logger)
         return LogProxy(fs_op, self._call_list)
+
 
 class ProcessPreloadMixin(object):
 
@@ -186,7 +195,7 @@ int main()
             rc = subprocess.call(["pola-run", "-B", "-fw=.",
                                   "-f", self._executable,
                                   "-e", self._executable] + self.main_args)
-            assert rc == 0
+            assert rc == 0, rc
         self._test_main(run)
 
     def _run_plash_process(self, proc):
@@ -216,14 +225,28 @@ int main()
         self.check()
 
     def test_preload_library(self):
-        def run():
-            self._method_calls = []
-            class Proc(ProcessPreloadMixin, ProcessWithLogging):
-                pass
-            proc = Proc(self._method_calls)
-            self._run_plash_process(proc)
-        self._test_main(run)
-        self.check()
+        old_ldso = os.environ.get("PLASH_LDSO_PATH", None)
+        # FsOp uses this environment variable to specify the
+        # executable that subprocesses should call execve() on.
+        # When using the preload library, we want to use the installed
+        # ld.so, not our built ld.so.
+        # TODO: make this an argument of FsOp, instead of taking it
+        # from an environment variable.
+        os.environ["PLASH_LDSO_PATH"] = "/usr/bin/env"
+        try:
+            def run():
+                self._method_calls = []
+                class Proc(ProcessPreloadMixin, ProcessWithLogging):
+                    pass
+                proc = Proc(self._method_calls)
+                self._run_plash_process(proc)
+            self._test_main(run)
+            self.check()
+        finally:
+            if old_ldso is None:
+                del os.environ["PLASH_LDSO_PATH"]
+            else:
+                os.environ["PLASH_LDSO_PATH"] = old_ldso
 
     def assertCalled(self, method_name, *args):
         self.assertTrue((method_name, args) in self._method_calls,
@@ -640,15 +663,26 @@ void test_fchownat()
 class TestFork(LibcTest):
     entry = "test_fork"
     code = r"""
+#include <fcntl.h>
 #include <unistd.h>
 #include <sys/wait.h>
 void test_fork()
 {
-  int pid, pid2, status;
+  int pid, pid2, fd, status;
   pid = fork();
   t_check(pid >= 0);
-  if(pid == 0)
+  if(pid == 0) {
+    /* Check that communications still work in the forked process. */
+    fd = creat("test_file1", 0666);
+    t_check(fd >= 0);
+    t_check_zero(close(fd));
     _exit(42);
+  }
+  /* Check that communications still work in the parent process. */
+  fd = creat("test_file2", 0666);
+  t_check(fd >= 0);
+  t_check_zero(close(fd));
+
   pid2 = wait(&status);
   t_check(pid2 >= 0);
   assert(pid == pid2);
@@ -657,6 +691,27 @@ void test_fork()
 """
     def check(self):
         self.assertCalled("fsop_copy")
+        self.assertCalled("fsop_open", None,
+                          os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0666,
+                          "test_file1")
+        self.assertCalled("fsop_open", None,
+                          os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0666,
+                          "test_file2")
+
+
+class TestExec(LibcTest):
+    entry = "test_exec"
+    code = r"""
+#include <unistd.h>
+void test_exec()
+{
+  char *const argv[] = { "zeroth arg", "first arg", "second arg", NULL };
+  t_check_zero(execve("/bin/true", argv, environ));
+}
+"""
+    def check(self):
+        self.assertCalled("fsop_exec", "/bin/true",
+                          ["zeroth arg", "first arg", "second arg"])
 
 
 class TestBind(LibcTest):

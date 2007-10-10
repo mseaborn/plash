@@ -120,12 +120,12 @@ pid_t new_fork(void)
       plash_libc_reset_connection();
       comm_sock = comm_sock_saved;
       
-      if(dup2(fd, comm_sock) < 0) {
+      if(kernel_dup2(fd, comm_sock) < 0) {
 	if(libc_debug) fprintf(stderr, "libc: fork(): dup2() failed\n");
 	/* Fail quietly at this point. */
 	unsetenv("PLASH_COMM_FD");
       }
-      close(fd);
+      kernel_close(fd);
       /* This may not work in some cases, if a program empties
 	 out the environment */
       /* However, it's not needed as we keep the indexes the same */
@@ -133,11 +133,11 @@ pid_t new_fork(void)
       return 0;
     }
     else if(pid < 0) {
-      close(fd);
+      kernel_close(fd);
       return -1;
     }
     else {
-      close(fd);
+      kernel_close(fd);
       return pid;
     }
   }

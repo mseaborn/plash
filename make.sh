@@ -610,6 +610,10 @@ build_python_module () {
   fi
 }
 
+copy_ldso () {
+  cp -av $GLIBC/elf/ld.so $OUT/ld.so
+}
+
 install_libs_for_testing () {
   mkdir -p lib
   ./src/install-libs.pl --dest-dir lib/
@@ -634,6 +638,8 @@ all_steps () {
     build_ldso
     build_libc
     build_libpthread
+  else
+    copy_ldso
   fi
   build_shell_etc
   build_gtk_powerbox

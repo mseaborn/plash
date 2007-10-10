@@ -23,9 +23,17 @@
 # This program installs the libc libraries (not including ld.so/ld-linux.so).
 # They come from different places and are given different version numbers.
 
-my $from_dir = `. src/config.sh && echo \$GLIBC_SO_DIR`;
-chomp($from_dir);
-if($from_dir eq '') { die }
+sub get_from_config {
+  my ($var) = @_;
+  my $value = `. src/config.sh && echo \$$var`;
+  chomp($value);
+  if($value eq '') {
+    die "No value for $var found in config.sh";
+  }
+  return $value;
+}
+
+my $from_dir = get_from_config('GLIBC_SO_DIR');
 
 # Install unmodified libs copied from the glibc build tree
 sub unmod {
@@ -41,10 +49,18 @@ sub unmod {
   die "Can't locate '$dir/$name', tried: ".join(', ', @fs);
 }
 
-my $libs = [
-  ['shobj/libc.so', 'libc.so.6'],
-  ['shobj/libpthread.so', 'libpthread.so.0'],
-
+my $libs = [];
+if(get_from_config('GLIBC_BUILD_TYPE') eq 'separate') {
+  push(@$libs,
+       ['shobj/libc.so', 'libc.so.6'],
+       ['shobj/libpthread.so', 'libpthread.so.0']);
+}
+else {
+  push(@$libs,
+       unmod('', 'libc.so', 'libc.so.6'),
+       unmod('nptl', 'libpthread.so', 'libpthread.so.0'));
+}
+push(@$libs,
   unmod('math', 'libm.so', 'libm.so.6'),
   unmod('crypt', 'libcrypt.so', 'libcrypt.so.1'),
   unmod('dlfcn', 'libdl.so', 'libdl.so.2'),
@@ -65,7 +81,7 @@ my $libs = [
   unmod('malloc', 'libmemusage.so', 'libmemusage.so'),
   unmod('debug', 'libSegFault.so', 'libSegFault.so'),
   unmod('debug', 'libpcprofile.so', 'libpcprofile.so'),
-];
+);
 
 if(scalar(@ARGV) == 2 && $ARGV[0] eq '--dest-dir') {
   my $dest_dir = $ARGV[1];

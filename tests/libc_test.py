@@ -563,6 +563,23 @@ void test_chdir()
         self.assertCalled("fsop_chdir", "dir")
 
 
+class TestFchdir(LibcTest):
+    entry = "test_fchdir"
+    code = r"""
+#include <fcntl.h>
+#include <unistd.h>
+void test_fchdir()
+{
+  int fd = open(".", O_RDONLY);
+  t_check(fd >= 0);
+  t_check_zero(fchdir(fd));
+  t_check_zero(close(fd));
+}
+"""
+    def check(self):
+        self.assertCalledPattern("fsop_fchdir", WildcardNotNone())
+
+
 class TestReaddir(LibcTest):
     entry = "test_readdir"
     code = r"""

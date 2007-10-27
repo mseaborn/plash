@@ -41,6 +41,8 @@ stamp-dir/configure-glibc: stamp-dir/unpack-patch-glibc
 	mkdir -p $(GLIBC_BUILD)
 	cd $(GLIBC_BUILD) && ../$(GLIBC_DIR)/configure \
 		CC="gcc-4.1 -fno-stack-protector" \
+		--host=$(shell dpkg-architecture -qDEB_HOST_GNU_TYPE) \
+		--build=$(shell dpkg-architecture -qDEB_HOST_GNU_TYPE) \
 		--prefix=/usr \
 		--without-selinux --enable-kernel=2.6.0 \
 		--with-tls \

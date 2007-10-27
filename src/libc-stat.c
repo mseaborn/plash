@@ -19,6 +19,8 @@
 
 /* To get "struct stat64" defined */
 #define _LARGEFILE64_SOURCE
+
+#include <errno.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 

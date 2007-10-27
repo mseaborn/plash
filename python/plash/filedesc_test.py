@@ -24,7 +24,8 @@ import traceback
 import unittest
 
 # Ensure that we don't need X to run
-del os.environ["DISPLAY"]
+if "DISPLAY" in os.environ:
+    del os.environ["DISPLAY"]
 
 import gobject
 

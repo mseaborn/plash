@@ -87,9 +87,9 @@ void new_seekdir(DIR *dir, off_t offset);
 int new_getdents(int fd, struct dirent *buf, unsigned count);
 int new_getdents64(int fd, struct dirent *buf, unsigned count);
 int new_xmknod(int ver, const char *path, mode_t mode, dev_t *dev);
-int new_readlink(const char *pathname, char *buf, size_t buf_size);
-int new_readlinkat(int dir_fd, const char *pathname,
-		   char *buf, size_t buf_size);
+ssize_t new_readlink(const char *pathname, char *buf, size_t buf_size);
+ssize_t new_readlinkat(int dir_fd, const char *pathname,
+		       char *buf, size_t buf_size);
 int new_access(const char *pathname, int mode);
 int new_faccessat(int dir_fd, const char *pathname, int mode,
 		  int flags);
@@ -980,7 +980,7 @@ export(new_readlink, __readlink);
 export(new_readlink, __GI_readlink);
 export(new_readlink, __GI___readlink);
 
-int new_readlink(const char *pathname, char *buf, size_t buf_size)
+ssize_t new_readlink(const char *pathname, char *buf, size_t buf_size)
 {
   return new_readlinkat(AT_FDCWD, pathname, buf, buf_size);
 }
@@ -989,8 +989,8 @@ int new_readlink(const char *pathname, char *buf, size_t buf_size)
 export(new_readlinkat, readlinkat);
 export(new_readlinkat, __GI_readlinkat);
 
-int new_readlinkat(int dir_fd, const char *pathname,
-		   char *buf, size_t buf_size)
+ssize_t new_readlinkat(int dir_fd, const char *pathname,
+		       char *buf, size_t buf_size)
 {
   region_t r = region_make();
   cap_t fs_op_server;

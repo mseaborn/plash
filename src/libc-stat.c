@@ -74,23 +74,24 @@ static void m_stat_info(int *ok, seqf_t *msg, int type, void *buf)
   if(*ok) {
     /* The __pad*, __unused* and __st_ino fields are defined on i386
        but not x86-64.  The kernel_stat.h headers in glibc declare
-       their presence via macros such as _HAVE_STAT___UNUSED4.
-       However, it's difficult to get at that header, so we use
-       memset() to clear those fields instead. */
+       their presence via macros such as _HAVE_STAT___UNUSED4. */
     
     if(type == TYPE_STAT) {
       struct stat *stat = buf;
-      memset(stat, 0, sizeof(struct stat));
       
       stat->st_dev = myst_dev;
-      // stat->__pad1 = 0;
+#ifdef _HAVE_STAT___PAD1
+      stat->__pad1 = 0;
+#endif
       stat->st_ino = myst_ino;
       stat->st_mode = myst_mode;
       stat->st_nlink = myst_nlink;
       stat->st_uid = myst_uid;
       stat->st_gid = myst_gid;
       stat->st_rdev = myst_rdev;
-      // stat->__pad2 = 0;
+#ifdef _HAVE_STAT___PAD2
+      stat->__pad2 = 0;
+#endif
       stat->st_size = myst_size;
       stat->st_blksize = myst_blksize;
       stat->st_blocks = myst_blocks;
@@ -100,22 +101,31 @@ static void m_stat_info(int *ok, seqf_t *msg, int type, void *buf)
       stat->st_mtim.tv_nsec = 0; /* FIXME */
       stat->st_ctim.tv_sec = myst_ctime;
       stat->st_ctim.tv_nsec = 0; /* FIXME */
-      // stat->__unused4 = 0;
-      // stat->__unused5 = 0;
+#ifdef _HAVE_STAT___UNUSED4
+      stat->__unused4 = 0;
+#endif
+#ifdef _HAVE_STAT___UNUSED5
+      stat->__unused5 = 0;
+#endif
     }
     else if(type == TYPE_STAT64) {
       struct stat64 *stat = buf;
-      memset(stat, 0, sizeof(struct stat64));
       
       stat->st_dev = myst_dev;
-      // stat->__pad1 = 0;
+#ifdef _HAVE_STAT64___PAD1
+      stat->__pad1 = 0;
+#endif
+#ifdef _HAVE_STAT64___ST_INO
       stat->__st_ino = myst_ino;
+#endif
       stat->st_mode = myst_mode;
       stat->st_nlink = myst_nlink;
       stat->st_uid = myst_uid;
       stat->st_gid = myst_gid;
       stat->st_rdev = myst_rdev;
-      // stat->__pad2 = 0;
+#ifdef _HAVE_STAT64___PAD2
+      stat->__pad2 = 0;
+#endif
       stat->st_size = myst_size;
       stat->st_blksize = myst_blksize;
       stat->st_blocks = myst_blocks;

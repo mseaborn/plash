@@ -32,8 +32,10 @@ STDERR_FILENO = 2
 
 
 def kernel_execve(cmd, argv, env):
-    return plash_core.kernel_execve(cmd, tuple(argv),
-                               tuple([x[0]+"="+x[1] for x in env.items()]))
+    env_as_tuple = tuple("%s=%s" % (key, value)
+                         for key, value in env.iteritems())
+    return plash_core.kernel_execve(cmd, tuple(argv), env_as_tuple)
+
 
 def add_to_path(dir, path):
     """Insert string <dir> into colon-separated list <path> if it is not
@@ -46,6 +48,7 @@ def add_to_path(dir, path):
         elts.remove(dir)
     elts.insert(0, dir)
     return string.join(elts, ":")
+
 
 # Attributes:
 # env: dict listing environment variables
@@ -181,15 +184,21 @@ class ProcessSpec(object):
         if pid == 0:
             try:
                 plash_core.cap_close_all_connections()
+                if plash.env.under_plash:
+                    # Unset this variable so that the connection
+                    # does not get reinstated after resetting it.
+                    if "PLASH_COMM_FD" in os.environ:
+                        del os.environ["PLASH_COMM_FD"]
+                    # This lets us close() the FD for libc's connection.
+                    plash_core.libc_reset_connection()
+                self._set_up_fds()
                 try:
-                    self._set_up_fds()
                     my_execve(self.cmd, [self.arg0] + self.args, self.env)
                 except Exception, ex:
-                    os.write(STDERR_FILENO, "%s\n" % str(ex))
-                os.write(STDERR_FILENO, "execve failed\n")
-            except:
-                pass
-            os._exit(1)
+                    os.write(STDERR_FILENO, "execve failed: %s: %s\n"
+                             % (type(ex).__name__, str(ex)))
+            finally:
+                os._exit(1)
         else:
             # We must drop our references to the client's FDs so that
             # we do not hold its connections open even after the

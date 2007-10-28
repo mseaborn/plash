@@ -20,6 +20,7 @@
 /* Needed for environ */
 #define _GNU_SOURCE
 
+#include <dlfcn.h>
 #include <errno.h>
 #include <stdio.h>
 #include <sys/socket.h>
@@ -559,7 +560,7 @@ static void args_to_exec_elf_program
    const char **cmd_out, int *argc_out, const char ***argv_out,
    int debug)
 {
-  const char *sandbox_prog = getenv("PLASH_SANDBOX_PROG");
+  const char *sandbox_prog;
   int extra_args = 2 + (debug ? 1:0) + 2 + 2;
   const char **argv2;
   int i, j;
@@ -568,6 +569,10 @@ static void args_to_exec_elf_program
   argv2 = region_alloc(r, (argc + extra_args + 1) * sizeof(char *));
   argv2[0] = argv[0];
   i = 1;
+  if(under_plash)
+    sandbox_prog = getenv("PLASH_P_SANDBOX_PROG");
+  else
+    sandbox_prog = getenv("PLASH_SANDBOX_PROG");
   if(!sandbox_prog) {
     if(under_plash) {
       *cmd_out = "/run-as-anonymous";
@@ -888,8 +893,10 @@ int main(int argc, char **argv)
 	cwd_discard();
 
 	if(under_plash) {
-	  assert(plash_libc_kernel_execve);
-	  plash_libc_kernel_execve(cmd, (char **) args_array2, environ);
+	  __typeof__(plash_libc_kernel_execve) *kernel_execve =
+	    dlsym(RTLD_NEXT, "plash_libc_kernel_execve");
+	  assert(kernel_execve != NULL);
+	  kernel_execve(cmd, (char **) args_array2, environ);
 	}
 	else {
 	  execve(cmd, (char **) args_array2, environ);

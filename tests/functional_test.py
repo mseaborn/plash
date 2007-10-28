@@ -40,6 +40,11 @@ def write_file(path, data):
         fh.close()
 
 
+def check_subprocess_status(status):
+    if status != 0:
+        raise Exception("Subprocess exited with status %i" % status)
+
+
 class TestCaseChdir(unittest.TestCase):
 
     def setUp(self):
@@ -159,6 +164,15 @@ class PolaRunTestsMixin(object):
              "-e", "/bin/bash", "-c", "/bin/echo yeah; /bin/true"],
             stdout=subprocess.PIPE)
         self.assertEquals(proc.communicate()[0], "yeah\n")
+
+    def test_nested(self):
+        proc = subprocess.Popen([self._pola_run, "-fw", "/", "-e",
+                                 self._pola_run, "-fw", "/", "-e",
+                                 "/bin/echo", "Hello world"],
+                                stdout=subprocess.PIPE)
+        stdout, stderr = proc.communicate()
+        check_subprocess_status(proc.wait())
+        self.assertEquals(stdout, "Hello world\n")
 
     def test_strace(self):
         proc = subprocess.Popen(

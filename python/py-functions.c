@@ -17,6 +17,9 @@
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
    USA.  */
 
+#define _GNU_SOURCE
+
+#include <dlfcn.h>
 #include <unistd.h>
 #include <fcntl.h>
 
@@ -78,13 +81,30 @@ static PyObject *plpy_cap_close_all_connections(PyObject *self, PyObject *args)
   return Py_None;
 }
 
-__asm__(".weak plash_libc_duplicate_connection");
-__asm__(".weak plash_libc_kernel_execve");
+static PyObject *plpy_libc_reset_connection(PyObject *self, PyObject *args)
+{
+  __typeof__(plash_libc_reset_connection) *reset_connection =
+    dlsym(RTLD_NEXT, "plash_libc_reset_connection");
+  if(reset_connection) {
+    reset_connection();
+    Py_INCREF(Py_None);
+    return Py_None;
+  }
+  else {
+    PyErr_SetString(PyExc_Exception,
+		    "The symbol plash_libc_reset_connection is not defined; "
+		    "the process is probably not running under the "
+		    "Plash environment");
+    return NULL;
+  }
+}
 
 static PyObject *plpy_libc_duplicate_connection(PyObject *self, PyObject *args)
 {
-  if(plash_libc_duplicate_connection) {
-    int fd = plash_libc_duplicate_connection();
+  __typeof__(plash_libc_duplicate_connection) *duplicate_connection =
+    dlsym(RTLD_NEXT, "plash_libc_duplicate_connection");
+  if(duplicate_connection) {
+    int fd = duplicate_connection();
     if(fd < 0) {
       PyErr_SetString(PyExc_Exception,
 		      "plash_libc_duplicate_connection() failed");
@@ -124,7 +144,9 @@ static PyObject *plpy_libc_kernel_execve(PyObject *self, PyObject *args)
     return NULL;
   }
 
-  if(!plash_libc_kernel_execve) {
+  __typeof__(plash_libc_kernel_execve) *kernel_execve =
+    dlsym(RTLD_NEXT, "plash_libc_kernel_execve");
+  if(!kernel_execve) {
     PyErr_SetString(PyExc_Exception,
 		    "The symbol plash_libc_kernel_execve is not defined; the process is probably not running under the Plash environment");
     return NULL;
@@ -156,7 +178,7 @@ static PyObject *plpy_libc_kernel_execve(PyObject *self, PyObject *args)
   }
   env_list[env_size] = NULL;
 
-  plash_libc_kernel_execve(path, argv_list, env_list);
+  kernel_execve(path, argv_list, env_list);
 
   PyErr_SetFromErrno(PyExc_OSError);
  fail_2:
@@ -479,7 +501,11 @@ static PyMethodDef module_methods[] = {
   { "kernel_execve", plpy_libc_kernel_execve, METH_VARARGS,
     "Calls the kernel's execve() system call, avoiding interception by\n"
     "Plash's libc." },
-  
+
+  { "libc_reset_connection", plpy_libc_reset_connection, METH_NOARGS,
+    "Tells PlashGlibc reset its connection, and to allow the file\n"
+    "descriptor slot to be overwritten by close() and dup2()." },
+
   { "libc_duplicate_connection", plpy_libc_duplicate_connection, METH_NOARGS,
     "Duplicates the connection that libc has with the server.\n"
     "Returns a file descriptor for the connection." },

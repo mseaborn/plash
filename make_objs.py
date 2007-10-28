@@ -178,7 +178,10 @@ class ArArchiveTarget(BuildTarget):
         run_command(["ar", "-cr", self._dest] + self._obj_files)
 
 
-c_flags = ["-O1", "-Wall", "-Igensrc", "-Isrc"]
+# Defining _GNU_SOURCE is necessary for making headers define symbols
+# including AT_FDCWD, PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP,
+# getpgid(), RTLD_NEXT.
+c_flags = ["-O1", "-Wall", "-Igensrc", "-Isrc", "-D_GNU_SOURCE"]
 
 
 def get_non_libc_targets():
@@ -276,11 +279,7 @@ def get_libc_targets():
         targets.append(target)
         return target
 
-    # Defining _GNU_SOURCE is necessary for making headers define symbols
-    # including AT_FDCWD, PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP,
-    # getpgid(), RTLD_NEXT.
-    opts_c = c_flags + ["-D_REENTRANT", "-fPIC", "-D_GNU_SOURCE",
-                        "-DGLIBC_SEPARATE_BUILD"]
+    opts_c = c_flags + ["-D_REENTRANT", "-fPIC", "-DGLIBC_SEPARATE_BUILD"]
 
     common_libc_modules = [
         "libc-misc",

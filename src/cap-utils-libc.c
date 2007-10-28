@@ -25,25 +25,6 @@
 #include "plash-libc.h"
 
 
-/* Don't need this, use weak symbols. */
-#if 0
-int plash_libc_duplicate_connection2()
-{
-  void *h;
-  int (*f)();
-  int result;
-  
-  h = dlopen("libc.so.6", RTLD_LAZY);
-  if(!h) { return -1; }
-  f = dlsym(h, "plash_libc_duplicate_connection");
-  if(!f) { return -1; }
-  result = f();
-  dlclose(h);
-  return result;
-}
-#endif
-
-
 /* This takes a list of pairs:
    const char *name, cap_t *dest
    It fills out *dest with the capability in the `name' slot. */
@@ -58,13 +39,21 @@ int get_process_caps(const char *arg, ...)
   cap_t *caps;
 
   var = getenv("PLASH_CAPS");
-  if(!var) { fprintf(stderr, _("PLASH_CAPS variable is not set\n")); return -1; }
-  if(!plash_libc_duplicate_connection) {
+  if(!var) {
+    fprintf(stderr, _("PLASH_CAPS variable is not set\n"));
+    return -1;
+  }
+  __typeof__(plash_libc_duplicate_connection) *duplicate_connection =
+    dlsym(RTLD_NEXT, "plash_libc_duplicate_connection");
+  if(!duplicate_connection) {
     fprintf(stderr, _("plash_libc_duplicate_connection not defined\n"));
     return -1;
   }
-  sock_fd = plash_libc_duplicate_connection();
-  if(sock_fd < 0) { fprintf(stderr, _("plash_libc_duplicate_connection() failed\n")); return -1; }
+  sock_fd = duplicate_connection();
+  if(sock_fd < 0) {
+    fprintf(stderr, _("plash_libc_duplicate_connection() failed\n"));
+    return -1;
+  }
 
   cap_list = seqf_string(var);
   list = cap_list;

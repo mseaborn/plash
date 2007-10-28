@@ -17,9 +17,7 @@
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
    USA.  */
 
-/* Used to get `environ' declared */
-#define _GNU_SOURCE
-
+#include <dlfcn.h>
 #include <stdio.h>
 #include <unistd.h>
 
@@ -96,8 +94,10 @@ int main(int argc, const char *argv[])
     }
   }
   region_free(r);
-  assert(plash_libc_reset_connection);
-  plash_libc_reset_connection();
+  __typeof__(plash_libc_reset_connection) *reset_connection =
+    dlsym(RTLD_NEXT, "plash_libc_reset_connection");
+  assert(reset_connection != NULL);
+  reset_connection();
   execve(argv[2], (char **) argv + 2, environ);
   perror("chroot: exec");
   return 1;

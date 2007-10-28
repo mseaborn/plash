@@ -21,12 +21,13 @@
 #include <pthread.h>
 #include <unistd.h>
 
-#include "region.h"
-#include "comms.h"
-#include "libc-comms.h"
 #include "cap-protocol.h"
 #include "cap-utils.h"
+#include "comms.h"
+#include "libc-comms.h"
 #include "marshal.h"
+#include "region.h"
+#include "plash-libc.h"
 
 
 void new_plash_libc_reset_connection(void);

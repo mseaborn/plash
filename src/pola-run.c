@@ -17,9 +17,6 @@
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
    USA.  */
 
-/* Needed for environ */
-#define _GNU_SOURCE
-
 #include <dlfcn.h>
 #include <errno.h>
 #include <stdio.h>

@@ -17,10 +17,6 @@
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
    USA.  */
 
-/* Necessary to get O_DIRECTORY and O_NOFOLLOW */
-/* #define __USE_GNU */
-#define _GNU_SOURCE
-
 #include <errno.h>
 #include <fcntl.h>
 

@@ -17,15 +17,13 @@
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
    USA.  */
 
-/* Used to get `environ' declared */
-#define _GNU_SOURCE
-
+#include <dlfcn.h>
 #include <errno.h>
-#include <stdio.h>
-#include <unistd.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <stdio.h>
 #include <sys/socket.h>
+#include <unistd.h>
 
 #include "region.h"
 #include "filesysobj.h"
@@ -397,8 +395,12 @@ int main(int argc, const char *argv[])
 	snprintf(buf, sizeof(buf), "%i", sock_fd);
 	setenv("PLASH_COMM_FD", buf, 1);
 	setenv("PLASH_CAPS", "fs_op;conn_maker;fs_op_maker", 1);
-	assert(plash_libc_reset_connection);
-	plash_libc_reset_connection();
+
+	__typeof__(plash_libc_reset_connection) *reset_connection =
+	  dlsym(RTLD_NEXT, "plash_libc_reset_connection");
+	assert(reset_connection != NULL);
+	reset_connection();
+
 	region_free(r);
 	
 	execve(prog, (char **) args, environ);

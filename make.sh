@@ -490,57 +490,18 @@ build_small_bits () {
 
 
 build_shell_etc() {
-  # Populate $OUT/lib with shared objects to link against
-  rm -rf $OUT/lib
-  mkdir -p $OUT/lib
-  GLIBC_DIR=`cd $GLIBC && pwd`
-  (cd $OUT/lib
-  ln -sf ../libc.so libc.so.6
-  ln -sf $GLIBC_DIR/libc_nonshared.a libc_nonshared.a
-  rm -f libc.so
-  echo "GROUP ( libc.so.6 libc_nonshared.a )" >libc.so
-  ln -sf ../ld.so ld-linux.so.2
-  ln -sf ../libpthread.so libpthread.so.0
-  ln -sf $GLIBC_DIR/math/libm.so libm.so
-  ln -sf $GLIBC_DIR/dlfcn/libdl.so libdl.so
-  ln -sf $GLIBC_DIR/rt/librt.so librt.so
-  ln -sf libm.so libm.so.6
-  ln -sf librt.so librt.so.1
-  ln -sf libdl.so libdl.so.2
-  )
-
-  # Even though we use weak references, we need to link with our libc.so,
-  # otherwise the weak references are omitted entirely from the dynamic
-  # linking tables.  They need to be associated with a particular shared
-  # object.
-  # We need to link with libdl.so and libm.so in case the installed ones
-  # aren't compatible with our libc.so and ld.so (they might be non-2.3.5).
-  # $GLIBC/math/libm.so $GLIBC/dlfcn/libdl.so shobj/libc.so shobj/ld.so
-  # FIXME: remove glib-2.0 from this
   LIBC_LINK="-Wl,-z,defs
-	-L$OUT/lib -Wl,-rpath-link=$OUT/lib"
+	-ldl"
   if [ "$USE_GTK" = yes ]; then
     LIBC_LINK="$LIBC_LINK `pkg-config --libs glib-2.0`"
   fi
 
-  # `pkg-config gtk+-2.0 --libs`
-  # If I want this to work on my old RedHat system (using 2.2.5), it's
-  # now necessary to omit $LIBC_LINK, which makes the executable depend
-  # on 2.3.5 (which it will depend on anyway if you build on a system
-  # where that is installed).  2.3.3 didn't have this problem.
-  # Other points:
-  #  * Used to link "-ltermcap".  This worked for building on RedHat 7.3,
-  #    but produced an executable that didn't work on recent Debians.
-  #    (However, building on Debian effectively ignored "-ltermcap" and
-  #    pulled in libncurses instead.)
-  #  * Link with "-lncurses".  This builds on RedHat 7.3 and Debian.
-  #    ncurses replaces termcap.
   echo Linking bin/pola-shell
   $CC $OPTS_S obj/shell.o obj/libplash.a \
 	obj/shell-parse.o \
 	obj/shell-variants.o \
 	obj/shell-globbing.o \
-	$LIBC_LINK -lreadline -ltermcap \
+	$LIBC_LINK -lreadline \
 	-o bin/pola-shell
 
   echo Linking bin/run-emacs

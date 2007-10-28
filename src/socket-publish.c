@@ -17,10 +17,6 @@
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
    USA.  */
 
-/* This removes warning about calling bind() */
-/* #define __USE_GNU */
-#define _GNU_SOURCE
-
 #include <errno.h>
 #include <stddef.h>
 #include <sys/socket.h>

@@ -17,9 +17,7 @@
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
    USA.  */
 
-/* Used to get `environ' declared */
-#define _GNU_SOURCE
-
+#include <dlfcn.h>
 #include <errno.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -205,12 +203,15 @@ void exec_obj_invoke(struct filesys_obj *obj1, struct cap_args args)
 	if(pid == 0) {
 	  char buf[20];
 	  fds_t inst_fds = { fds2.fds, fds2.count };
-	  
+
+	  __typeof__(plash_libc_reset_connection) *reset_connection =
+	    dlsym(RTLD_NEXT, "plash_libc_reset_connection");
+	  assert(reset_connection != NULL);
+
 	  /* Close sockets */
 	  cap_close_all_connections();
 	  unsetenv("PLASH_COMM_FD");
-	  assert(plash_libc_reset_connection);
-	  plash_libc_reset_connection();
+	  reset_connection();
 	  
 	  if(install_fds(inst_fds) < 0) { exit(1); }
 	  
@@ -220,7 +221,7 @@ void exec_obj_invoke(struct filesys_obj *obj1, struct cap_args args)
 	    fprintf(stderr, "setenv failed");
 	    exit(1);
 	  }
-	  plash_libc_reset_connection();
+	  reset_connection();
 
 	  if(ea.pgid > 0) {
 	    if(setpgid(0, ea.pgid) < 0) perror("exec-object: setpgid");

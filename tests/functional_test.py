@@ -124,6 +124,7 @@ class PolaRunTestsMixin(object):
                                  "-a", "Hello world"],
                                 stdout=subprocess.PIPE)
         stdout, stderr = proc.communicate()
+        check_subprocess_status(proc.wait())
         self.assertEquals(stdout, "Hello world\n")
 
     def test_echo_path(self):
@@ -132,6 +133,7 @@ class PolaRunTestsMixin(object):
                                  "-a", "Hello world"],
                                 stdout=subprocess.PIPE)
         stdout, stderr = proc.communicate()
+        check_subprocess_status(proc.wait())
         self.assertEquals(stdout, "Hello world\n")
 
     def test_nopath(self):
@@ -149,21 +151,27 @@ class PolaRunTestsMixin(object):
         proc = subprocess.Popen(
             [self._pola_run, "-B", "--prog", "cat", "-fa", "file"],
             stdout=subprocess.PIPE)
-        self.assertEquals(proc.communicate()[0], data)
+        stdout, stderr = proc.communicate()
+        check_subprocess_status(proc.wait())
+        self.assertEquals(stdout, data)
 
     def test_bash_exec(self):
         proc = subprocess.Popen(
             [self._pola_run, "-B", "--cwd", "/",
              "-e", "/bin/bash", "-c", "/bin/echo yeah"],
             stdout=subprocess.PIPE)
-        self.assertEquals(proc.communicate()[0], "yeah\n")
+        stdout, stderr = proc.communicate()
+        check_subprocess_status(proc.wait())
+        self.assertEquals(stdout, "yeah\n")
 
     def test_bash_fork(self):
         proc = subprocess.Popen(
             [self._pola_run, "-B", "--cwd", "/",
              "-e", "/bin/bash", "-c", "/bin/echo yeah; /bin/true"],
             stdout=subprocess.PIPE)
-        self.assertEquals(proc.communicate()[0], "yeah\n")
+        stdout, stderr = proc.communicate()
+        check_subprocess_status(proc.wait())
+        self.assertEquals(stdout, "yeah\n")
 
     def test_nested(self):
         proc = subprocess.Popen([self._pola_run, "-fw", "/", "-e",
@@ -180,7 +188,9 @@ class PolaRunTestsMixin(object):
              "/bin/echo", "Hello world"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE)
-        self.assertTrue("Hello world" in proc.communicate()[0])
+        stdout, stderr = proc.communicate()
+        check_subprocess_status(proc.wait())
+        self.assertTrue("Hello world" in stdout)
 
     def test_script(self):
         """Test handling of "#!" scripts."""
@@ -191,7 +201,9 @@ echo "script output"
         proc = subprocess.Popen(
             [self._pola_run, "-B", "-f", ".", "-e", "./script"],
             stdout=subprocess.PIPE)
-        self.assertEquals(proc.communicate()[0], "script output\n")
+        stdout, stderr = proc.communicate()
+        check_subprocess_status(proc.wait())
+        self.assertEquals(stdout, "script output\n")
 
     def test_script_arg(self):
         write_file("script", """\
@@ -201,16 +213,18 @@ echo "this does not get used"
         proc = subprocess.Popen(
             [self._pola_run, "-B", "-f", ".", "-e", "./script"],
             stdout=subprocess.PIPE)
-        self.assertEquals(proc.communicate()[0],
-                          "argument-to-interpreter ./script\n")
+        stdout, stderr = proc.communicate()
+        check_subprocess_status(proc.wait())
+        self.assertEquals(stdout, "argument-to-interpreter ./script\n")
 
     def test_script_arg_space(self):
         write_file("script", """#!/bin/echo  args with spaces  \n""")
         proc = subprocess.Popen(
             [self._pola_run, "-B", "-f", ".", "-e", "./script"],
             stdout=subprocess.PIPE)
-        self.assertEquals(proc.communicate()[0],
-                          "args with spaces   ./script\n")
+        stdout, stderr = proc.communicate()
+        check_subprocess_status(proc.wait())
+        self.assertEquals(stdout, "args with spaces   ./script\n")
 
     def test_return_code_exited(self):
         proc = subprocess.Popen([self._pola_run, "--cwd", "/", "-B", "-e",

@@ -57,14 +57,7 @@ fi
 
 
 if test "x$GLIBC_DIR" = x; then
-  #GLIBC_DIR=glibc
-  GLIBC_DIR=./glibc-i386-objs-2.3.5_2
-fi
-AC_MSG_CHECKING([for glibc build tree or object files])
-if test -d "$GLIBC_DIR"; then
-  AC_MSG_RESULT([\"$GLIBC_DIR\" exists])
-else
-  AC_MSG_ERROR([\"$GLIBC_DIR\" not present])
+  GLIBC_DIR=glibc-build
 fi
 
 
@@ -86,6 +79,16 @@ fi
 
 if test "x$GLIBC_BUILD_TYPE" = x; then
   GLIBC_BUILD_TYPE=separate
+fi
+
+
+if test "$GLIBC_BUILD_TYPE" != integrated; then
+  AC_MSG_CHECKING([for glibc build tree or object files])
+  if test -d "$GLIBC_DIR"; then
+    AC_MSG_RESULT([\"$GLIBC_DIR\" exists])
+  else
+    AC_MSG_ERROR([\"$GLIBC_DIR\" not present])
+  fi
 fi
 
 

@@ -152,7 +152,11 @@ setup_glibc_build () {
   fi
 
   # Used by the SHLIB_COMPAT macro
-  cp -av $GLIBC/abi-versions.h gensrc/
+  if [ "$GLIBC_BUILD_TYPE" = separate ]; then
+    cp -av $GLIBC/abi-versions.h gensrc/
+  else
+    echo > gensrc/abi-versions.h
+  fi
 
   LIBC_OBJS="obj/libc-misc_libc.os \
 	obj/libc-stat_libc.os \
@@ -572,10 +576,6 @@ build_python_module () {
   fi
 }
 
-copy_ldso () {
-  cp -av $GLIBC/elf/ld.so $OUT/ld.so
-}
-
 install_libs_for_testing () {
   mkdir -p lib
   ./src/install-libs.pl --dest-dir lib/
@@ -600,13 +600,11 @@ all_steps () {
     build_ldso
     build_libc
     build_libpthread
-  else
-    copy_ldso
+    install_libs_for_testing
   fi
   build_shell_etc
   build_gtk_powerbox
   build_python_module
-  install_libs_for_testing
 }
 
 

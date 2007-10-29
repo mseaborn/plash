@@ -29,21 +29,23 @@ if(scalar(@ARGV) == 1 && $ARGV[0] eq '--rtld') {
 # single token containing dots.  This all means that we have to do the
 # expansion outside of the preprocessor.
 
-my $glibc_dir = `. src/config.sh && echo \$GLIBC`;
-chomp($glibc_dir);
-if($glibc_dir eq '') { die }
-
 my $version_map = {};
 
-my $file = "$glibc_dir/abi-versions.h";
-my $f = IO::File->new($file, 'r') || die "Can't open \"$file\"";
-my $line;
-while(defined($line = <$f>)) {
-  if($line =~ /^#define (VERSION_\S+)\s+(\S+)\s*$/) {
-    $version_map->{$1} = $2;
+if(!$for_rtld) {
+  my $glibc_dir = `. src/config.sh && echo \$GLIBC`;
+  chomp($glibc_dir);
+  if($glibc_dir eq '') { die }
+
+  my $file = "$glibc_dir/abi-versions.h";
+  my $f = IO::File->new($file, 'r') || die "Can't open \"$file\"";
+  my $line;
+  while(defined($line = <$f>)) {
+    if($line =~ /^#define (VERSION_\S+)\s+(\S+)\s*$/) {
+      $version_map->{$1} = $2;
+    }
   }
+  $f->close();
 }
-$f->close();
 
 sub get_version_symbol {
   my ($sym) = @_;
@@ -62,8 +64,8 @@ while(defined($sym = <STDIN>)) {
   }
   elsif($sym =~ /^exportver_(.+)__defaultversion__(.+)$/) {
     my $name = $1;
-    my $ver = get_version_symbol($2);
     if(!$for_rtld) {
+      my $ver = get_version_symbol($2);
       print "--redefine-sym $sym=$name\@\@$ver\n";
     }
     else {
@@ -73,8 +75,8 @@ while(defined($sym = <STDIN>)) {
   }
   elsif($sym =~ /^exportver_(.+)__version__(.+)$/) {
     my $name = $1;
-    my $ver = get_version_symbol($2);
     if(!$for_rtld) {
+      my $ver = get_version_symbol($2);
       print "--redefine-sym $sym=$name\@$ver\n";
     }
     else {

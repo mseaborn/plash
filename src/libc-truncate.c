@@ -26,6 +26,7 @@
 
 
 int new_truncate(const char *path, off_t length);
+int new_truncate64(const char *path, off64_t length);
 
 
 export(new_truncate, truncate);
@@ -37,8 +38,23 @@ int new_truncate(const char *path, off_t length)
 {
   int rc;
   int fd = new_open(path, O_WRONLY, 0);
-  if(fd < 0) return -1;
+  if(fd < 0)
+    return -1;
   rc = ftruncate(fd, length);
+  close(fd);
+  return rc;
+}
+
+
+export(new_truncate64, truncate64);
+
+int new_truncate64(const char *path, off64_t length)
+{
+  int rc;
+  int fd = new_open64(path, O_WRONLY, 0);
+  if(fd < 0)
+    return -1;
+  rc = ftruncate64(fd, length);
   close(fd);
   return rc;
 }

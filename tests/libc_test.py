@@ -1178,6 +1178,30 @@ void test_truncate()
         self.assertCalled("fsop_open", None, os.O_WRONLY, 0, "test_file")
 
 
+class TestTruncate64(LibcTest):
+    entry = "test_truncate64"
+    code = r"""
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+void test_truncate64()
+{
+  int fd = open("test_file", O_CREAT, 0777);
+  t_check(fd >= 0);
+  t_check_zero(truncate64("test_file", 123));
+
+  struct stat st;
+  t_check_zero(fstat(fd, &st));
+  assert(st.st_size == 123);
+  t_check_zero(close(fd));
+}
+"""
+    def check(self):
+        self.assertCalled("fsop_open", None, os.O_CREAT, 0777, "test_file")
+        self.assertCalled("fsop_open", None, os.O_WRONLY | os.O_LARGEFILE,
+                          0, "test_file")
+
+
 def compile_into_one_executable(cases, tmp_dir):
     entry_points = [case.entry for case in cases]
     test_case_prototypes = ""

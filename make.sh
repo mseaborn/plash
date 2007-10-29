@@ -104,6 +104,7 @@ setup_glibc_build () {
 	stdio-common/rename.os
 	misc/utimes.os misc/lutimes.os
 	misc/truncate.os
+	misc/truncate64.os
 	socket/connect.os socket/bind.os
 	socket/getsockname.os
 	socket/getsockopt.os

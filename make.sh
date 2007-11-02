@@ -579,10 +579,6 @@ build_python_module () {
 install_libs_for_testing () {
   mkdir -p lib
   ./src/install-libs.pl --dest-dir lib/
-
-  if [ "$USE_GTK" = yes ]; then
-    cp -a shobj/powerbox-for-gtk.so lib/
-  fi
 }
 
 

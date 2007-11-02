@@ -38,7 +38,7 @@ int expect_ok(struct cap_args args);
 int expect_cap1(struct cap_args args, cap_t *c);
 
 int parse_cap_list(seqf_t list, seqf_t *elt, seqf_t *rest);
-int get_process_caps(const char *arg, ...);
+int get_process_caps(const char *arg, ...) __attribute__((sentinel));
 
 
 #endif

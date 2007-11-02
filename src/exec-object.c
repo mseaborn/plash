@@ -298,7 +298,8 @@ int main(int argc, const char *argv[])
 		      "conn_maker", &conn_maker,
 		      "union_dir_maker", &union_dir_maker,
 		      "return_cont", &return_cont,
-		      0) < 0) return 1;
+		      NULL) < 0)
+    return 1;
 
   {
     cap_t exec_obj;

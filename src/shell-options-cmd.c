@@ -38,7 +38,8 @@ int main(int argc, char *argv[])
     return 1;
   }
 
-  if(get_process_caps("fs_op", &fs_server, 0) < 0) return 1;
+  if(get_process_caps("fs_op", &fs_server, NULL) < 0)
+    return 1;
 
   {
     cap_t opts;

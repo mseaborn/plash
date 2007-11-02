@@ -41,7 +41,8 @@ int main(int argc, char *argv[])
     return 1;
   }
 
-  if(get_process_caps("fs_op", &fs_server, 0) < 0) return 1;
+  if(get_process_caps("fs_op", &fs_server, NULL) < 0)
+    return 1;
 
   r = region_make();
   cap_call(fs_server, r,

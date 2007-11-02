@@ -43,7 +43,8 @@ int main(int argc, const char *argv[])
   if(get_process_caps("fs_op", &fs_server,
 		      "fs_op_maker", &fs_op_maker,
 		      "conn_maker", &conn_maker,
-		      0) < 0) return 1;
+		      NULL) < 0)
+    return 1;
 
   {
     cap_t root_dir;

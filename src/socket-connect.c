@@ -37,7 +37,8 @@ int main(int argc, char *argv[])
     return 1;
   }
 
-  if(get_process_caps("return_cont", &return_cont, 0) < 0) return 1;
+  if(get_process_caps("return_cont", &return_cont, NULL) < 0)
+    return 1;
 
   {
     const char *pathname = argv[1];

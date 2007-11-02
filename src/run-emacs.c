@@ -299,7 +299,8 @@ int main(int argc, const char *argv[])
 		      "fs_op_maker", &fs_op_maker,
 		      "conn_maker", &conn_maker,
 		      "return_cont", &return_cont,
-		      0) < 0) return 1;
+		      NULL) < 0)
+    return 1;
 
   /* Get root directory */
   {

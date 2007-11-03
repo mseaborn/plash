@@ -6,7 +6,7 @@ function link_source
 {
   plash_dir=$(pwd)
   (cd glibc-source &&
-   ./link-source.sh $plash_dir
+   bash link-source.sh $plash_dir
   ) || false
 }
 

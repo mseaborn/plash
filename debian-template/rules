@@ -1,0 +1,78 @@
+#!/usr/bin/make -f
+
+# Copyright (C) 2004, 2005, 2006, 2007 Mark Seaborn
+#
+# This file is part of Plash.
+#
+# Plash is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Lesser General Public License as
+# published by the Free Software Foundation; either version 2.1 of
+# the License, or (at your option) any later version.
+#
+# Plash is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with Plash; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
+# USA.
+
+
+GLIBC_BASE=glibc-2.7
+GLIBC_PATCH=$(GLIBC_BASE)-plash.patch
+
+all: binary
+
+clean:
+	# nothing
+
+
+glibc-source:
+	mkdir tmp-unpack
+	bzip2 -cd /usr/src/$(GLIBC_BASE).tar.bz2 | tar -C tmp-unpack -xf -
+	cd tmp-unpack/$(GLIBC_BASE) && patch -p1 < ../../$(GLIBC_PATCH)
+	mv tmp-unpack/$(GLIBC_BASE) glibc-source
+	rmdir tmp-unpack
+
+stamp-configure-glibc: glibc-source
+	./build-glibc-integrated.sh link_source
+	./build-glibc-integrated.sh configure_glibc
+	touch stamp-configure-glibc
+
+stamp-build-glibc: stamp-configure-glibc stamp-build-plash
+	./build-glibc-integrated.sh make_glibc
+	touch stamp-build-glibc
+
+
+configure:	configure.in
+	autoconf
+
+stamp-build-plash:	configure
+	$(checkdir)
+	./configure GLIBC_BUILD_TYPE=integrated GLIBC_VERSION=9999 CC=gcc-4.1
+	./make.sh
+	(cd docs && ./make-man-pages.pl)
+	(cd web-site && ./make.pl)
+	touch stamp-build-plash
+
+
+build:	stamp-build-plash stamp-build-glibc
+
+binary:	binary-arch
+
+binary-arch:	checkroot build-plash build-glibc
+	bash ./make-package.sh
+
+binary-indep:
+	# nothing
+
+
+define checkdir
+        test -f debian/rules
+endef
+
+checkroot:
+	$(checkdir)
+	test $$(id -u) = 0

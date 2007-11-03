@@ -43,6 +43,7 @@ stamp-configure-glibc: glibc-source
 
 stamp-build-glibc: stamp-configure-glibc stamp-build-plash
 	./build-glibc-integrated.sh make_glibc
+	./build-glibc-integrated.sh copy_ldso
 	touch stamp-build-glibc
 
 
@@ -62,7 +63,7 @@ build:	stamp-build-plash stamp-build-glibc
 
 binary:	binary-arch
 
-binary-arch:	checkroot build-plash build-glibc
+binary-arch:	checkroot stamp-build-plash stamp-build-glibc
 	bash ./make-package.sh
 
 binary-indep:

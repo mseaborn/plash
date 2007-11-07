@@ -94,30 +94,32 @@ class ProcessSpec(object):
                 add_to_path("/usr/lib/plash/lib",
                             self.env.get("LD_LIBRARY_PATH", ""))
 
-    def _set_up_sandbox_prog(self):
-        """Make sure run-as-anonymous is invoked."""
-
+    @staticmethod
+    def preserve_env(env):
         # Ensure that certain environment variables get preserved
         # across the invocation of a setuid program.
-        def preserve_env(args):
-            for var in ['LD_LIBRARY_PATH', 'LD_PRELOAD']:
-                if var in self.env:
-                    args.extend(["-s", var + '=' + self.env[var]])
+        args = []
+        for var in ["LD_LIBRARY_PATH", "LD_PRELOAD"]:
+            if var in env:
+                args.extend(["-s", "%s=%s" % (var, env[var])])
+        return args
 
+    def _set_up_sandbox_prog(self):
+        """Make sure run-as-anonymous is invoked."""
         if not plash.env.under_plash:
             if "PLASH_SANDBOX_PROG" in os.environ:
                 prefix_cmd = [os.environ["PLASH_SANDBOX_PROG"]]
             else:
                 prefix_cmd = ["/usr/lib/plash/run-as-anonymous"]
-                preserve_env(prefix_cmd)
+                prefix_cmd.extend(self.preserve_env(self.env))
                 prefix_cmd.append("/special/ld-linux.so.2")
         else:
             if "PLASH_P_SANDBOX_PROG" in os.environ:
                 prefix_cmd = [os.environ["PLASH_P_SANDBOX_PROG"]]
             else:
                 prefix_cmd = ["/run-as-anonymous"]
-                preserve_env(prefix_cmd)
-
+                prefix_cmd.extend(self.preserve_env(self.env))
+                prefix_cmd.append("/special/ld-linux.so.2")
         orig_cmd = self.cmd
         self.cmd = prefix_cmd[0]
         self.args = prefix_cmd[1:] + [orig_cmd] + self.args

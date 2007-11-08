@@ -23,6 +23,7 @@ import select
 import unittest
 
 import protocol_cap
+import protocol_simple
 
 
 class CapProtocolEncodingTest(unittest.TestCase):
@@ -103,6 +104,13 @@ class EventLoop(object):
         assert len(ready) != 0, self._get_fd_flags()
         self._process_ready(ready)
 
+    def run_awhile(self):
+        while True:
+            ready = dict(poll_fds(self._get_fd_flags(), 0))
+            if len(ready) == 0:
+                break
+            self._process_ready(ready)
+
     def _process_ready(self, ready):
         for watch in self._watches:
             fd = watch.fd.fileno()
@@ -170,6 +178,138 @@ class FDBufferedWriterTest(unittest.TestCase):
         loop.once_safely()
         # Should have written all of buffer to the pipe now
         self.assertTrue(not loop.is_listening())
+
+
+class CallLogger(protocol_cap.PlashObjectBase):
+
+    def __init__(self):
+        self.calls = []
+
+    def __getattr__(self, attr):
+        def func(*args):
+            self.calls.append((attr, args))
+        return func
+
+
+class CapProtocolTests(unittest.TestCase):
+
+    def _read_to_list(self, loop, socket_fd):
+        messages = []
+        protocol_cap.FDBufferedReader(loop, socket_fd, messages.append)
+        return messages
+
+    def test_sending(self):
+        loop = EventLoop()
+        sock1, sock2 = protocol_cap.socketpair()
+        got = self._read_to_list(loop, sock1)
+        imported_objects = protocol_cap.make_connection(loop, sock2, [], 10)
+        # Should work for any sequence of valid indexes
+        for index in (0, 0, 1, 2):
+            imported_objects[index].cap_invoke(("body data", (), ()))
+            loop.run_awhile()
+            decoded = [protocol_cap.decode_pocp_message(data) for data in got]
+            self.assertEquals(
+                decoded, [("invoke",
+                           protocol_cap.encode_wire_id(
+                               protocol_cap.NAMESPACE_RECEIVER, index),
+                           [], "body data")])
+            got[:] = []
+
+    def test_sending_references(self):
+        loop = EventLoop()
+        sock1, sock2 = protocol_cap.socketpair()
+        got = self._read_to_list(loop, sock1)
+        [imported] = protocol_cap.make_connection(loop, sock2, [], 1)
+        arg_objects = [protocol_cap.PlashObject() for i in range(10)]
+        imported.cap_invoke(("body", tuple(arg_objects), ()))
+        loop.run_awhile()
+        decoded = [protocol_cap.decode_pocp_message(data) for data in got]
+        self.assertEquals(
+            decoded, [("invoke",
+                       protocol_cap.encode_wire_id(
+                           protocol_cap.NAMESPACE_RECEIVER, 0),
+                       [protocol_cap.encode_wire_id(
+                            protocol_cap.NAMESPACE_SENDER, index)
+                        for index in range(10)], "body")])
+        # Check internal state of the connection
+        self.assertEquals(
+            imported._connection._export,
+            dict((index, arg_objects[index]) for index in range(10)))
+
+    def test_receiving(self):
+        loop = EventLoop()
+        sock1, sock2 = protocol_cap.socketpair()
+        exported_objects = [CallLogger() for i in range(10)]
+        protocol_cap.make_connection(loop, sock1, exported_objects)
+        writer = protocol_cap.FDBufferedWriter(loop, sock2)
+        # Should work for any sequence of valid indexes
+        for index in (0, 0, 1, 2):
+            writer.write(protocol_simple.make_message(
+                    protocol_cap.make_invoke_message(
+                        protocol_cap.encode_wire_id(
+                            protocol_cap.NAMESPACE_RECEIVER, index),
+                        [], "body data")))
+            loop.run_awhile()
+            self.assertEquals(exported_objects[index].calls,
+                              [("cap_invoke", (("body data", (), ()),))])
+            exported_objects[index].calls[:] = []
+
+    def test_receiving_references(self):
+        calls = []
+        class Object(protocol_cap.PlashObject):
+            def cap_invoke(self, args):
+                calls.append(args)
+
+        loop = EventLoop()
+        sock1, sock2 = protocol_cap.socketpair()
+        exported = Object()
+        protocol_cap.make_connection(loop, sock1, [exported])
+        writer = protocol_cap.FDBufferedWriter(loop, sock2)
+        # Should work for any sequence of indexes
+        indexes = [6, 2, 52, 8, 4]
+        writer.write(protocol_simple.make_message(
+                protocol_cap.make_invoke_message(
+                    protocol_cap.encode_wire_id(
+                        protocol_cap.NAMESPACE_RECEIVER, 0),
+                    [protocol_cap.encode_wire_id(
+                            protocol_cap.NAMESPACE_SENDER, index)
+                     for index in indexes],
+                    "body data")))
+        loop.run_awhile()
+        self.assertEquals(len(calls), 1)
+        data, caps, fds = calls[0]
+        self.assertEquals(len(caps), len(indexes))
+        # Check internal state of received proxy objects
+        for index, received_obj in zip(indexes, caps):
+            assert isinstance(received_obj, protocol_cap.RemoteObject)
+            self.assertEquals(received_obj._object_id, index)
+            self.assertEquals(received_obj._single_use, False)
+
+    # TODO: check receiving bogus IDs
+
+    # TODO: check receiving bogus messages
+
+    # TODO: check dropping references
+
+
+class CapProtocolEndToEndTests(unittest.TestCase):
+
+    # End-to-end test: makes no assumptions about the protocol's encoding.
+
+    def test_sending_and_receiving(self):
+        loop = EventLoop()
+        sock1, sock2 = protocol_cap.socketpair()
+        exported_objects = [CallLogger() for i in range(10)]
+        protocol_cap.make_connection(loop, sock1, exported_objects)
+        imported_objects = protocol_cap.make_connection(loop, sock2, [], 10)
+        # Should work for any sequence of valid indexes
+        for index in (0, 1, 1, 2):
+            msg = ("some data for the body", (), ())
+            imported_objects[index].cap_invoke(msg)
+            loop.run_awhile()
+            self.assertEquals(exported_objects[index].calls,
+                              [("cap_invoke", (msg,))])
+            exported_objects[index].calls[:] = []
 
 
 if __name__ == "__main__":

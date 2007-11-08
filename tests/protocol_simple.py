@@ -61,9 +61,10 @@ class InputBuffer(object):
 
 
 def decode_message(data):
+    if len(data) >= 4:
+        assert data[:4] == "MSG!"
     if len(data) < 12:
         raise IncompleteMessageException()
-    assert data[:4] == "MSG!"
     check_tag, size, fds_count = struct.unpack("iii", data[:12])
     message_size = 12 + round_up_to_word(size)
     if len(data) < message_size:

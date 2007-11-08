@@ -311,6 +311,20 @@ class CapProtocolEndToEndTests(unittest.TestCase):
                               [("cap_invoke", (msg,))])
             exported_objects[index].calls[:] = []
 
+    def test_call_return(self):
+        calls = []
+        class Object(protocol_cap.LocalObject):
+            def cap_call(self, args):
+                calls.append(args)
+                return ("result body", (), ())
+
+        loop = EventLoop()
+        loop.once = loop.once_safely # Should really apply this for all tests
+        sock1, sock2 = protocol_cap.socketpair()
+        protocol_cap.make_connection(loop, sock1, [Object()])
+        [imported] = protocol_cap.make_connection(loop, sock2, [], 1)
+        result = imported.cap_call(("args body", (), ()))
+
 
 if __name__ == "__main__":
     unittest.main()

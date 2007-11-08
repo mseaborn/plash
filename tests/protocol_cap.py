@@ -140,7 +140,8 @@ class FDBufferedReader(object):
 
 class ConnectionPrivate(object):
 
-    def __init__(self, writer, export_objects):
+    def __init__(self, event_loop, writer, export_objects):
+        self.event_loop = event_loop
         self._writer = writer
         self._export = {}
         for index, obj in enumerate(export_objects):
@@ -203,9 +204,9 @@ class ConnectionPrivate(object):
             # TODO: remove single use object from table on invocation
         elif args[0] == "drop":
             tag_unused, object_wire_id = args
-            dest_namespace, dest_index = decode_wire_id(dest_wire_id)
+            dest_namespace, dest_index = decode_wire_id(object_wire_id)
             assert dest_namespace == NAMESPACE_RECEIVER, dest_namespace
-            self._export.remove(dest_index)
+            del self._export[dest_index]
         else:
             raise Exception("Unknown message: %r" % args)
 
@@ -249,9 +250,42 @@ class RemoteObject(PlashObject):
         # Just in case the object somehow becomes live again
         self._connection = None
 
+    # Implements call-return.  This is not part of the core remote protocol.
+    def cap_call(self, (data, caps, fds)):
+        # TODO: should really split this into separate resolver/result facets
+        return_cont = ReturnContinuation()
+        self.cap_invoke((data, (return_cont,) + caps, fds))
+        while return_cont._result is None:
+            # TODO: this assertion doesn't belong here
+            assert self._connection.event_loop.is_listening()
+            self._connection.event_loop.once()
+        return return_cont._result
+
+
+class ReturnContinuation(PlashObject):
+
+    def __init__(self):
+        self._result = None
+
+    def cap_invoke(self, args):
+        if self._result is None:
+            self._result = args
+        else:
+            # TODO: warn about multiple return calls?
+            pass
+
+
+class LocalObject(PlashObject):
+
+    # Half of call-return.  The other half is RemoteObject.cap_invoke.
+    def cap_invoke(self, (data, caps, fds)):
+        return_cont = caps[0]
+        result = self.cap_call((data, caps[1:], fds))
+        return_cont.cap_invoke(result)
+
 
 def make_connection(event_loop, socket_fd, caps_export, import_count=0):
     writer = FDBufferedWriter(event_loop, socket_fd)
-    connection = ConnectionPrivate(writer, caps_export)
+    connection = ConnectionPrivate(event_loop, writer, caps_export)
     FDBufferedReader(event_loop, socket_fd, connection.handle_message)
     return connection.get_initial_imported_objects(import_count)

@@ -17,6 +17,8 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 # USA.
 
+import os
+import select
 import struct
 
 
@@ -61,3 +63,42 @@ def decode_pocp_message(data):
         return ("drop", dest_id)
     else:
         raise Exception("Unknown message: %s" % tag)
+
+
+class WrappedFD(object):
+
+    def __init__(self, fd):
+        assert isinstance(fd, int)
+        self._fd = fd
+
+    def fileno(self):
+        return self._fd
+
+    def __del__(self):
+        os.close(self._fd)
+
+
+def make_pipe():
+    pipe_read, pipe_write = os.pipe()
+    return WrappedFD(pipe_read), WrappedFD(pipe_write)
+
+
+class FDBufferedWriter(object):
+
+    def __init__(self, event_loop, fd):
+        self._fd = fd
+        self._buf = ""
+        event_loop.make_watch(fd, self._get_flags, self._handler)
+
+    def _get_flags(self):
+        if len(self._buf) == 0:
+            return 0
+        else:
+            return select.POLLOUT
+
+    def _handler(self, flags):
+        written = os.write(self._fd.fileno(), self._buf)
+        self._buf = self._buf[written:]
+
+    def write(self, data):
+        self._buf += data

@@ -98,20 +98,34 @@ class FDBufferedWriter(object):
     def __init__(self, event_loop, fd):
         self._fd = fd
         self._buf = ""
+        self._connection_broken = False
         event_loop.make_watch(fd, self._get_flags, self._handler)
+        event_loop.make_error_watch(fd, lambda flags: self.finish())
 
     def _get_flags(self):
-        if len(self._buf) == 0:
+        if len(self._buf) == 0 or self._connection_broken:
             return 0
         else:
             return select.POLLOUT
 
     def _handler(self, flags):
-        written = os.write(self._fd.fileno(), self._buf)
-        self._buf = self._buf[written:]
+        # Note that Python changes the default signal handler for
+        # SIGPIPE so that this can return EPIPE instead of killing the
+        # process when writing to a pipe with no reader.
+        try:
+            written = os.write(self._fd.fileno(), self._buf)
+        except OSError:
+            self.finish()
+        else:
+            self._buf = self._buf[written:]
+
+    def finish(self):
+        self._buf = ""
+        self._connection_broken = True
 
     def write(self, data):
-        self._buf += data
+        if not self._connection_broken:
+            self._buf += data
 
 
 class FDBufferedReader(object):
@@ -126,7 +140,8 @@ class FDBufferedReader(object):
 
     def _read_data(self, flags):
         data = os.read(self._fd.fileno(), 1024)
-        self._buffer.add(data)
+        if len(data) != 0:
+            self._buffer.add(data)
 
     def _handle(self):
         while True:

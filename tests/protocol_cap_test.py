@@ -24,6 +24,7 @@ import unittest
 
 from protocol_event_loop import EventLoop
 import protocol_cap
+import protocol_event_loop
 import protocol_simple
 
 
@@ -63,15 +64,45 @@ class FDWrapperTest(unittest.TestCase):
 
 class FDBufferedWriterTest(unittest.TestCase):
 
-    def test(self):
+    def test_writing(self):
         loop = EventLoop()
         pipe_read, pipe_write = protocol_cap.make_pipe()
         writer = protocol_cap.FDBufferedWriter(loop, pipe_write)
-        self.assertTrue(not loop.is_listening())
+        self.assertEquals(loop._get_fd_flags().values(), [0])
         writer.write("hello")
-        self.assertTrue(loop.is_listening())
+        self.assertEquals(loop._get_fd_flags().values(), [select.POLLOUT])
         loop.once_safely()
         # Should have written all of buffer to the pipe now
+        self.assertEquals(loop._get_fd_flags().values(), [0])
+
+    def test_writing_to_closed_pipe(self):
+        loop = EventLoop()
+        pipe_read, pipe_write = protocol_cap.make_pipe()
+        writer = protocol_cap.FDBufferedWriter(loop, pipe_write)
+        writer.write("hello")
+        del pipe_read
+        self.assertEquals(writer._connection_broken, False)
+        loop.once_safely()
+        self.assertEquals(writer._connection_broken, True)
+
+
+class FDBufferedReaderTest(unittest.TestCase):
+
+    def test_end_of_stream(self):
+        got = []
+        def callback(data):
+            got.append(data)
+        loop = EventLoop()
+        pipe_read, pipe_write = protocol_cap.make_pipe()
+        reader = protocol_cap.FDBufferedReader(loop, pipe_read, callback)
+        self.assertTrue(loop.will_block())
+        os.write(pipe_write.fileno(), protocol_simple.make_message("hello"))
+        os.write(pipe_write.fileno(), protocol_simple.make_message("world"))
+        self.assertTrue(not loop.will_block())
+        loop.once_safely()
+        self.assertEquals(got, ["hello", "world"])
+        del pipe_write
+        loop.once_safely()
         self.assertTrue(not loop.is_listening())
 
 

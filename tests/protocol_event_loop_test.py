@@ -27,7 +27,7 @@ import protocol_event_loop
 
 class EventLoopTest(unittest.TestCase):
 
-    def test(self):
+    def test_reading(self):
         loop = protocol_event_loop.EventLoop()
         self.assertTrue(loop.will_block())
         pipe_read, pipe_write = protocol_cap.make_pipe()
@@ -44,6 +44,36 @@ class EventLoopTest(unittest.TestCase):
         loop.once_safely()
         self.assertEquals(got, ["hello"])
         self.assertTrue(loop.will_block())
+
+    def test_removing_watch_on_error(self):
+        loop = protocol_event_loop.EventLoop()
+        pipe_read, pipe_write = protocol_cap.make_pipe()
+
+        got_callbacks = []
+        def callback(flags):
+            got_callbacks.append(flags)
+
+        watch_read = loop.make_watch(pipe_read, lambda: 0, callback)
+        self.assertTrue(loop.will_block())
+        del pipe_write
+        self.assertTrue(not loop.will_block())
+        loop.once_safely()
+        self.assertTrue(watch_read.destroyed)
+        self.assertTrue(not loop.is_listening())
+        self.assertEquals(got_callbacks, [])
+
+    def test_error_callback(self):
+        loop = protocol_event_loop.EventLoop()
+        pipe_read, pipe_write = protocol_cap.make_pipe()
+        del pipe_write
+
+        got_callbacks = []
+        def error_callback(flags):
+            got_callbacks.append(flags)
+
+        loop.make_error_watch(pipe_read, error_callback)
+        loop.once_safely()
+        self.assertEquals(got_callbacks, [select.POLLHUP])
 
 
 if __name__ == "__main__":

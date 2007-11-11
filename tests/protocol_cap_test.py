@@ -290,6 +290,55 @@ class CapProtocolTests(unittest.TestCase):
         del sock1
         self._assert_connection_dropped(sock2)
 
+    def test_receiving_and_invoking_single_use_reference(self):
+        calls = []
+        class Object(protocol_cap.PlashObject):
+            def cap_invoke(self, args):
+                calls.append(args)
+
+        loop = EventLoop()
+        sock1, sock2 = protocol_cap.socketpair()
+        exported = Object()
+        protocol_cap.make_connection(loop, sock1, [exported])
+        del sock1
+        received = self._read_to_list(loop, sock2)
+        writer = protocol_cap.FDBufferedWriter(loop, sock2)
+        writer.write(protocol_simple.make_message(
+                protocol_cap.make_invoke_message(
+                    protocol_cap.encode_wire_id(
+                        protocol_cap.NAMESPACE_RECEIVER, 0),
+                    [protocol_cap.encode_wire_id(
+                            protocol_cap.NAMESPACE_SENDER_SINGLE_USE, 1234)],
+                    "body data")))
+        # Drop the exported object so that the imported single use
+        # object is the only one left.
+        writer.write(protocol_simple.make_message(
+                protocol_cap.make_drop_message(
+                    protocol_cap.encode_wire_id(
+                        protocol_cap.NAMESPACE_RECEIVER, 0))))
+        loop.run_awhile()
+        self.assertEquals(len(calls), 1)
+        data, caps, fds = calls[0]
+        [received_obj] = caps
+        assert isinstance(received_obj, protocol_cap.RemoteObject)
+        self.assertEquals(received_obj._object_id, 1234)
+        self.assertEquals(received_obj._single_use, True)
+        assert received_obj._connection is not None
+        received_obj.cap_invoke(("some return message", (), ()))
+        assert received_obj._connection is None
+
+        # This tests sending a message and immediately disconnecting.
+        # The message should be queued, not dropped.  The message
+        # should be sent before the connection is dropped.
+        loop.run_awhile()
+        decoded = [protocol_cap.decode_pocp_message(data) for data in received]
+        self.assertEquals(
+            decoded,
+            [("invoke", protocol_cap.encode_wire_id(
+                           protocol_cap.NAMESPACE_RECEIVER, 1234),
+              [], "some return message")])
+        self._assert_connection_dropped(sock2)
+
     # TODO: check receiving bogus IDs
 
     # TODO: check receiving bogus messages

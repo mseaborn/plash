@@ -98,10 +98,10 @@ class FDBufferedWriter(object):
     def __init__(self, event_loop, fd):
         self._fd = fd
         self._buf = ""
+        self._eof_requested = False
         self._connection_broken = False
         self._watch1 = event_loop.make_watch(fd, self._get_flags, self._handler)
-        self._watch2 = event_loop.make_error_watch(
-            fd, lambda flags: self.finish())
+        self._watch2 = event_loop.make_error_watch(fd, self._error_handler)
 
     def _get_flags(self):
         if len(self._buf) == 0 or self._connection_broken:
@@ -116,20 +116,35 @@ class FDBufferedWriter(object):
         try:
             written = os.write(self._fd.fileno(), self._buf)
         except OSError:
-            self.finish()
+            self._error_handler(0)
         else:
             self._buf = self._buf[written:]
+            self._check_for_disconnect()
 
-    def finish(self):
+    def _error_handler(self, flags):
+        # An error occurred, so no more data can be written.
         self._fd = None
         self._buf = ""
         self._connection_broken = True
         self._watch1.remove_watch()
         self._watch2.remove_watch()
 
+    def _check_for_disconnect(self):
+        if self._eof_requested and len(self._buf) == 0:
+            self._fd = None
+            self._watch1.remove_watch()
+            self._watch2.remove_watch()
+
     def write(self, data):
-        if not self._connection_broken:
+        # Should this raise an exception if called after end_of_stream()?
+        if not self._eof_requested and not self._connection_broken:
             self._buf += data
+
+    def end_of_stream(self):
+        # Declares that no more data will be written.  Any buffered
+        # data should be written before closing the FD.
+        self._eof_requested = True
+        self._check_for_disconnect()
 
 
 class FDBufferedReader(object):
@@ -309,9 +324,10 @@ class RemoteObject(PlashObject):
                 self._connection = None
 
     def __del__(self):
-        self._connection.drop_imported_reference(self._object_id)
-        # Just in case the object somehow becomes live again
-        self._connection = None
+        if self._connection is not None:
+            self._connection.drop_imported_reference(self._object_id)
+            # Just in case the object somehow becomes live again
+            self._connection = None
 
     # Implements call-return.  This is not part of the core remote protocol.
     def cap_call(self, (data, caps, fds)):
@@ -353,7 +369,7 @@ def make_connection(event_loop, socket_fd, caps_export, import_count=0):
         return []
 
     def disconnect():
-        writer.finish()
+        writer.end_of_stream()
         reader.finish()
 
     writer = FDBufferedWriter(event_loop, socket_fd)

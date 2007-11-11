@@ -182,6 +182,7 @@ class ConnectionPrivate(object):
 
     def __init__(self, event_loop, writer, disconnect_callback, export_objects):
         self.event_loop = event_loop
+        self._connected = True
         self._writer = writer
         self._disconnect = disconnect_callback
         self._import_count = 0
@@ -237,6 +238,7 @@ class ConnectionPrivate(object):
                 for object_id in range(count)]
 
     def handle_message(self, message_data):
+        assert self._connected
         args = decode_pocp_message(message_data)
         if args[0] == "invoke":
             tag_unused, dest_wire_id, arg_ids, body_data = args
@@ -262,15 +264,25 @@ class ConnectionPrivate(object):
         else:
             raise Exception("Unknown message: %r" % args)
 
+    def handle_disconnection(self):
+        # If the other end drops the connection, this
+        # ConnectionPrivate can still remain live because the
+        # RemoteObject wrappers for the imported objects (now broken)
+        # can remain live.  We must ensure that we don't hold
+        # references to exported objects.
+        self._connected = False
+        self._export.clear()
+
     def send_object_invocation(self, object_id, data, caps, fds, is_single_use):
-        self._send(
-            make_invoke_message(
-                encode_wire_id(NAMESPACE_RECEIVER, object_id),
-                [self._object_to_wire_id(object)
-                 for object in caps],
-                data))
-        if is_single_use:
-            self._decrement_import_count()
+        if self._connected:
+            self._send(
+                make_invoke_message(
+                    encode_wire_id(NAMESPACE_RECEIVER, object_id),
+                    [self._object_to_wire_id(object)
+                     for object in caps],
+                    data))
+            if is_single_use:
+                self._decrement_import_count()
 
     def drop_imported_reference(self, object_id):
         # _decrement_import_count() might cause the whole connection
@@ -391,8 +403,13 @@ def make_connection(event_loop, socket_fd, caps_export, import_count=0):
     def disconnect():
         writer.end_of_stream()
         reader.finish()
+        error_watch.remove_watch()
+
+    def on_fd_error(flags):
+        connection.handle_disconnection()
 
     writer = FDBufferedWriter(event_loop, socket_fd)
     connection = ConnectionPrivate(event_loop, writer, disconnect, caps_export)
     reader = FDBufferedReader(event_loop, socket_fd, connection.handle_message)
+    error_watch = event_loop.make_error_watch(socket_fd, on_fd_error)
     return connection.get_initial_imported_objects(import_count)

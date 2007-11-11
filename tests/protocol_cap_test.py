@@ -281,6 +281,29 @@ class CapProtocolTests(unittest.TestCase):
         loop.run_awhile()
         self._assert_connection_dropped(sock2)
 
+    def test_handling_dropped_connection(self):
+        for import_count in (0, 1, 2):
+            deleted = []
+            class Object(protocol_cap.PlashObject):
+                def __init__(self, index):
+                    self._index = index
+                def __del__(self):
+                    deleted.append(self._index)
+
+            loop = EventLoop()
+            sock1, sock2 = protocol_cap.socketpair()
+            imported = protocol_cap.make_connection(
+                loop, sock1, [Object(index) for index in range(10)],
+                import_count)
+            del sock2
+            loop.run_awhile()
+            self.assertTrue(not loop.is_listening())
+            self.assertEquals(sorted(deleted), sorted(range(10)))
+            for imported_object in imported:
+                self.assertFalse(imported_object._connection._connected)
+                imported_object.cap_invoke(
+                    ("message that will get ignored", (), ()))
+
     def test_creating_useless_connection(self):
         loop = EventLoop()
         sock1, sock2 = protocol_cap.socketpair()

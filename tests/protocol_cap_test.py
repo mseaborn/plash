@@ -376,6 +376,23 @@ class CapProtocolEndToEndTests(unittest.TestCase):
         protocol_cap.make_connection(loop, sock1, [Object()])
         [imported] = protocol_cap.make_connection(loop, sock2, [], 1)
         result = imported.cap_call(("args body", (), ()))
+        self.assertEquals(calls, [("args body", (), ())])
+        self.assertEquals(result, ("result body", (), ()))
+
+    def test_return_continuation_dropped(self):
+        calls = []
+        class Object(protocol_cap.PlashObject):
+            def cap_invoke(self, (data, caps, fds)):
+                calls.append((data, caps[1:], fds))
+
+        loop = EventLoop()
+        loop.once = loop.once_safely # Should really apply this for all tests
+        sock1, sock2 = protocol_cap.socketpair()
+        protocol_cap.make_connection(loop, sock1, [Object()])
+        [imported] = protocol_cap.make_connection(loop, sock2, [], 1)
+        result = imported.cap_call(("args body", (), ()))
+        self.assertEquals(calls, [("args body", (), ())])
+        self.assertEquals(result, ("Fail", (), ()))
 
 
 if __name__ == "__main__":

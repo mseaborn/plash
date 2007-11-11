@@ -331,27 +331,47 @@ class RemoteObject(PlashObject):
 
     # Implements call-return.  This is not part of the core remote protocol.
     def cap_call(self, (data, caps, fds)):
-        # TODO: should really split this into separate resolver/result facets
-        return_cont = ReturnContinuation()
+        result_slot = ResultSlot()
+        return_cont = ReturnContinuation(result_slot)
         self.cap_invoke((data, (return_cont,) + caps, fds))
-        while return_cont._result is None:
+        del return_cont
+        while not result_slot.is_resolved():
             # TODO: this assertion doesn't belong here
             assert self._connection.event_loop.is_listening()
             self._connection.event_loop.once()
-        return return_cont._result
+        return result_slot.get()
 
 
-class ReturnContinuation(PlashObject):
+class ResultSlot(object):
 
     def __init__(self):
         self._result = None
 
+    def is_resolved(self):
+        return self._result is not None
+
+    def resolve(self, val):
+        self._result = val
+
+    def get(self):
+        return self._result
+
+
+class ReturnContinuation(PlashObject):
+
+    def __init__(self, slot):
+        self._result_slot = slot
+
     def cap_invoke(self, args):
-        if self._result is None:
-            self._result = args
+        if not self._result_slot.is_resolved():
+            self._result_slot.resolve(args)
         else:
             # TODO: warn about multiple return calls?
             pass
+
+    def __del__(self):
+        if not self._result_slot.is_resolved():
+            self._result_slot.resolve(("Fail", (), ()))
 
 
 class LocalObject(PlashObject):

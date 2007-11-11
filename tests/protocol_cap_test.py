@@ -124,6 +124,11 @@ class CapProtocolTests(unittest.TestCase):
         protocol_cap.FDBufferedReader(loop, socket_fd, messages.append)
         return messages
 
+    def _assert_connection_dropped(self, sock):
+        self.assertEquals(
+            protocol_event_loop.poll_fds({sock.fileno(): 0}, 0),
+            [(sock.fileno(), select.POLLHUP)])
+
     def test_sending(self):
         loop = EventLoop()
         sock1, sock2 = protocol_cap.socketpair()
@@ -211,11 +216,83 @@ class CapProtocolTests(unittest.TestCase):
             self.assertEquals(received_obj._object_id, index)
             self.assertEquals(received_obj._single_use, False)
 
+    def test_dropping_imported_references(self):
+        loop = EventLoop()
+        sock1, sock2 = protocol_cap.socketpair()
+        got = self._read_to_list(loop, sock1)
+        imported_objects = protocol_cap.make_connection(loop, sock2, [], 100)
+        imported_objects[42] = None
+        loop.run_awhile()
+        decoded = [protocol_cap.decode_pocp_message(data) for data in got]
+        self.assertEquals(
+            decoded,
+            [("drop", protocol_cap.encode_wire_id(
+                        protocol_cap.NAMESPACE_RECEIVER, 42))])
+
+    def test_dropping_all_imported_references(self):
+        loop = EventLoop()
+        sock1, sock2 = protocol_cap.socketpair()
+        got = self._read_to_list(loop, sock1)
+        imported_objects = protocol_cap.make_connection(loop, sock2, [], 1)
+        del sock2
+        del imported_objects
+        loop.run_awhile()
+        self._assert_connection_dropped(sock1)
+        decoded = [protocol_cap.decode_pocp_message(data) for data in got]
+        # The last "drop" message is unnecessary and we should not
+        # receive it, because the connection will be dropped instead.
+        self.assertEquals(decoded, [])
+
+    def test_dropping_exported_references(self):
+        deleted = []
+        class Object(protocol_cap.PlashObject):
+            def __init__(self, index):
+                self._index = index
+            def __del__(self):
+                deleted.append(self._index)
+
+        loop = EventLoop()
+        sock1, sock2 = protocol_cap.socketpair()
+        protocol_cap.make_connection(loop, sock1, [Object(index)
+                                                   for index in range(100)])
+        writer = protocol_cap.FDBufferedWriter(loop, sock2)
+        # Should work for any sequence of indexes
+        indexes = [5, 10, 56, 1, 0]
+        for index in indexes:
+            writer.write(protocol_simple.make_message(
+                    protocol_cap.make_drop_message(
+                        protocol_cap.encode_wire_id(
+                            protocol_cap.NAMESPACE_RECEIVER, index))))
+        loop.run_awhile()
+        self.assertEquals(deleted, indexes)
+
+    def test_dropping_all_exported_references(self):
+        loop = EventLoop()
+        sock1, sock2 = protocol_cap.socketpair()
+        protocol_cap.make_connection(loop, sock1, [protocol_cap.PlashObject()
+                                                   for index in range(100)])
+        del sock1
+        writer = protocol_cap.FDBufferedWriter(loop, sock2)
+        for index in range(100):
+            writer.write(protocol_simple.make_message(
+                    protocol_cap.make_drop_message(
+                        protocol_cap.encode_wire_id(
+                            protocol_cap.NAMESPACE_RECEIVER, index))))
+        loop.run_awhile()
+        self._assert_connection_dropped(sock2)
+
+    def test_creating_useless_connection(self):
+        loop = EventLoop()
+        sock1, sock2 = protocol_cap.socketpair()
+        # This connection neither imports nor exports any references,
+        # so it starts off moribund.
+        protocol_cap.make_connection(loop, sock1, [])
+        del sock1
+        self._assert_connection_dropped(sock2)
+
     # TODO: check receiving bogus IDs
 
     # TODO: check receiving bogus messages
-
-    # TODO: check dropping references
 
 
 class CapProtocolEndToEndTests(unittest.TestCase):

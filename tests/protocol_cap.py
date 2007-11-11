@@ -99,8 +99,9 @@ class FDBufferedWriter(object):
         self._fd = fd
         self._buf = ""
         self._connection_broken = False
-        event_loop.make_watch(fd, self._get_flags, self._handler)
-        event_loop.make_error_watch(fd, lambda flags: self.finish())
+        self._watch1 = event_loop.make_watch(fd, self._get_flags, self._handler)
+        self._watch2 = event_loop.make_error_watch(
+            fd, lambda flags: self.finish())
 
     def _get_flags(self):
         if len(self._buf) == 0 or self._connection_broken:
@@ -120,8 +121,11 @@ class FDBufferedWriter(object):
             self._buf = self._buf[written:]
 
     def finish(self):
+        self._fd = None
         self._buf = ""
         self._connection_broken = True
+        self._watch1.remove_watch()
+        self._watch2.remove_watch()
 
     def write(self, data):
         if not self._connection_broken:
@@ -136,7 +140,13 @@ class FDBufferedReader(object):
         self._buffer = protocol_simple.InputBuffer()
         self._buffer.connect(self._handle)
         # TODO: extend to do flow control
-        event_loop.make_watch(fd, lambda: select.POLLIN, self._read_data)
+        self._watch = event_loop.make_watch(fd, lambda: select.POLLIN,
+                                            self._read_data)
+
+    def finish(self):
+        self._fd = None
+        self._callback = None
+        self._watch.remove_watch()
 
     def _read_data(self, flags):
         data = os.read(self._fd.fileno(), 1024)
@@ -155,18 +165,20 @@ class FDBufferedReader(object):
 
 class ConnectionPrivate(object):
 
-    def __init__(self, event_loop, writer, export_objects):
+    def __init__(self, event_loop, writer, disconnect_callback, export_objects):
         self.event_loop = event_loop
         self._writer = writer
+        self._disconnect = disconnect_callback
+        self._import_count = 0
         self._export = {}
         for index, obj in enumerate(export_objects):
             self._export[index] = obj
 
-    def send(self, data):
+    def _send(self, data):
         self._writer.write(protocol_simple.make_message(data))
 
     # Encode outgoing objects to IDs
-    def object_to_wire_id(self, obj):
+    def _object_to_wire_id(self, obj):
         assert isinstance(obj, PlashObjectBase)
         # Synergy: need to be able to look inside RemoteObjects
         # Alternative is to maintain a hash table of RemoteObjects
@@ -195,14 +207,18 @@ class ConnectionPrivate(object):
             return self._export[object_index]
         elif namespace == NAMESPACE_SENDER:
             # TODO: preserve EQ by reusing RemoteObjects
-            return RemoteObject(self, object_index, single_use=False)
+            return self._import_object(object_index, single_use=False)
         elif namespace == NAMESPACE_SENDER_SINGLE_USE:
-            return RemoteObject(self, object_index, single_use=True)
+            return self._import_object(object_index, single_use=True)
         else:
             raise Exception("Unknown namespace ID: %i" % namespace)
 
+    def _import_object(self, object_index, single_use):
+        self._import_count += 1
+        return RemoteObject(self, object_index, single_use)
+
     def get_initial_imported_objects(self, count):
-        return [RemoteObject(self, object_id, single_use=False)
+        return [self._import_object(object_id, single_use=False)
                 for object_id in range(count)]
 
     def handle_message(self, message_data):
@@ -222,8 +238,44 @@ class ConnectionPrivate(object):
             dest_namespace, dest_index = decode_wire_id(object_wire_id)
             assert dest_namespace == NAMESPACE_RECEIVER, dest_namespace
             del self._export[dest_index]
+            # This check should not be necessary if the other end
+            # behaves sensibly, because it should drop the connection
+            # rather than send a final "drop" message across it.
+            # TODO: produce a warning if we find the other end's actions
+            # have made the connection moribund.
+            self._check_for_moribund_connection()
         else:
             raise Exception("Unknown message: %r" % args)
+
+    def send_object_invocation(self, object_id, data, caps, fds, is_single_use):
+        self._send(
+            make_invoke_message(
+                encode_wire_id(NAMESPACE_RECEIVER, object_id),
+                [self._object_to_wire_id(object)
+                 for object in caps],
+                data))
+        if is_single_use:
+            self._decrement_import_count()
+
+    def drop_imported_reference(self, object_id):
+        # _decrement_import_count() might cause the whole connection
+        # to be dropped, in which case the second message does not
+        # need to be sent and will simply be ignored.
+        self._decrement_import_count()
+        self._send(make_drop_message(
+                encode_wire_id(NAMESPACE_RECEIVER, object_id)))
+
+    def _decrement_import_count(self):
+        assert self._import_count > 0, self._import_count
+        self._import_count -= 1
+        self._check_for_moribund_connection()
+
+    def _check_for_moribund_connection(self):
+        # A moribund connection is one where neither side can legally
+        # send messages, because no references are imported or
+        # exported.
+        if self._import_count == 0 and len(self._export) == 0:
+            self._disconnect()
 
 
 class PlashObjectBase(object):
@@ -251,17 +303,13 @@ class RemoteObject(PlashObject):
 
     def cap_invoke(self, (data, caps, fds)):
         if self._connection is not None:
-            self._connection.send(
-                make_invoke_message(
-                    encode_wire_id(NAMESPACE_RECEIVER, self._object_id),
-                    [self._connection.object_to_wire_id(object)
-                     for object in caps],
-                    data))
+            self._connection.send_object_invocation(
+                self._object_id, data, caps, fds, self._single_use)
             if self._single_use:
                 self._connection = None
 
     def __del__(self):
-        self._connection.send(make_drop_message(self._object_id))
+        self._connection.drop_imported_reference(self._object_id)
         # Just in case the object somehow becomes live again
         self._connection = None
 
@@ -300,7 +348,15 @@ class LocalObject(PlashObject):
 
 
 def make_connection(event_loop, socket_fd, caps_export, import_count=0):
+    if len(caps_export) == 0 and import_count == 0:
+        # No need to create a connection.  socket_fd will be dropped.
+        return []
+
+    def disconnect():
+        writer.finish()
+        reader.finish()
+
     writer = FDBufferedWriter(event_loop, socket_fd)
-    connection = ConnectionPrivate(event_loop, writer, caps_export)
-    FDBufferedReader(event_loop, socket_fd, connection.handle_message)
+    connection = ConnectionPrivate(event_loop, writer, disconnect, caps_export)
+    reader = FDBufferedReader(event_loop, socket_fd, connection.handle_message)
     return connection.get_initial_imported_objects(import_count)

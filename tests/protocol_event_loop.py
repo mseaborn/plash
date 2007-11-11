@@ -36,6 +36,11 @@ class FDWatch(object):
         if not self.destroyed:
             self.destroyed = True
             self._parent_watch_list.remove(self)
+            # Unset the FD so that it can be GC'd
+            self.fd = None
+            self.get_flags = lambda: 0
+            self.callback = lambda flags: None
+            self.error_callback = lambda flags: None
 
 
 def poll_fds(fd_flags, timeout=None):

@@ -24,6 +24,7 @@ import unittest
 
 from protocol_event_loop import EventLoop
 import protocol_cap
+import protocol_cap as cap
 import protocol_event_loop
 import protocol_simple
 
@@ -106,6 +107,36 @@ class FDBufferedReaderTest(unittest.TestCase):
         self.assertTrue(not loop.is_listening())
 
 
+class TestExportTable(unittest.TestCase):
+
+    cls = protocol_cap.ExportTableSimple
+
+    def test_exporting_object(self):
+        table = self.cls([])
+        obj = protocol_cap.PlashObject()
+        index = table.export_object(obj)
+        self.assertEquals(table.get(index), obj)
+        table.drop(index)
+        self.assertRaises(KeyError, lambda: table.get(index))
+
+
+class TestExportTablePreservingEQ(TestExportTable):
+
+    cls = protocol_cap.ExportTablePreservingEQ
+
+    def test_exporting_object_twice(self):
+        table = self.cls([])
+        obj = protocol_cap.PlashObject()
+        index = table.export_object(obj)
+        index2 = table.export_object(obj)
+        self.assertEquals(index, index2)
+        self.assertEquals(table.get(index), obj)
+        table.drop(index)
+        self.assertEquals(table.get(index), obj)
+        table.drop(index)
+        self.assertRaises(KeyError, lambda: table.get(index))
+
+
 class CallLogger(protocol_cap.PlashObjectBase):
 
     def __init__(self):
@@ -164,8 +195,41 @@ class CapProtocolTests(unittest.TestCase):
                         for index in range(10)], "body")])
         # Check internal state of the connection
         self.assertEquals(
-            imported._connection._export,
+            imported._connection._exports.get_all_exports(),
             dict((index, arg_objects[index]) for index in range(10)))
+
+    def test_sending_references_preserves_eq(self):
+        calls = []
+        class Object(protocol_cap.PlashObject):
+            def cap_invoke(self, args):
+                calls.append(args)
+
+        loop = EventLoop()
+        sock1, sock2 = protocol_cap.socketpair()
+        got = self._read_to_list(loop, sock1)
+        [imported] = protocol_cap.make_connection(loop, sock2, [], 1)
+        writer = protocol_cap.FDBufferedWriter(loop, sock1)
+        object1 = Object()
+        object2 = Object()
+        imported.cap_invoke(("body", (object1, object1, object2), ()))
+        loop.run_awhile()
+        decoded = [protocol_cap.decode_pocp_message(data) for data in got]
+        self.assertEquals(
+            decoded, [("invoke", cap.encode_wire_id(cap.NAMESPACE_RECEIVER, 0),
+                       [cap.encode_wire_id(cap.NAMESPACE_SENDER, 0),
+                        cap.encode_wire_id(cap.NAMESPACE_SENDER, 0),
+                        cap.encode_wire_id(cap.NAMESPACE_SENDER, 1)], "body")])
+        # Now check that we can invoke the resulting object and drop
+        # it twice
+        for unused in range(2):
+            writer.write(protocol_simple.make_message(
+                    cap.make_invoke_message(
+                        cap.encode_wire_id(cap.NAMESPACE_RECEIVER, 0),
+                        [], "body")))
+            writer.write(protocol_simple.make_message(
+                    cap.make_drop_message(
+                        cap.encode_wire_id(cap.NAMESPACE_RECEIVER, 0))))
+        loop.run_awhile()
 
     def test_receiving(self):
         loop = EventLoop()
@@ -215,6 +279,39 @@ class CapProtocolTests(unittest.TestCase):
             assert isinstance(received_obj, protocol_cap.RemoteObject)
             self.assertEquals(received_obj._object_id, index)
             self.assertEquals(received_obj._single_use, False)
+
+    def test_receiving_references_preserves_eq(self):
+        calls = []
+        class Object(protocol_cap.PlashObject):
+            def cap_invoke(self, args):
+                calls.append(args)
+
+        loop = EventLoop()
+        sock1, sock2 = protocol_cap.socketpair()
+        protocol_cap.make_connection(loop, sock1, [Object()])
+        got = self._read_to_list(loop, sock2)
+        writer = protocol_cap.FDBufferedWriter(loop, sock2)
+        writer.write(protocol_simple.make_message(
+                cap.make_invoke_message(
+                    cap.encode_wire_id(cap.NAMESPACE_RECEIVER, 0),
+                    [cap.encode_wire_id(cap.NAMESPACE_SENDER, 123),
+                     cap.encode_wire_id(cap.NAMESPACE_SENDER, 123),
+                     cap.encode_wire_id(cap.NAMESPACE_SENDER, 456)], "body")))
+        loop.run_awhile()
+        self.assertEquals(len(calls), 1)
+        data, caps, fds = calls[0]
+        self.assertEquals(caps[0], caps[1])
+        self.assertNotEquals(caps[1], caps[2])
+        # Now check that we get the right number of "drop" messages
+        del caps
+        calls[:] = []
+        loop.run_awhile()
+        decoded = [protocol_cap.decode_pocp_message(data) for data in got]
+        self.assertEquals(
+            sorted(decoded),
+            [("drop", cap.encode_wire_id(cap.NAMESPACE_RECEIVER, 123)),
+             ("drop", cap.encode_wire_id(cap.NAMESPACE_RECEIVER, 123)),
+             ("drop", cap.encode_wire_id(cap.NAMESPACE_RECEIVER, 456))])
 
     def test_dropping_imported_references(self):
         loop = EventLoop()
@@ -298,7 +395,7 @@ class CapProtocolTests(unittest.TestCase):
             del sock2
             loop.run_awhile()
             self.assertTrue(not loop.is_listening())
-            self.assertEquals(sorted(deleted), sorted(range(10)))
+            self.assertEquals(sorted(deleted), range(10))
             for imported_object in imported:
                 self.assertFalse(imported_object._connection._connected)
                 imported_object.cap_invoke(

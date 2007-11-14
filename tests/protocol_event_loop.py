@@ -60,8 +60,9 @@ class EventLoop(object):
     # The design of select.poll prevents us from reusing the poll
     # instance.
 
-    def __init__(self):
+    def __init__(self, poll_fds=poll_fds):
         self._watches = []
+        self._poll_fds = poll_fds
 
     def make_watch(self, fd, get_flags, callback):
         def error_callback(flags):
@@ -102,21 +103,21 @@ class EventLoop(object):
         return len(self._get_fd_flags()) > 0
 
     def will_block(self):
-        ready = poll_fds(self._get_fd_flags(), 0)
+        ready = self._poll_fds(self._get_fd_flags(), 0)
         return len(ready) == 0
 
     def once(self):
-        ready = dict(poll_fds(self._get_fd_flags()))
+        ready = dict(self._poll_fds(self._get_fd_flags()))
         self._process_ready(ready)
 
     def once_safely(self):
-        ready = dict(poll_fds(self._get_fd_flags(), 0))
+        ready = dict(self._poll_fds(self._get_fd_flags(), 0))
         assert len(ready) != 0, self._get_fd_flags()
         self._process_ready(ready)
 
     def run_awhile(self):
         while True:
-            ready = dict(poll_fds(self._get_fd_flags(), 0))
+            ready = dict(self._poll_fds(self._get_fd_flags(), 0))
             if len(ready) == 0:
                 break
             self._process_ready(ready)

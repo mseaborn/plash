@@ -21,14 +21,58 @@ import os
 import select
 import unittest
 
+import gobject
+
 import protocol_cap
 import protocol_event_loop
 
 
-class EventLoopTest(unittest.TestCase):
+def glib_poll_fds(fd_flags):
+    # Emulates poll() (when called with a zero timeout) using a
+    # one-off call to glib's main loop.
+    watch_ids = []
+    ready_fds = []
+    revoked = False
+    for fd, flags_requested in fd_flags.iteritems():
+        def handler(fd_unused, flags_got, fd=fd):
+            assert not revoked
+            ready_fds.append((fd, flags_got))
+            # Keep handler: it gets removed soon after
+            return True
+        # The ERROR_FLAGS are optional with glib even though they are
+        # not optional with poll().  That means naive use of glib
+        # could result in busy waits if you ignore error conditions on
+        # FDs.
+        watch_id = gobject.io_add_watch(
+            fd, flags_requested | protocol_event_loop.ERROR_FLAGS, handler)
+        watch_ids.append(watch_id)
+    may_block = False
+    gobject.main_context_default().iteration(may_block)
+    revoked = True
+    for watch_id in watch_ids:
+        gobject.source_remove(watch_id)
+    return ready_fds
+
+
+def checked_poll_fds(fd_flags, timeout=None):
+    # Check that glib gives the same results as poll().
+    ready_fds1 = protocol_event_loop.poll_fds(fd_flags, timeout)
+    if timeout == 0:
+        ready_fds2 = glib_poll_fds(fd_flags)
+        assert ready_fds1 == ready_fds2, (ready_fds1, ready_fds2)
+    return ready_fds1
+
+
+class EventLoopTestCase(unittest.TestCase):
+
+    def make_event_loop(self):
+        return protocol_event_loop.EventLoop(poll_fds=checked_poll_fds)
+
+
+class EventLoopTests(EventLoopTestCase):
 
     def test_reading(self):
-        loop = protocol_event_loop.EventLoop()
+        loop = self.make_event_loop()
         self.assertTrue(loop.will_block())
         pipe_read, pipe_write = protocol_cap.make_pipe()
 
@@ -46,7 +90,7 @@ class EventLoopTest(unittest.TestCase):
         self.assertTrue(loop.will_block())
 
     def test_removing_watch_on_error(self):
-        loop = protocol_event_loop.EventLoop()
+        loop = self.make_event_loop()
         pipe_read, pipe_write = protocol_cap.make_pipe()
 
         got_callbacks = []
@@ -63,7 +107,7 @@ class EventLoopTest(unittest.TestCase):
         self.assertEquals(got_callbacks, [])
 
     def test_error_callback(self):
-        loop = protocol_event_loop.EventLoop()
+        loop = self.make_event_loop()
         pipe_read, pipe_write = protocol_cap.make_pipe()
         del pipe_write
 

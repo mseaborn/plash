@@ -64,6 +64,12 @@ class FDWrapperTest(unittest.TestCase):
                           lambda: fcntl.fcntl(fd, fcntl.F_GETFL))
 
 
+def poll_fd(fd):
+    fd_flags = {fd.fileno(): protocol_event_loop.REQUESTABLE_FLAGS}
+    ready = dict(protocol_event_loop.poll_fds(fd_flags, 0))
+    return ready.get(fd.fileno(), 0)
+
+
 class FDBufferedWriterTest(protocol_event_loop_test.EventLoopTestCase):
 
     def test_writing(self):
@@ -86,6 +92,19 @@ class FDBufferedWriterTest(protocol_event_loop_test.EventLoopTestCase):
         self.assertEquals(writer._connection_broken, False)
         loop.once_safely()
         self.assertEquals(writer._connection_broken, True)
+
+    def test_writing_end_of_stream_with_data_buffered(self):
+        loop = self.make_event_loop()
+        pipe_read, pipe_write = protocol_cap.make_pipe()
+        writer = protocol_cap.FDBufferedWriter(loop, pipe_write)
+        del pipe_write
+        writer.write("hello")
+        writer.end_of_stream()
+        loop.once_safely()
+        self.assertEquals(poll_fd(pipe_read), select.POLLHUP | select.POLLIN)
+        self.assertEquals(os.read(pipe_read.fileno(), 100), "hello")
+        self.assertEquals(poll_fd(pipe_read), select.POLLHUP)
+        self.assertEquals(os.read(pipe_read.fileno(), 100), "")
 
 
 class FDBufferedReaderTest(protocol_event_loop_test.EventLoopTestCase):
@@ -157,9 +176,7 @@ class CapProtocolTests(protocol_event_loop_test.EventLoopTestCase):
         return messages
 
     def _assert_connection_dropped(self, sock):
-        self.assertEquals(
-            protocol_event_loop.poll_fds({sock.fileno(): 0}, 0),
-            [(sock.fileno(), select.POLLHUP)])
+        self.assertNotEquals(poll_fd(sock) & select.POLLHUP, 0)
 
     def test_sending(self):
         loop = self.make_event_loop()

@@ -105,7 +105,7 @@ class FDBufferedWriter(object):
         self._watch2 = event_loop.make_error_watch(fd, self._error_handler)
 
     def _get_flags(self):
-        if len(self._buf) == 0 or self._connection_broken:
+        if len(self._buf) == 0:
             return 0
         else:
             return select.POLLOUT
@@ -120,6 +120,7 @@ class FDBufferedWriter(object):
             self._error_handler(0)
         else:
             self._buf = self._buf[written:]
+            self._watch1.update_flags()
             self._check_for_disconnect()
 
     def _error_handler(self, flags):
@@ -140,6 +141,7 @@ class FDBufferedWriter(object):
         # Should this raise an exception if called after end_of_stream()?
         if not self._eof_requested and not self._connection_broken:
             self._buf += data
+            self._watch1.update_flags()
 
     def end_of_stream(self):
         # Declares that no more data will be written.  Any buffered

@@ -27,10 +27,14 @@ class FDWatch(object):
         self._parent_watch_list = parent_watch_list
         self.fd = fd
         self.get_flags = get_flags
+        self.flags = get_flags()
         self.callback = callback
         self.error_callback = error_callback
         self.destroyed = False
         parent_watch_list.append(self)
+
+    def update_flags(self):
+        self.flags = self.get_flags()
 
     def remove_watch(self):
         if not self.destroyed:
@@ -80,7 +84,7 @@ class EventLoop(object):
     def _get_fd_flags(self):
         fd_flags = {}
         for watch in self._watches:
-            add_flags = watch.get_flags()
+            add_flags = watch.flags
             assert add_flags & ~REQUESTABLE_FLAGS == 0, add_flags
             # We add the FD to the poll set event if no flags are set,
             # because we can still receive results for POLLERR, POLLHUP
@@ -128,7 +132,7 @@ class EventLoop(object):
             if fd in ready:
                 flags = ready[fd]
                 # Assumes the watch has not been changed since _get_fd_flags()
-                relevant_flags = flags & watch.get_flags()
+                relevant_flags = flags & watch.flags
                 if relevant_flags != 0:
                     self._assert_still_relevant(fd, relevant_flags)
                     watch.callback(relevant_flags)

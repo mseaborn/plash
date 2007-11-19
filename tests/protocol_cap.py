@@ -149,6 +149,9 @@ class FDBufferedWriter(object):
         self._eof_requested = True
         self._check_for_disconnect()
 
+    def buffered_size(self):
+        return len(self._buf)
+
 
 class FDBufferedReader(object):
 

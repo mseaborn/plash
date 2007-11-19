@@ -19,6 +19,8 @@
 
 import select
 
+import gobject
+
 
 class FDWatch(object):
 
@@ -45,6 +47,61 @@ class FDWatch(object):
             self.get_flags = lambda: 0
             self.callback = lambda flags: None
             self.error_callback = lambda flags: None
+
+
+class GlibFDWatch(object):
+
+    def __init__(self, parent_watch_list, fd, get_flags, callback,
+                 error_callback):
+        self._parent_watch_list = parent_watch_list
+        self._fd = fd
+        self._get_flags = get_flags
+        self._flags = get_flags()
+        self._callback = callback
+        self._error_callback = error_callback
+        self._id = None
+        self.destroyed = False
+        parent_watch_list.append(self)
+
+    def unregister(self):
+        if self._id is not None:
+            gobject.source_remove(self._id)
+            self._id = None
+
+    def register(self):
+        self.unregister()
+        if not self.destroyed:
+            self._id = gobject.io_add_watch(
+                self._fd.fileno(), self._flags | ERROR_FLAGS, self._handler)
+
+    def update_flags(self):
+        old_flags = self._flags
+        self._flags = self._get_flags()
+        if old_flags != self._flags and self._id is not None:
+            self.register()
+
+    def _handler(self, fd_unused, flags):
+        relevant_flags = flags & self._flags
+        if relevant_flags != 0:
+            self._callback(relevant_flags)
+        if flags & ERROR_FLAGS != 0:
+            self._error_callback(flags & ERROR_FLAGS)
+            self._id = None
+            self.remove_watch()
+            return False # remove handler
+        else:
+            return True # keep handler
+
+    def remove_watch(self):
+        if not self.destroyed:
+            self.destroyed = True
+            self._parent_watch_list.remove(self)
+            self.unregister()
+            # Unset the FD so that it can be GC'd
+            self._fd = None
+            self._get_flags = lambda: 0
+            self._callback = lambda flags: None
+            self._error_callback = lambda flags: None
 
 
 def poll_fds(fd_flags, timeout=None):
@@ -151,3 +208,58 @@ class EventLoop(object):
         fd2, current_flags = ready[0]
         assert fd2 == fd
         assert current_flags & expected_flags == expected_flags
+
+
+class GlibEventLoop(object):
+
+    def __init__(self):
+        self._watches = []
+        self._registered = True
+
+    def make_watch(self, fd, get_flags, callback):
+        def error_callback(flags):
+            pass
+        watch = GlibFDWatch(self._watches, fd, get_flags, callback,
+                            error_callback)
+        if self._registered:
+            watch.register()
+        return watch
+
+    def make_error_watch(self, fd, error_callback):
+        def get_flags():
+            return 0
+        def ready_callback(flags):
+            pass
+        watch = GlibFDWatch(self._watches, fd, get_flags, ready_callback,
+                            error_callback)
+        if self._registered:
+            watch.register()
+        return watch
+
+    def once_safely(self):
+        may_block = False
+        did_something = gobject.main_context_default().iteration(may_block)
+        assert did_something
+
+    def run_awhile(self):
+        while True:
+            may_block = False
+            did_something = gobject.main_context_default().iteration(may_block)
+            if not did_something:
+                break
+
+    def will_block(self):
+        return not gobject.main_context_default().pending()
+
+    def is_listening(self):
+        return len(self._watches) > 0
+
+    def register(self):
+        for watch in self._watches:
+            watch.register()
+        self._registered = True
+
+    def unregister(self):
+        for watch in self._watches:
+            watch.unregister()
+        self._registered = False

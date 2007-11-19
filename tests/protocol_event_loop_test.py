@@ -25,6 +25,7 @@ import gobject
 
 import protocol_cap
 import protocol_event_loop
+import testrunner
 
 
 def glib_poll_fds(fd_flags):
@@ -63,10 +64,27 @@ def checked_poll_fds(fd_flags, timeout=None):
     return ready_fds1
 
 
-class EventLoopTestCase(unittest.TestCase):
+class EventLoopTestCase(testrunner.CombinationTestCase):
+
+    def setUp(self):
+        self._on_teardown = []
+
+    def on_teardown(self, callback):
+        self._on_teardown.append(callback)
+
+    def tearDown(self):
+        for callback in reversed(self._on_teardown):
+            callback()
+
+    def setup_poll_event_loop(self):
+        self.loop = protocol_event_loop.EventLoop(poll_fds=checked_poll_fds)
+
+    def setup_glib_event_loop(self):
+        self.loop = protocol_event_loop.GlibEventLoop()
+        self.on_teardown(lambda: self.loop.unregister())
 
     def make_event_loop(self):
-        return protocol_event_loop.EventLoop(poll_fds=checked_poll_fds)
+        return self.loop
 
 
 class EventLoopTests(EventLoopTestCase):

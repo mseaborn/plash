@@ -22,7 +22,6 @@ import os
 import select
 import unittest
 
-from protocol_event_loop import EventLoop
 import protocol_cap
 import protocol_cap as cap
 import protocol_event_loop
@@ -76,12 +75,12 @@ class FDBufferedWriterTest(protocol_event_loop_test.EventLoopTestCase):
         loop = self.make_event_loop()
         pipe_read, pipe_write = protocol_cap.make_pipe()
         writer = protocol_cap.FDBufferedWriter(loop, pipe_write)
-        self.assertEquals(loop._get_fd_flags().values(), [0])
+        self.assertEquals(writer.buffered_size(), 0)
         writer.write("hello")
-        self.assertEquals(loop._get_fd_flags().values(), [select.POLLOUT])
+        self.assertEquals(writer.buffered_size(), 5)
         loop.once_safely()
         # Should have written all of buffer to the pipe now
-        self.assertEquals(loop._get_fd_flags().values(), [0])
+        self.assertEquals(writer.buffered_size(), 0)
 
     def test_writing_to_closed_pipe(self):
         loop = self.make_event_loop()

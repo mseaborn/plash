@@ -28,18 +28,34 @@ import sys
 import unittest
 
 import libc_test
+import testrunner
 
 
 top_dirs = ["python", "tests"]
 
-def get_test_case_modules():
-    for top_dir in top_dirs:
-        for dirpath, dirnames, leafnames in os.walk(top_dir):
-            for leafname in leafnames:
-                if leafname.endswith("_test.py"):
-                    path = os.path.join(dirpath, leafname)
-                    module_name = path.replace("/", "_").replace(".", "_")
-                    yield imp.load_source(module_name, path)
+
+def get_files_recursively(path):
+    if os.path.isfile(path):
+        yield path
+    elif os.path.isdir(path):
+        for leafname in os.listdir(path):
+            for filename in get_files_recursively(os.path.join(path, leafname)):
+                yield filename
+
+
+def get_test_case_modules(search_paths):
+    for top_path in search_paths:
+        filenames = [path for path in get_files_recursively(top_path)
+                     if path.endswith("_test.py")]
+        if len(filenames) == 0:
+            print 'Warning: no test modules found under "%s"' % top_path
+        for path in filenames:
+            # TODO: use __import__ instead, which means
+            # modules will only get imported once.  That only
+            # works when the modules are in sys.path though.
+            module_name = path.replace("/", "_").replace(".", "_")
+            yield imp.load_source(module_name, path)
+
 
 def main(args):
     verbosity = 1
@@ -51,23 +67,26 @@ def main(args):
             print __doc__
             return 0
     if len(args) != 0:
-        print __doc__
-        return 1
+        search_paths = args
+    else:
+        search_paths = top_dirs
 
     loader = unittest.defaultTestLoader
     suite = unittest.TestSuite()
     temp_maker = libc_test.TempMaker()
     try:
-        for module in get_test_case_modules():
+        for module in get_test_case_modules(search_paths):
             if hasattr(module, "get_test_suite"):
                 suite.addTests(module.get_test_suite(module, temp_maker))
             else:
                 suite.addTests(loader.loadTestsFromModule(module))
+                suite.addTests(testrunner.load_tests_from_module(module))
         runner = unittest.TextTestRunner(verbosity=verbosity)
         result = runner.run(suite)
         return not result.wasSuccessful()
     finally:
         temp_maker.destroy()
+
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))

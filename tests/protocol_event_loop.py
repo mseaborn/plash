@@ -115,8 +115,32 @@ REQUESTABLE_FLAGS = select.POLLIN | select.POLLOUT | select.POLLPRI
 
 ERROR_FLAGS = select.POLLERR | select.POLLHUP | select.POLLNVAL
 
+assert gobject.IO_IN == select.POLLIN
+assert gobject.IO_OUT == select.POLLOUT
+assert gobject.IO_PRI == select.POLLPRI
+assert gobject.IO_ERR == select.POLLERR
+assert gobject.IO_HUP == select.POLLHUP
+assert gobject.IO_NVAL == select.POLLNVAL
 
-class EventLoop(object):
+
+class EventLoopBase(object):
+
+    def make_watch(self, fd, get_flags, callback):
+        def error_callback(flags):
+            pass
+        return self.make_watch_with_error_handler(fd, get_flags, callback,
+                                                  error_callback)
+
+    def make_error_watch(self, fd, error_callback):
+        def get_flags():
+            return 0
+        def ready_callback(flags):
+            pass
+        return self.make_watch_with_error_handler(fd, get_flags, ready_callback,
+                                                  error_callback)
+
+
+class EventLoop(EventLoopBase):
 
     # The design of select.poll prevents us from reusing the poll
     # instance.
@@ -125,18 +149,9 @@ class EventLoop(object):
         self._watches = []
         self._poll_fds = poll_fds
 
-    def make_watch(self, fd, get_flags, callback):
-        def error_callback(flags):
-            pass
+    def make_watch_with_error_handler(self, fd, get_flags, callback,
+                                      error_callback):
         return FDWatch(self._watches, fd, get_flags, callback, error_callback)
-
-    def make_error_watch(self, fd, error_callback):
-        def get_flags():
-            return 0
-        def ready_callback(flags):
-            pass
-        return FDWatch(self._watches, fd, get_flags, ready_callback,
-                       error_callback)
 
     def _get_fd_flags(self):
         fd_flags = {}
@@ -176,6 +191,11 @@ class EventLoop(object):
         assert len(ready) != 0, self._get_fd_flags()
         self._process_ready(ready)
 
+    def run(self):
+        while True:
+            ready = dict(self._poll_fds(self._get_fd_flags()))
+            self._process_ready(ready)
+
     def run_awhile(self):
         while True:
             ready = dict(self._poll_fds(self._get_fd_flags(), 0))
@@ -210,27 +230,15 @@ class EventLoop(object):
         assert current_flags & expected_flags == expected_flags
 
 
-class GlibEventLoop(object):
+class GlibEventLoop(EventLoopBase):
 
     def __init__(self):
         self._watches = []
         self._registered = True
 
-    def make_watch(self, fd, get_flags, callback):
-        def error_callback(flags):
-            pass
+    def make_watch_with_error_handler(self, fd, get_flags, callback,
+                                      error_callback):
         watch = GlibFDWatch(self._watches, fd, get_flags, callback,
-                            error_callback)
-        if self._registered:
-            watch.register()
-        return watch
-
-    def make_error_watch(self, fd, error_callback):
-        def get_flags():
-            return 0
-        def ready_callback(flags):
-            pass
-        watch = GlibFDWatch(self._watches, fd, get_flags, ready_callback,
                             error_callback)
         if self._registered:
             watch.register()
@@ -240,6 +248,11 @@ class GlibEventLoop(object):
         may_block = False
         did_something = gobject.main_context_default().iteration(may_block)
         assert did_something
+
+    def run(self):
+        while True:
+            may_block = True
+            gobject.main_context_default().iteration(may_block)
 
     def run_awhile(self):
         while True:

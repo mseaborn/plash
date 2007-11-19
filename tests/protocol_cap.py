@@ -101,8 +101,8 @@ class FDBufferedWriter(object):
         self._buf = ""
         self._eof_requested = False
         self._connection_broken = False
-        self._watch1 = event_loop.make_watch(fd, self._get_flags, self._handler)
-        self._watch2 = event_loop.make_error_watch(fd, self._error_handler)
+        self._watch = event_loop.make_watch_with_error_handler(
+            fd, self._get_flags, self._handler, self._error_handler)
 
     def _get_flags(self):
         if len(self._buf) == 0:
@@ -120,7 +120,7 @@ class FDBufferedWriter(object):
             self._error_handler(0)
         else:
             self._buf = self._buf[written:]
-            self._watch1.update_flags()
+            self._watch.update_flags()
             self._check_for_disconnect()
 
     def _error_handler(self, flags):
@@ -128,20 +128,18 @@ class FDBufferedWriter(object):
         self._fd = None
         self._buf = ""
         self._connection_broken = True
-        self._watch1.remove_watch()
-        self._watch2.remove_watch()
+        self._watch.remove_watch()
 
     def _check_for_disconnect(self):
         if self._eof_requested and len(self._buf) == 0:
             self._fd = None
-            self._watch1.remove_watch()
-            self._watch2.remove_watch()
+            self._watch.remove_watch()
 
     def write(self, data):
         # Should this raise an exception if called after end_of_stream()?
         if not self._eof_requested and not self._connection_broken:
             self._buf += data
-            self._watch1.update_flags()
+            self._watch.update_flags()
 
     def end_of_stream(self):
         # Declares that no more data will be written.  Any buffered
@@ -182,6 +180,20 @@ class FDBufferedReader(object):
                 break
             else:
                 self._callback(message)
+
+
+class SocketListener(object):
+
+    def __init__(self, event_loop, socket_type, socket_address, callback):
+        self._callback = callback
+        self._sock = socket.socket(socket_type)
+        self._sock.bind(socket_address)
+        self._sock.listen(10)
+        event_loop.make_watch(self._sock, lambda: select.POLLIN, self._handler)
+
+    def _handler(self, flags):
+        sock2 = self._sock.accept()
+        self._callback(sock2)
 
 
 class ExportTableSimple(object):

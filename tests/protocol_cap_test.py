@@ -20,6 +20,7 @@
 import fcntl
 import os
 import select
+import socket
 import unittest
 
 import protocol_cap
@@ -56,6 +57,22 @@ class FDWrapperTest(unittest.TestCase):
         del pipe_read
         self.assertRaises(IOError,
                           lambda: fcntl.fcntl(fd, fcntl.F_GETFL))
+
+
+class SocketListenerTest(protocol_event_loop_test.EventLoopTestCase):
+
+    def test_listener(self):
+        loop = self.make_event_loop()
+        socket_path = os.path.join(self.make_temp_dir(), "socket")
+        got = []
+        def callback(sock):
+            got.append(sock)
+        protocol_cap.SocketListener(loop, socket.AF_UNIX, socket_path, callback)
+        self.assertTrue(loop.will_block())
+        sock = socket.socket(socket.AF_UNIX)
+        sock.connect(socket_path)
+        loop.once_safely()
+        self.assertEquals(len(got), 1)
 
 
 def poll_fd(fd):

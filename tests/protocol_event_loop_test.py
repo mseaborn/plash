@@ -66,16 +66,6 @@ def checked_poll_fds(fd_flags, timeout=None):
 
 class EventLoopTestCase(testrunner.CombinationTestCase):
 
-    def setUp(self):
-        self._on_teardown = []
-
-    def on_teardown(self, callback):
-        self._on_teardown.append(callback)
-
-    def tearDown(self):
-        for callback in reversed(self._on_teardown):
-            callback()
-
     def setup_poll_event_loop(self):
         self.loop = protocol_event_loop.EventLoop(poll_fds=checked_poll_fds)
 

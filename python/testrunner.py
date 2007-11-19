@@ -18,7 +18,9 @@
 # USA.
 
 import inspect
+import shutil
 import sys
+import tempfile
 import unittest
 
 
@@ -59,10 +61,20 @@ class TestCase(TestCaseBase):
         return suite
 
     def setUp(self):
-        pass
+        self._on_teardown = []
+
+    def on_teardown(self, callback):
+        self._on_teardown.append(callback)
+
+    def make_temp_dir(self):
+        temp_dir = tempfile.mkdtemp(prefix="unittest-%s" %
+                                    self.__class__.__module__)
+        self.on_teardown(lambda: shutil.rmtree(temp_dir))
+        return temp_dir
 
     def tearDown(self):
-        pass
+        for callback in reversed(self._on_teardown):
+            callback()
 
     def assertEquals(self, x, y):
         if not x == y:

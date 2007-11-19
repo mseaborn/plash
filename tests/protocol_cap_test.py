@@ -32,23 +32,18 @@ import protocol_simple
 class CapProtocolEncodingTest(unittest.TestCase):
 
     def test_id_encoding(self):
-        args = (protocol_cap.NAMESPACE_SENDER, 12345)
-        self.assertEquals(
-            protocol_cap.decode_wire_id(
-                protocol_cap.encode_wire_id(*args)),
-            args)
+        args = (cap.NAMESPACE_SENDER, 12345)
+        self.assertEquals(cap.decode_wire_id(cap.encode_wire_id(*args)), args)
 
     def test_invoke_encoding(self):
         invoke_args = (123, [4, 5, 6], "body")
         self.assertEquals(
-            protocol_cap.decode_pocp_message(
-                protocol_cap.make_invoke_message(*invoke_args)),
+            cap.decode_pocp_message(cap.make_invoke_message(*invoke_args)),
             ("invoke",) + invoke_args)
 
     def test_drop_encoding(self):
         self.assertEquals(
-            protocol_cap.decode_pocp_message(
-                protocol_cap.make_drop_message(789)),
+            cap.decode_pocp_message(cap.make_drop_message(789)),
             ("drop", 789))
 
 
@@ -189,8 +184,7 @@ class CapProtocolTests(protocol_event_loop_test.EventLoopTestCase):
             decoded = [protocol_cap.decode_pocp_message(data) for data in got]
             self.assertEquals(
                 decoded, [("invoke",
-                           protocol_cap.encode_wire_id(
-                               protocol_cap.NAMESPACE_RECEIVER, index),
+                           cap.encode_wire_id(cap.NAMESPACE_RECEIVER, index),
                            [], "body data")])
             got[:] = []
 
@@ -205,10 +199,8 @@ class CapProtocolTests(protocol_event_loop_test.EventLoopTestCase):
         decoded = [protocol_cap.decode_pocp_message(data) for data in got]
         self.assertEquals(
             decoded, [("invoke",
-                       protocol_cap.encode_wire_id(
-                           protocol_cap.NAMESPACE_RECEIVER, 0),
-                       [protocol_cap.encode_wire_id(
-                            protocol_cap.NAMESPACE_SENDER, index)
+                       cap.encode_wire_id(cap.NAMESPACE_RECEIVER, 0),
+                       [cap.encode_wire_id(cap.NAMESPACE_SENDER, index)
                         for index in range(10)], "body")])
         # Check internal state of the connection
         self.assertEquals(
@@ -256,10 +248,8 @@ class CapProtocolTests(protocol_event_loop_test.EventLoopTestCase):
         writer = protocol_cap.FDBufferedWriter(loop, sock2)
         # Should work for any sequence of valid indexes
         for index in (0, 0, 1, 2):
-            writer.write(protocol_simple.make_message(
-                    protocol_cap.make_invoke_message(
-                        protocol_cap.encode_wire_id(
-                            protocol_cap.NAMESPACE_RECEIVER, index),
+            writer.write(protocol_simple.make_message(cap.make_invoke_message(
+                        cap.encode_wire_id(cap.NAMESPACE_RECEIVER, index),
                         [], "body data")))
             loop.run_awhile()
             self.assertEquals(exported_objects[index].calls,
@@ -279,12 +269,9 @@ class CapProtocolTests(protocol_event_loop_test.EventLoopTestCase):
         writer = protocol_cap.FDBufferedWriter(loop, sock2)
         # Should work for any sequence of indexes
         indexes = [6, 2, 52, 8, 4]
-        writer.write(protocol_simple.make_message(
-                protocol_cap.make_invoke_message(
-                    protocol_cap.encode_wire_id(
-                        protocol_cap.NAMESPACE_RECEIVER, 0),
-                    [protocol_cap.encode_wire_id(
-                            protocol_cap.NAMESPACE_SENDER, index)
+        writer.write(protocol_simple.make_message(cap.make_invoke_message(
+                    cap.encode_wire_id(cap.NAMESPACE_RECEIVER, 0),
+                    [cap.encode_wire_id(cap.NAMESPACE_SENDER, index)
                      for index in indexes],
                     "body data")))
         loop.run_awhile()
@@ -340,8 +327,7 @@ class CapProtocolTests(protocol_event_loop_test.EventLoopTestCase):
         decoded = [protocol_cap.decode_pocp_message(data) for data in got]
         self.assertEquals(
             decoded,
-            [("drop", protocol_cap.encode_wire_id(
-                        protocol_cap.NAMESPACE_RECEIVER, 42))])
+            [("drop", cap.encode_wire_id(cap.NAMESPACE_RECEIVER, 42))])
 
     def test_dropping_all_imported_references(self):
         loop = self.make_event_loop()
@@ -373,10 +359,8 @@ class CapProtocolTests(protocol_event_loop_test.EventLoopTestCase):
         # Should work for any sequence of indexes
         indexes = [5, 10, 56, 1, 0]
         for index in indexes:
-            writer.write(protocol_simple.make_message(
-                    protocol_cap.make_drop_message(
-                        protocol_cap.encode_wire_id(
-                            protocol_cap.NAMESPACE_RECEIVER, index))))
+            writer.write(protocol_simple.make_message(cap.make_drop_message(
+                        cap.encode_wire_id(cap.NAMESPACE_RECEIVER, index))))
         loop.run_awhile()
         self.assertEquals(deleted, indexes)
 
@@ -388,10 +372,8 @@ class CapProtocolTests(protocol_event_loop_test.EventLoopTestCase):
         del sock1
         writer = protocol_cap.FDBufferedWriter(loop, sock2)
         for index in range(100):
-            writer.write(protocol_simple.make_message(
-                    protocol_cap.make_drop_message(
-                        protocol_cap.encode_wire_id(
-                            protocol_cap.NAMESPACE_RECEIVER, index))))
+            writer.write(protocol_simple.make_message(cap.make_drop_message(
+                        cap.encode_wire_id(cap.NAMESPACE_RECEIVER, index))))
         loop.run_awhile()
         self._assert_connection_dropped(sock2)
 
@@ -440,19 +422,14 @@ class CapProtocolTests(protocol_event_loop_test.EventLoopTestCase):
         del sock1
         received = self._read_to_list(loop, sock2)
         writer = protocol_cap.FDBufferedWriter(loop, sock2)
-        writer.write(protocol_simple.make_message(
-                protocol_cap.make_invoke_message(
-                    protocol_cap.encode_wire_id(
-                        protocol_cap.NAMESPACE_RECEIVER, 0),
-                    [protocol_cap.encode_wire_id(
-                            protocol_cap.NAMESPACE_SENDER_SINGLE_USE, 1234)],
+        writer.write(protocol_simple.make_message(cap.make_invoke_message(
+                    cap.encode_wire_id(cap.NAMESPACE_RECEIVER, 0),
+                    [cap.encode_wire_id(cap.NAMESPACE_SENDER_SINGLE_USE, 1234)],
                     "body data")))
         # Drop the exported object so that the imported single use
         # object is the only one left.
-        writer.write(protocol_simple.make_message(
-                protocol_cap.make_drop_message(
-                    protocol_cap.encode_wire_id(
-                        protocol_cap.NAMESPACE_RECEIVER, 0))))
+        writer.write(protocol_simple.make_message(cap.make_drop_message(
+                    cap.encode_wire_id(cap.NAMESPACE_RECEIVER, 0))))
         loop.run_awhile()
         self.assertEquals(len(calls), 1)
         data, caps, fds = calls[0]
@@ -471,8 +448,7 @@ class CapProtocolTests(protocol_event_loop_test.EventLoopTestCase):
         decoded = [protocol_cap.decode_pocp_message(data) for data in received]
         self.assertEquals(
             decoded,
-            [("invoke", protocol_cap.encode_wire_id(
-                           protocol_cap.NAMESPACE_RECEIVER, 1234),
+            [("invoke", cap.encode_wire_id(cap.NAMESPACE_RECEIVER, 1234),
               [], "some return message")])
         self._assert_connection_dropped(sock2)
 

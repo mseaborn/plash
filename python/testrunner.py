@@ -112,14 +112,19 @@ class CombinationTestCase(TestCase):
                 run_single_test(results, test_name, test_body)
             suite.addTest(test_wrapper)
 
+        for method_names in cls.get_method_combinations():
+            add_test(method_names)
+        return suite
+
+    @classmethod
+    def get_method_combinations(cls):
         def by_prefix(prefix):
             return [method_name
                     for method_name, unused in inspect.getmembers(cls)
                     if method_name.startswith(prefix)]
         for setup_method in by_prefix("setup_"):
             for test_method in by_prefix("test_"):
-                add_test([setup_method, test_method])
-        return suite
+                yield [setup_method, test_method]
 
 
 # Similar logic to unittest.TestCase.run(), except that

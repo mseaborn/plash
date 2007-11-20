@@ -81,6 +81,22 @@ def poll_fd(fd):
     return ready.get(fd.fileno(), 0)
 
 
+def tcp_socketpair():
+    # Pick an arbitrary port.  This could interfere with another
+    # program running on the machine, but there is not really any way
+    # to avoid that.  socketpair() doesn't work for AF_INET.
+    address = ("localhost", 47205)
+    sock_listener = socket.socket(socket.AF_INET)
+    sock_listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock_listener.bind(address)
+    sock_listener.listen(1)
+    sock1 = socket.socket(socket.AF_INET)
+    sock1.connect(address)
+    sock2, address2 = sock_listener.accept()
+    return (protocol_cap.WrappedFD(os.dup(sock1.fileno())),
+            protocol_cap.WrappedFD(os.dup(sock2.fileno())))
+
+
 class FDBufferedWriterTest(protocol_event_loop_test.EventLoopTestCase):
 
     def test_writing(self):
@@ -179,19 +195,39 @@ class CallLogger(protocol_cap.PlashObjectBase):
         return func
 
 
-class CapProtocolTests(protocol_event_loop_test.EventLoopTestCase):
+class SocketPairTestCase(protocol_event_loop_test.EventLoopTestCase):
+
+    @classmethod
+    def get_method_combinations(cls):
+        for methods in super(SocketPairTestCase, cls).get_method_combinations():
+            yield ["set_unix_socket"] + methods
+            yield ["set_tcp_socket"] + methods
+
+    def set_unix_socket(self):
+        self.socketpair = protocol_cap.socketpair
+
+    def set_tcp_socket(self):
+        self.socketpair = tcp_socketpair
+
+
+class CapProtocolTests(SocketPairTestCase):
 
     def _read_to_list(self, loop, socket_fd):
         messages = []
         protocol_cap.FDBufferedReader(loop, socket_fd, messages.append)
         return messages
 
-    def _assert_connection_dropped(self, sock):
-        self.assertNotEquals(poll_fd(sock) & select.POLLHUP, 0)
+    def _connection_dropped(self, sock):
+        # AF_UNIX sockets set POLLHUP when the other end has been
+        # closed, but AF_INET sockets do not set POLLHUP.  Both set
+        # POLLIN and return an EOF condition from read().
+        if poll_fd(sock) & select.POLLIN:
+            return len(os.read(sock.fileno(), 100)) == 0
+        return False
 
     def test_sending(self):
         loop = self.make_event_loop()
-        sock1, sock2 = protocol_cap.socketpair()
+        sock1, sock2 = self.socketpair()
         got = self._read_to_list(loop, sock1)
         imported_objects = protocol_cap.make_connection(loop, sock2, [], 10)
         # Should work for any sequence of valid indexes
@@ -207,7 +243,7 @@ class CapProtocolTests(protocol_event_loop_test.EventLoopTestCase):
 
     def test_sending_references(self):
         loop = self.make_event_loop()
-        sock1, sock2 = protocol_cap.socketpair()
+        sock1, sock2 = self.socketpair()
         got = self._read_to_list(loop, sock1)
         [imported] = protocol_cap.make_connection(loop, sock2, [], 1)
         arg_objects = [protocol_cap.PlashObject() for i in range(10)]
@@ -231,7 +267,7 @@ class CapProtocolTests(protocol_event_loop_test.EventLoopTestCase):
                 calls.append(args)
 
         loop = self.make_event_loop()
-        sock1, sock2 = protocol_cap.socketpair()
+        sock1, sock2 = self.socketpair()
         got = self._read_to_list(loop, sock1)
         [imported] = protocol_cap.make_connection(loop, sock2, [], 1)
         writer = protocol_cap.FDBufferedWriter(loop, sock1)
@@ -259,7 +295,7 @@ class CapProtocolTests(protocol_event_loop_test.EventLoopTestCase):
 
     def test_receiving(self):
         loop = self.make_event_loop()
-        sock1, sock2 = protocol_cap.socketpair()
+        sock1, sock2 = self.socketpair()
         exported_objects = [CallLogger() for i in range(10)]
         protocol_cap.make_connection(loop, sock1, exported_objects)
         writer = protocol_cap.FDBufferedWriter(loop, sock2)
@@ -280,7 +316,7 @@ class CapProtocolTests(protocol_event_loop_test.EventLoopTestCase):
                 calls.append(args)
 
         loop = self.make_event_loop()
-        sock1, sock2 = protocol_cap.socketpair()
+        sock1, sock2 = self.socketpair()
         exported = Object()
         protocol_cap.make_connection(loop, sock1, [exported])
         writer = protocol_cap.FDBufferedWriter(loop, sock2)
@@ -308,7 +344,7 @@ class CapProtocolTests(protocol_event_loop_test.EventLoopTestCase):
                 calls.append(args)
 
         loop = self.make_event_loop()
-        sock1, sock2 = protocol_cap.socketpair()
+        sock1, sock2 = self.socketpair()
         protocol_cap.make_connection(loop, sock1, [Object()])
         got = self._read_to_list(loop, sock2)
         writer = protocol_cap.FDBufferedWriter(loop, sock2)
@@ -336,7 +372,7 @@ class CapProtocolTests(protocol_event_loop_test.EventLoopTestCase):
 
     def test_dropping_imported_references(self):
         loop = self.make_event_loop()
-        sock1, sock2 = protocol_cap.socketpair()
+        sock1, sock2 = self.socketpair()
         got = self._read_to_list(loop, sock1)
         imported_objects = protocol_cap.make_connection(loop, sock2, [], 100)
         imported_objects[42] = None
@@ -348,13 +384,13 @@ class CapProtocolTests(protocol_event_loop_test.EventLoopTestCase):
 
     def test_dropping_all_imported_references(self):
         loop = self.make_event_loop()
-        sock1, sock2 = protocol_cap.socketpair()
+        sock1, sock2 = self.socketpair()
         got = self._read_to_list(loop, sock1)
         imported_objects = protocol_cap.make_connection(loop, sock2, [], 1)
         del sock2
         del imported_objects
         loop.run_awhile()
-        self._assert_connection_dropped(sock1)
+        self.assertTrue(self._connection_dropped(sock1))
         decoded = [protocol_cap.decode_pocp_message(data) for data in got]
         # The last "drop" message is unnecessary and we should not
         # receive it, because the connection will be dropped instead.
@@ -369,7 +405,7 @@ class CapProtocolTests(protocol_event_loop_test.EventLoopTestCase):
                 deleted.append(self._index)
 
         loop = self.make_event_loop()
-        sock1, sock2 = protocol_cap.socketpair()
+        sock1, sock2 = self.socketpair()
         protocol_cap.make_connection(loop, sock1, [Object(index)
                                                    for index in range(100)])
         writer = protocol_cap.FDBufferedWriter(loop, sock2)
@@ -383,7 +419,7 @@ class CapProtocolTests(protocol_event_loop_test.EventLoopTestCase):
 
     def test_dropping_all_exported_references(self):
         loop = self.make_event_loop()
-        sock1, sock2 = protocol_cap.socketpair()
+        sock1, sock2 = self.socketpair()
         protocol_cap.make_connection(loop, sock1, [protocol_cap.PlashObject()
                                                    for index in range(100)])
         del sock1
@@ -392,7 +428,7 @@ class CapProtocolTests(protocol_event_loop_test.EventLoopTestCase):
             writer.write(protocol_simple.make_message(cap.make_drop_message(
                         cap.encode_wire_id(cap.NAMESPACE_RECEIVER, index))))
         loop.run_awhile()
-        self._assert_connection_dropped(sock2)
+        self.assertTrue(self._connection_dropped(sock2))
 
     def test_handling_dropped_connection(self):
         for import_count in (0, 1, 2):
@@ -404,7 +440,7 @@ class CapProtocolTests(protocol_event_loop_test.EventLoopTestCase):
                     deleted.append(self._index)
 
             loop = self.make_event_loop()
-            sock1, sock2 = protocol_cap.socketpair()
+            sock1, sock2 = self.socketpair()
             imported = protocol_cap.make_connection(
                 loop, sock1, [Object(index) for index in range(10)],
                 import_count)
@@ -419,12 +455,12 @@ class CapProtocolTests(protocol_event_loop_test.EventLoopTestCase):
 
     def test_creating_useless_connection(self):
         loop = self.make_event_loop()
-        sock1, sock2 = protocol_cap.socketpair()
+        sock1, sock2 = self.socketpair()
         # This connection neither imports nor exports any references,
         # so it starts off moribund.
         protocol_cap.make_connection(loop, sock1, [])
         del sock1
-        self._assert_connection_dropped(sock2)
+        self.assertTrue(self._connection_dropped(sock2))
 
     def test_receiving_and_invoking_single_use_reference(self):
         calls = []
@@ -433,7 +469,7 @@ class CapProtocolTests(protocol_event_loop_test.EventLoopTestCase):
                 calls.append(args)
 
         loop = self.make_event_loop()
-        sock1, sock2 = protocol_cap.socketpair()
+        sock1, sock2 = self.socketpair()
         exported = Object()
         protocol_cap.make_connection(loop, sock1, [exported])
         del sock1
@@ -467,20 +503,20 @@ class CapProtocolTests(protocol_event_loop_test.EventLoopTestCase):
             decoded,
             [("invoke", cap.encode_wire_id(cap.NAMESPACE_RECEIVER, 1234),
               [], "some return message")])
-        self._assert_connection_dropped(sock2)
+        self.assertTrue(self._connection_dropped(sock2))
 
     # TODO: check receiving bogus IDs
 
     # TODO: check receiving bogus messages
 
 
-class CapProtocolEndToEndTests(protocol_event_loop_test.EventLoopTestCase):
+class CapProtocolEndToEndTests(SocketPairTestCase):
 
     # End-to-end test: makes no assumptions about the protocol's encoding.
 
     def test_sending_and_receiving(self):
         loop = self.make_event_loop()
-        sock1, sock2 = protocol_cap.socketpair()
+        sock1, sock2 = self.socketpair()
         exported_objects = [CallLogger() for i in range(10)]
         protocol_cap.make_connection(loop, sock1, exported_objects)
         imported_objects = protocol_cap.make_connection(loop, sock2, [], 10)
@@ -502,7 +538,7 @@ class CapProtocolEndToEndTests(protocol_event_loop_test.EventLoopTestCase):
 
         loop = self.make_event_loop()
         loop.once = loop.once_safely # Should really apply this for all tests
-        sock1, sock2 = protocol_cap.socketpair()
+        sock1, sock2 = self.socketpair()
         protocol_cap.make_connection(loop, sock1, [Object()])
         [imported] = protocol_cap.make_connection(loop, sock2, [], 1)
         result = imported.cap_call(("args body", (), ()))
@@ -517,7 +553,7 @@ class CapProtocolEndToEndTests(protocol_event_loop_test.EventLoopTestCase):
 
         loop = self.make_event_loop()
         loop.once = loop.once_safely # Should really apply this for all tests
-        sock1, sock2 = protocol_cap.socketpair()
+        sock1, sock2 = self.socketpair()
         protocol_cap.make_connection(loop, sock1, [Object()])
         [imported] = protocol_cap.make_connection(loop, sock2, [], 1)
         result = imported.cap_call(("args body", (), ()))

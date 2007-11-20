@@ -153,9 +153,10 @@ class FDBufferedWriter(object):
 
 class FDBufferedReader(object):
 
-    def __init__(self, event_loop, fd, callback):
+    def __init__(self, event_loop, fd, callback, eof_callback=lambda: None):
         self._fd = fd
         self._callback = callback
+        self._eof_callback = eof_callback
         self._buffer = protocol_simple.InputBuffer()
         self._buffer.connect(self._handle)
         # TODO: extend to do flow control
@@ -171,6 +172,9 @@ class FDBufferedReader(object):
         data = os.read(self._fd.fileno(), 1024)
         if len(data) != 0:
             self._buffer.add(data)
+        else:
+            self.finish()
+            self._eof_callback()
 
     def _handle(self):
         while True:
@@ -501,9 +505,15 @@ def make_connection(event_loop, socket_fd, caps_export, import_count=0):
     def on_fd_error(flags):
         connection.handle_disconnection()
 
+    def on_eof():
+        connection.handle_disconnection()
+        writer.end_of_stream()
+        error_watch.remove_watch()
+
     export_table = ExportTablePreservingEQ(caps_export)
     writer = FDBufferedWriter(event_loop, socket_fd)
     connection = ConnectionPrivate(event_loop, writer, disconnect, export_table)
-    reader = FDBufferedReader(event_loop, socket_fd, connection.handle_message)
+    reader = FDBufferedReader(event_loop, socket_fd, connection.handle_message,
+                              on_eof)
     error_watch = event_loop.make_error_watch(socket_fd, on_fd_error)
     return connection.get_initial_imported_objects(import_count)

@@ -90,6 +90,14 @@ class TestCase(TestCaseBase):
     def assertFalse(self, x):
         self.assertEquals(x, False)
 
+    def assertRaises(self, exception_class, func, *args, **kwargs):
+        try:
+            func(*args, **kwargs)
+        except exception_class:
+            pass
+        else:
+            raise AssertionError("Did not raise %r" % exception_class)
+
 
 class CombinationTestCase(TestCase):
 

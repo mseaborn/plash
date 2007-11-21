@@ -90,6 +90,9 @@ class EventLoopTestCase(testrunner.CombinationTestCase):
 
     def setup_poll_event_loop(self):
         self.loop = protocol_event_loop.EventLoop(poll_fds=checked_poll_fds)
+        def reraise(*args):
+            raise
+        self.loop.set_excepthook(reraise)
 
     def setup_glib_event_loop(self):
         self.loop = protocol_event_loop.GlibEventLoop()
@@ -163,6 +166,40 @@ class EventLoopTests(EventLoopTestCase):
         os.write(pipe_write.fileno(), "hello")
         loop.once_safely()
         self.assertEquals(len(got), limit)
+
+    def test_exception_in_callback(self):
+        def callback(flags):
+            raise AssertionError()
+
+        loop = self.make_event_loop()
+        pipe_read, pipe_write = protocol_cap.make_pipe()
+        watch = loop.make_watch(pipe_read, lambda: select.POLLIN, callback)
+        os.write(pipe_write.fileno(), "hello")
+
+        got_exceptions = []
+        def handle_exception(*args):
+            got_exceptions.append(args)
+        loop.set_excepthook(handle_exception)
+        loop.once_safely()
+        self.assertEquals(len(got_exceptions), 1)
+        self.assertTrue(watch.destroyed)
+
+    def test_exception_in_error_callback(self):
+        def callback(flags):
+            raise AssertionError()
+
+        loop = self.make_event_loop()
+        pipe_read, pipe_write = protocol_cap.make_pipe()
+        del pipe_write
+        watch = loop.make_error_watch(pipe_read, callback)
+
+        got_exceptions = []
+        def handle_exception(*args):
+            got_exceptions.append(args)
+        loop.set_excepthook(handle_exception)
+        loop.once_safely()
+        self.assertEquals(len(got_exceptions), 1)
+        self.assertTrue(watch.destroyed)
 
 
 if __name__ == "__main__":

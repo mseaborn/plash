@@ -18,15 +18,42 @@
 # USA.
 
 import select
+import sys
 
 import gobject
 
 
+class ExcepthookProxy(object):
+
+    def __init__(self):
+        self._func = lambda *args: sys.excepthook(*args)
+
+    def excepthook(self, *args):
+        self._func(*args)
+
+    def set(self, func):
+        self._func = func
+
+
+def assert_still_relevant(fd, expected_flags):
+    # Be paranoid, and check flags again.  A handler could have a
+    # side effect of causing the earlier poll results to no longer
+    # be relevant.
+    poller = select.poll()
+    poller.register(fd, expected_flags)
+    ready = poller.poll(0)
+    assert len(ready) == 1, ready
+    fd2, current_flags = ready[0]
+    assert fd2 == fd
+    assert current_flags & expected_flags == expected_flags
+
+
 class FDWatch(object):
 
-    def __init__(self, parent_watch_list, fd, get_flags, callback,
+    def __init__(self, parent_watch_list, excepthook, fd, get_flags, callback,
                  error_callback):
         self._parent_watch_list = parent_watch_list
+        self._excepthook = excepthook
         self.fd = fd
         self.get_flags = get_flags
         self.flags = get_flags()
@@ -48,12 +75,30 @@ class FDWatch(object):
             self.callback = lambda flags: None
             self.error_callback = lambda flags: None
 
+    def dispatch(self, flags):
+        # Assumes the watch has not been changed since EventLoop._get_fd_flags()
+        relevant_flags = flags & self.flags
+        if relevant_flags != 0:
+            assert_still_relevant(self.fd.fileno(), relevant_flags)
+            try:
+                self.callback(relevant_flags)
+            except:
+                self._excepthook(*sys.exc_info())
+                self.remove_watch()
+        if flags & ERROR_FLAGS != 0:
+            try:
+                self.error_callback(flags & ERROR_FLAGS)
+            except:
+                self._excepthook(*sys.exc_info())
+            self.remove_watch()
+
 
 class GlibFDWatch(object):
 
-    def __init__(self, parent_watch_list, fd, get_flags, callback,
+    def __init__(self, parent_watch_list, excepthook, fd, get_flags, callback,
                  error_callback):
         self._parent_watch_list = parent_watch_list
+        self._excepthook = excepthook
         self._fd = fd
         self._get_flags = get_flags
         self._flags = get_flags()
@@ -87,9 +132,16 @@ class GlibFDWatch(object):
         self.register()
         relevant_flags = flags & self._flags
         if relevant_flags != 0:
-            self._callback(relevant_flags)
+            try:
+                self._callback(relevant_flags)
+            except:
+                self._excepthook(*sys.exc_info())
+                self.remove_watch()
         if flags & ERROR_FLAGS != 0:
-            self._error_callback(flags & ERROR_FLAGS)
+            try:
+                self._error_callback(flags & ERROR_FLAGS)
+            except:
+                self._excepthook(*sys.exc_info())
             self.remove_watch()
         return False # remove handler
 
@@ -149,10 +201,15 @@ class EventLoop(EventLoopBase):
     def __init__(self, poll_fds=poll_fds):
         self._watches = []
         self._poll_fds = poll_fds
+        self._excepthook = ExcepthookProxy()
 
     def make_watch_with_error_handler(self, fd, get_flags, callback,
                                       error_callback):
-        return FDWatch(self._watches, fd, get_flags, callback, error_callback)
+        return FDWatch(self._watches, self._excepthook.excepthook,
+                       fd, get_flags, callback, error_callback)
+
+    def set_excepthook(self, func):
+        self._excepthook.set(func)
 
     def _get_fd_flags(self):
         fd_flags = {}
@@ -177,7 +234,7 @@ class EventLoop(EventLoopBase):
     def is_listening(self):
         # Whether there are any events we're currently interested in.
         # If not, the loop would block forever.
-        return len(self._get_fd_flags()) > 0
+        return len(self._watches) > 0
 
     def will_block(self):
         ready = self._poll_fds(self._get_fd_flags(), 0)
@@ -209,56 +266,45 @@ class EventLoop(EventLoopBase):
             fd = watch.fd.fileno()
             if fd in ready:
                 flags = ready[fd]
-                # Assumes the watch has not been changed since _get_fd_flags()
-                relevant_flags = flags & watch.flags
-                if relevant_flags != 0:
-                    self._assert_still_relevant(fd, relevant_flags)
-                    watch.callback(relevant_flags)
-                if flags & ERROR_FLAGS != 0:
-                    watch.error_callback(flags & ERROR_FLAGS)
-                    watch.remove_watch()
-
-    def _assert_still_relevant(self, fd, expected_flags):
-        # Be paranoid, and check flags again.  A handler could have a
-        # side effect of causing the earlier poll results to no longer
-        # be relevant.
-        poller = select.poll()
-        poller.register(fd, expected_flags)
-        ready = poller.poll(0)
-        assert len(ready) == 1, ready
-        fd2, current_flags = ready[0]
-        assert fd2 == fd
-        assert current_flags & expected_flags == expected_flags
+                watch.dispatch(flags)
 
 
 class GlibEventLoop(EventLoopBase):
 
     def __init__(self):
         self._watches = []
+        self._excepthook = ExcepthookProxy()
         self._registered = True
 
     def make_watch_with_error_handler(self, fd, get_flags, callback,
                                       error_callback):
-        watch = GlibFDWatch(self._watches, fd, get_flags, callback,
-                            error_callback)
+        watch = GlibFDWatch(self._watches, self._excepthook.excepthook,
+                            fd, get_flags, callback, error_callback)
         if self._registered:
             watch.register()
         return watch
 
-    def once_safely(self):
-        may_block = False
+    def set_excepthook(self, func):
+        self._excepthook.set(func)
+
+    def _iteration(self, may_block):
         did_something = gobject.main_context_default().iteration(may_block)
+        return did_something
+
+    def once(self):
+        self._iteration(may_block=True)
+
+    def once_safely(self):
+        did_something = self._iteration(may_block=False)
         assert did_something
 
     def run(self):
         while True:
-            may_block = True
-            gobject.main_context_default().iteration(may_block)
+            self._iteration(may_block=True)
 
     def run_awhile(self):
         while True:
-            may_block = False
-            did_something = gobject.main_context_default().iteration(may_block)
+            did_something = self._iteration(may_block=False)
             if not did_something:
                 break
 

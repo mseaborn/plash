@@ -81,16 +81,17 @@ class GlibFDWatch(object):
             self.register()
 
     def _handler(self, fd_unused, flags):
+        # Always re-register the event handler otherwise glib will
+        # refuse to re-enter the handler if the callback should happen
+        # to start a nested event loop.
+        self.register()
         relevant_flags = flags & self._flags
         if relevant_flags != 0:
             self._callback(relevant_flags)
         if flags & ERROR_FLAGS != 0:
             self._error_callback(flags & ERROR_FLAGS)
-            self._id = None
             self.remove_watch()
-            return False # remove handler
-        else:
-            return True # keep handler
+        return False # remove handler
 
     def remove_watch(self):
         if not self.destroyed:

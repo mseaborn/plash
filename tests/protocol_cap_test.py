@@ -545,6 +545,37 @@ class CapProtocolEndToEndTests(SocketPairTestCase):
         self.assertEquals(calls, [("args body", (), ())])
         self.assertEquals(result, ("result body", (), ()))
 
+    def test_call_return_nested(self):
+        limit = 4
+        calls = []
+
+        class Object(protocol_cap.LocalObject):
+
+            def __init__(self, name):
+                self._name = name
+                self.other = None
+
+            def cap_call(self, args):
+                calls.append("call %s" % self._name)
+                if len(calls) < limit:
+                    self.other.cap_call(("body", (), ()))
+                calls.append("return %s" % self._name)
+                return ("body", (), ())
+
+        a = Object("a")
+        b = Object("b")
+        loop = self.make_event_loop()
+        loop.once = loop.once_safely # Should really apply this for all tests
+        sock1, sock2 = self.socketpair()
+        [b_imported] = protocol_cap.make_connection(loop, sock1, [a], 1)
+        [a_imported] = protocol_cap.make_connection(loop, sock2, [b], 1)
+        a.other = b_imported
+        b.other = a_imported
+        result = a_imported.cap_call(("body", (), ()))
+        self.assertEquals(calls,
+                          ["call a", "call b", "call a", "call b",
+                           "return b", "return a", "return b", "return a"])
+
     def test_return_continuation_dropped(self):
         calls = []
         class Object(protocol_cap.PlashObject):

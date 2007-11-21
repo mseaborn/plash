@@ -64,6 +64,28 @@ def checked_poll_fds(fd_flags, timeout=None):
     return ready_fds1
 
 
+class GlibTests(unittest.TestCase):
+
+    def test_not_reentering_glib_watches(self):
+        # glib will not re-enter a glib watch while it is active.  If
+        # we run an iteration of the main loop from inside a handler,
+        # the handler will not be called again.  We do not rely on
+        # this behaviour; in fact, we work around it.
+        got = []
+        def handler(fd_unused, flags):
+            got.append(flags)
+            may_block = False
+            gobject.main_context_default().iteration(may_block)
+            return False
+
+        pipe_read, pipe_write = protocol_cap.make_pipe()
+        gobject.io_add_watch(pipe_read, select.POLLIN, handler)
+        os.write(pipe_write.fileno(), "hello")
+        may_block = False
+        gobject.main_context_default().iteration(may_block)
+        self.assertEquals(len(got), 1)
+
+
 class EventLoopTestCase(testrunner.CombinationTestCase):
 
     def setup_poll_event_loop(self):
@@ -126,6 +148,21 @@ class EventLoopTests(EventLoopTestCase):
         loop.make_error_watch(pipe_read, error_callback)
         loop.once_safely()
         self.assertEquals(got_callbacks, [select.POLLHUP])
+
+    def test_reentering_watches(self):
+        limit = 4
+        got = []
+        def handler(flags):
+            got.append(flags)
+            if len(got) < limit:
+                loop.once_safely()
+
+        loop = self.make_event_loop()
+        pipe_read, pipe_write = protocol_cap.make_pipe()
+        loop.make_watch(pipe_read, lambda: select.POLLIN, handler)
+        os.write(pipe_write.fileno(), "hello")
+        loop.once_safely()
+        self.assertEquals(len(got), limit)
 
 
 if __name__ == "__main__":

@@ -17,7 +17,6 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 # USA.
 
-import fcntl
 import os
 import select
 import socket
@@ -28,6 +27,7 @@ import protocol_cap as cap
 import protocol_event_loop
 import protocol_event_loop_test
 import protocol_simple
+import protocol_stream
 
 
 class CapProtocolEncodingTest(unittest.TestCase):
@@ -48,33 +48,6 @@ class CapProtocolEncodingTest(unittest.TestCase):
             ("drop", 789))
 
 
-class FDWrapperTest(unittest.TestCase):
-
-    def test_fds_are_freed(self):
-        pipe_read, pipe_write = protocol_cap.make_pipe()
-        fd = pipe_read.fileno()
-        fcntl.fcntl(fd, fcntl.F_GETFL)
-        del pipe_read
-        self.assertRaises(IOError,
-                          lambda: fcntl.fcntl(fd, fcntl.F_GETFL))
-
-
-class SocketListenerTest(protocol_event_loop_test.EventLoopTestCase):
-
-    def test_listener(self):
-        loop = self.make_event_loop()
-        socket_path = os.path.join(self.make_temp_dir(), "socket")
-        got = []
-        def callback(sock):
-            got.append(sock)
-        protocol_cap.SocketListener(loop, socket.AF_UNIX, socket_path, callback)
-        self.assertTrue(loop.will_block())
-        sock = socket.socket(socket.AF_UNIX)
-        sock.connect(socket_path)
-        loop.once_safely()
-        self.assertEquals(len(got), 1)
-
-
 def poll_fd(fd):
     fd_flags = {fd.fileno(): protocol_event_loop.REQUESTABLE_FLAGS}
     ready = dict(protocol_event_loop.poll_fds(fd_flags, 0))
@@ -93,65 +66,8 @@ def tcp_socketpair():
     sock1 = socket.socket(socket.AF_INET)
     sock1.connect(address)
     sock2, address2 = sock_listener.accept()
-    return (protocol_cap.WrappedFD(os.dup(sock1.fileno())),
-            protocol_cap.WrappedFD(os.dup(sock2.fileno())))
-
-
-class FDBufferedWriterTest(protocol_event_loop_test.EventLoopTestCase):
-
-    def test_writing(self):
-        loop = self.make_event_loop()
-        pipe_read, pipe_write = protocol_cap.make_pipe()
-        writer = protocol_cap.FDBufferedWriter(loop, pipe_write)
-        self.assertEquals(writer.buffered_size(), 0)
-        writer.write("hello")
-        self.assertEquals(writer.buffered_size(), 5)
-        loop.once_safely()
-        # Should have written all of buffer to the pipe now
-        self.assertEquals(writer.buffered_size(), 0)
-
-    def test_writing_to_closed_pipe(self):
-        loop = self.make_event_loop()
-        pipe_read, pipe_write = protocol_cap.make_pipe()
-        writer = protocol_cap.FDBufferedWriter(loop, pipe_write)
-        writer.write("hello")
-        del pipe_read
-        self.assertEquals(writer._connection_broken, False)
-        loop.once_safely()
-        self.assertEquals(writer._connection_broken, True)
-
-    def test_writing_end_of_stream_with_data_buffered(self):
-        loop = self.make_event_loop()
-        pipe_read, pipe_write = protocol_cap.make_pipe()
-        writer = protocol_cap.FDBufferedWriter(loop, pipe_write)
-        del pipe_write
-        writer.write("hello")
-        writer.end_of_stream()
-        loop.once_safely()
-        self.assertEquals(poll_fd(pipe_read), select.POLLHUP | select.POLLIN)
-        self.assertEquals(os.read(pipe_read.fileno(), 100), "hello")
-        self.assertEquals(poll_fd(pipe_read), select.POLLHUP)
-        self.assertEquals(os.read(pipe_read.fileno(), 100), "")
-
-
-class FDBufferedReaderTest(protocol_event_loop_test.EventLoopTestCase):
-
-    def test_end_of_stream(self):
-        got = []
-        def callback(data):
-            got.append(data)
-        loop = self.make_event_loop()
-        pipe_read, pipe_write = protocol_cap.make_pipe()
-        reader = protocol_cap.FDBufferedReader(loop, pipe_read, callback)
-        self.assertTrue(loop.will_block())
-        os.write(pipe_write.fileno(), protocol_simple.make_message("hello"))
-        os.write(pipe_write.fileno(), protocol_simple.make_message("world"))
-        self.assertTrue(not loop.will_block())
-        loop.once_safely()
-        self.assertEquals(got, ["hello", "world"])
-        del pipe_write
-        loop.once_safely()
-        self.assertTrue(not loop.is_listening())
+    return (protocol_stream.WrappedFD(os.dup(sock1.fileno())),
+            protocol_stream.WrappedFD(os.dup(sock2.fileno())))
 
 
 class TestExportTable(unittest.TestCase):
@@ -204,7 +120,7 @@ class SocketPairTestCase(protocol_event_loop_test.EventLoopTestCase):
             yield ["set_tcp_socket"] + methods
 
     def set_unix_socket(self):
-        self.socketpair = protocol_cap.socketpair
+        self.socketpair = protocol_stream.socketpair
 
     def set_tcp_socket(self):
         self.socketpair = tcp_socketpair
@@ -214,7 +130,7 @@ class CapProtocolTests(SocketPairTestCase):
 
     def _read_to_list(self, loop, socket_fd):
         messages = []
-        protocol_cap.FDBufferedReader(loop, socket_fd, messages.append)
+        protocol_stream.FDBufferedReader(loop, socket_fd, messages.append)
         return messages
 
     def _connection_dropped(self, sock):
@@ -270,7 +186,7 @@ class CapProtocolTests(SocketPairTestCase):
         sock1, sock2 = self.socketpair()
         got = self._read_to_list(loop, sock1)
         [imported] = protocol_cap.make_connection(loop, sock2, [], 1)
-        writer = protocol_cap.FDBufferedWriter(loop, sock1)
+        writer = protocol_stream.FDBufferedWriter(loop, sock1)
         object1 = Object()
         object2 = Object()
         imported.cap_invoke(("body", (object1, object1, object2), ()))
@@ -298,7 +214,7 @@ class CapProtocolTests(SocketPairTestCase):
         sock1, sock2 = self.socketpair()
         exported_objects = [CallLogger() for i in range(10)]
         protocol_cap.make_connection(loop, sock1, exported_objects)
-        writer = protocol_cap.FDBufferedWriter(loop, sock2)
+        writer = protocol_stream.FDBufferedWriter(loop, sock2)
         # Should work for any sequence of valid indexes
         for index in (0, 0, 1, 2):
             writer.write(protocol_simple.make_message(cap.make_invoke_message(
@@ -319,7 +235,7 @@ class CapProtocolTests(SocketPairTestCase):
         sock1, sock2 = self.socketpair()
         exported = Object()
         protocol_cap.make_connection(loop, sock1, [exported])
-        writer = protocol_cap.FDBufferedWriter(loop, sock2)
+        writer = protocol_stream.FDBufferedWriter(loop, sock2)
         # Should work for any sequence of indexes
         indexes = [6, 2, 52, 8, 4]
         writer.write(protocol_simple.make_message(cap.make_invoke_message(
@@ -347,7 +263,7 @@ class CapProtocolTests(SocketPairTestCase):
         sock1, sock2 = self.socketpair()
         protocol_cap.make_connection(loop, sock1, [Object()])
         got = self._read_to_list(loop, sock2)
-        writer = protocol_cap.FDBufferedWriter(loop, sock2)
+        writer = protocol_stream.FDBufferedWriter(loop, sock2)
         writer.write(protocol_simple.make_message(
                 cap.make_invoke_message(
                     cap.encode_wire_id(cap.NAMESPACE_RECEIVER, 0),
@@ -408,7 +324,7 @@ class CapProtocolTests(SocketPairTestCase):
         sock1, sock2 = self.socketpair()
         protocol_cap.make_connection(loop, sock1, [Object(index)
                                                    for index in range(100)])
-        writer = protocol_cap.FDBufferedWriter(loop, sock2)
+        writer = protocol_stream.FDBufferedWriter(loop, sock2)
         # Should work for any sequence of indexes
         indexes = [5, 10, 56, 1, 0]
         for index in indexes:
@@ -423,7 +339,7 @@ class CapProtocolTests(SocketPairTestCase):
         protocol_cap.make_connection(loop, sock1, [protocol_cap.PlashObject()
                                                    for index in range(100)])
         del sock1
-        writer = protocol_cap.FDBufferedWriter(loop, sock2)
+        writer = protocol_stream.FDBufferedWriter(loop, sock2)
         for index in range(100):
             writer.write(protocol_simple.make_message(cap.make_drop_message(
                         cap.encode_wire_id(cap.NAMESPACE_RECEIVER, index))))
@@ -474,7 +390,7 @@ class CapProtocolTests(SocketPairTestCase):
         protocol_cap.make_connection(loop, sock1, [exported])
         del sock1
         received = self._read_to_list(loop, sock2)
-        writer = protocol_cap.FDBufferedWriter(loop, sock2)
+        writer = protocol_stream.FDBufferedWriter(loop, sock2)
         writer.write(protocol_simple.make_message(cap.make_invoke_message(
                     cap.encode_wire_id(cap.NAMESPACE_RECEIVER, 0),
                     [cap.encode_wire_id(cap.NAMESPACE_SENDER_SINGLE_USE, 1234)],

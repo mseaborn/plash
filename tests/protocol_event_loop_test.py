@@ -23,8 +23,8 @@ import unittest
 
 import gobject
 
-import protocol_cap
 import protocol_event_loop
+import protocol_stream
 import testrunner
 
 
@@ -78,7 +78,7 @@ class GlibTests(unittest.TestCase):
             gobject.main_context_default().iteration(may_block)
             return False
 
-        pipe_read, pipe_write = protocol_cap.make_pipe()
+        pipe_read, pipe_write = protocol_stream.make_pipe()
         gobject.io_add_watch(pipe_read, select.POLLIN, handler)
         os.write(pipe_write.fileno(), "hello")
         may_block = False
@@ -107,7 +107,7 @@ class EventLoopTests(EventLoopTestCase):
     def test_reading(self):
         loop = self.make_event_loop()
         self.assertTrue(loop.will_block())
-        pipe_read, pipe_write = protocol_cap.make_pipe()
+        pipe_read, pipe_write = protocol_stream.make_pipe()
 
         got = []
         def callback(flags):
@@ -124,7 +124,7 @@ class EventLoopTests(EventLoopTestCase):
 
     def test_removing_watch_on_error(self):
         loop = self.make_event_loop()
-        pipe_read, pipe_write = protocol_cap.make_pipe()
+        pipe_read, pipe_write = protocol_stream.make_pipe()
 
         got_callbacks = []
         def callback(flags):
@@ -141,7 +141,7 @@ class EventLoopTests(EventLoopTestCase):
 
     def test_error_callback(self):
         loop = self.make_event_loop()
-        pipe_read, pipe_write = protocol_cap.make_pipe()
+        pipe_read, pipe_write = protocol_stream.make_pipe()
         del pipe_write
 
         got_callbacks = []
@@ -161,7 +161,7 @@ class EventLoopTests(EventLoopTestCase):
                 loop.once_safely()
 
         loop = self.make_event_loop()
-        pipe_read, pipe_write = protocol_cap.make_pipe()
+        pipe_read, pipe_write = protocol_stream.make_pipe()
         loop.make_watch(pipe_read, lambda: select.POLLIN, handler)
         os.write(pipe_write.fileno(), "hello")
         loop.once_safely()
@@ -172,7 +172,7 @@ class EventLoopTests(EventLoopTestCase):
             raise AssertionError()
 
         loop = self.make_event_loop()
-        pipe_read, pipe_write = protocol_cap.make_pipe()
+        pipe_read, pipe_write = protocol_stream.make_pipe()
         watch = loop.make_watch(pipe_read, lambda: select.POLLIN, callback)
         os.write(pipe_write.fileno(), "hello")
 
@@ -189,7 +189,7 @@ class EventLoopTests(EventLoopTestCase):
             raise AssertionError()
 
         loop = self.make_event_loop()
-        pipe_read, pipe_write = protocol_cap.make_pipe()
+        pipe_read, pipe_write = protocol_stream.make_pipe()
         del pipe_write
         watch = loop.make_error_watch(pipe_read, callback)
 

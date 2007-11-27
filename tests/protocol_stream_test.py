@@ -24,6 +24,7 @@ import socket
 import unittest
 
 from protocol_cap_test import poll_fd
+import protocol_cap_test
 import protocol_event_loop_test
 import protocol_simple
 import protocol_stream
@@ -100,9 +101,14 @@ class FDBufferedReaderTest(protocol_event_loop_test.EventLoopTestCase):
         got = []
         def callback(data):
             got.append(data)
+        def eof_callback():
+            got.append("EOF")
         loop = self.make_event_loop()
-        pipe_read, pipe_write = protocol_stream.make_pipe()
-        reader = protocol_stream.FDBufferedReader(loop, pipe_read, callback)
+        # Unix domain sockets report EOF from read() but pipes will
+        # return an error from poll() instead.
+        pipe_read, pipe_write = protocol_stream.socketpair()
+        reader = protocol_stream.FDBufferedReader(loop, pipe_read, callback,
+                                                  eof_callback)
         self.assertTrue(loop.will_block())
         os.write(pipe_write.fileno(), protocol_simple.make_message("hello"))
         os.write(pipe_write.fileno(), protocol_simple.make_message("world"))
@@ -111,4 +117,25 @@ class FDBufferedReaderTest(protocol_event_loop_test.EventLoopTestCase):
         self.assertEquals(got, ["hello", "world"])
         del pipe_write
         loop.once_safely()
+        self.assertEquals(got, ["hello", "world", "EOF"])
         self.assertTrue(not loop.is_listening())
+
+    def test_reading_with_econnreset(self):
+        # If A has written data when B has not read and B has closed
+        # its socket, when A tries to read it will get ECONNRESET.
+        got = []
+        def callback(data):
+            got.append(data)
+        def eof_callback():
+            got.append("EOF")
+        loop = self.make_event_loop()
+        sock1, sock2 = protocol_stream.socketpair()
+        reader = protocol_stream.FDBufferedReader(loop, sock1, callback,
+                                                  eof_callback)
+        self.assertTrue(loop.will_block())
+        # Ordering is significant here.  If we close sock2 first,
+        # writing to sock1 will simply raise EPIPE.
+        os.write(sock1.fileno(), protocol_simple.make_message("blah"))
+        del sock2
+        loop.once_safely()
+        self.assertEquals(got, ["EOF"])

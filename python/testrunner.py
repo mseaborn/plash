@@ -49,6 +49,7 @@ class TestCase(TestCaseBase):
                 instance.setUp()
                 try:
                     getattr(instance, method_name)()
+                    instance.check_for_pending_failures()
                 finally:
                     instance.tearDown()
             def test_wrapper(results):
@@ -61,10 +62,18 @@ class TestCase(TestCaseBase):
         return suite
 
     def setUp(self):
-        self._on_teardown = []
+        self.__on_teardown = []
+        self.__pending_failures = []
+
+    def mark_failure(self, message):
+        self.__pending_failures.append(message)
+
+    def check_for_pending_failures(self):
+        if len(self.__pending_failures) > 0:
+            raise AssertionError("Queued errors: %r" % self.__pending_failures)
 
     def on_teardown(self, callback):
-        self._on_teardown.append(callback)
+        self.__on_teardown.append(callback)
 
     def make_temp_dir(self):
         temp_dir = tempfile.mkdtemp(prefix="unittest-%s" %
@@ -73,7 +82,7 @@ class TestCase(TestCaseBase):
         return temp_dir
 
     def tearDown(self):
-        for callback in reversed(self._on_teardown):
+        for callback in reversed(self.__on_teardown):
             callback()
 
     def assertEquals(self, x, y):
@@ -114,6 +123,7 @@ class CombinationTestCase(TestCase):
                 try:
                     for method_name in method_names:
                         getattr(instance, method_name)()
+                    instance.check_for_pending_failures()
                 finally:
                     instance.tearDown()
             def test_wrapper(results):

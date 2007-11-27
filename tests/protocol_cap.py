@@ -367,20 +367,14 @@ def make_connection(event_loop, socket_fd, caps_export, import_count=0):
     def disconnect():
         writer.end_of_stream()
         reader.finish()
-        error_watch.remove_watch()
 
-    def on_fd_error(flags):
-        connection.handle_disconnection()
-
-    def on_eof():
+    def on_eof_or_fd_error():
         connection.handle_disconnection()
         writer.end_of_stream()
-        error_watch.remove_watch()
 
     export_table = ExportTablePreservingEQ(caps_export)
     writer = protocol_stream.FDBufferedWriter(event_loop, socket_fd)
     connection = ConnectionPrivate(event_loop, writer, disconnect, export_table)
     reader = protocol_stream.FDBufferedReader(
-        event_loop, socket_fd, connection.handle_message, on_eof)
-    error_watch = event_loop.make_error_watch(socket_fd, on_fd_error)
+        event_loop, socket_fd, connection.handle_message, on_eof_or_fd_error)
     return connection.get_initial_imported_objects(import_count)

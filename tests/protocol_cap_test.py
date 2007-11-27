@@ -369,6 +369,20 @@ class CapProtocolTests(SocketPairTestCase):
                 imported_object.cap_invoke(
                     ("message that will get ignored", (), ()))
 
+    def test_handling_dropped_connection_econnreset(self):
+        import_count = 1
+        loop = self.make_event_loop()
+        sock1, sock2 = self.socketpair()
+        imported = protocol_cap.make_connection(
+            loop, sock1, [],
+            import_count)
+        # Try to trigger an ECONNRESET condition by writing data which
+        # is not read before the other end closes the connection.
+        imported[0].cap_invoke(("data", (), ()))
+        loop.once_safely()
+        del sock2
+        loop.once_safely()
+
     def test_creating_useless_connection(self):
         loop = self.make_event_loop()
         sock1, sock2 = self.socketpair()

@@ -90,12 +90,17 @@ class EventLoopTestCase(testrunner.CombinationTestCase):
 
     def setup_poll_event_loop(self):
         self.loop = protocol_event_loop.EventLoop(poll_fds=checked_poll_fds)
-        def reraise(*args):
+        def on_exception(exc_type, exc_value, exc_traceback):
+            self.mark_failure(exc_value)
             raise
-        self.loop.set_excepthook(reraise)
+        self.loop.set_excepthook(on_exception)
 
     def setup_glib_event_loop(self):
         self.loop = protocol_event_loop.GlibEventLoop()
+        def on_exception(exc_type, exc_value, exc_traceback):
+            self.mark_failure(exc_value)
+            raise
+        self.loop.set_excepthook(on_exception)
         self.on_teardown(lambda: self.loop.unregister())
 
     def make_event_loop(self):
@@ -183,6 +188,7 @@ class EventLoopTests(EventLoopTestCase):
         loop.once_safely()
         self.assertEquals(len(got_exceptions), 1)
         self.assertTrue(watch.destroyed)
+        self.assertFalse(loop.is_listening())
 
     def test_exception_in_error_callback(self):
         def callback(flags):

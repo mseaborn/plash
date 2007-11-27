@@ -129,21 +129,32 @@ class FDBufferedReader(object):
         self._buffer = protocol_simple.InputBuffer()
         self._buffer.connect(self._handle)
         # TODO: extend to do flow control
-        self._watch = event_loop.make_watch(fd, lambda: select.POLLIN,
-                                            self._read_data)
+        self._watch = event_loop.make_watch_with_error_handler(
+            fd, lambda: select.POLLIN, self._read_data, self._error_handler)
 
     def finish(self):
+        eof_callback = self._eof_callback
         self._fd = None
         self._callback = None
+        self._eof_callback = lambda: None
         self._watch.remove_watch()
+        eof_callback()
+
+    def _error_handler(self, flags):
+        self.finish()
 
     def _read_data(self, flags):
-        data = os.read(self._fd.fileno(), 1024)
-        if len(data) != 0:
-            self._buffer.add(data)
-        else:
+        # read() can return ECONNRESET if the other end closed its
+        # connection without reading all the data it had been sent.
+        try:
+            data = os.read(self._fd.fileno(), 1024)
+        except OSError:
             self.finish()
-            self._eof_callback()
+        else:
+            if len(data) != 0:
+                self._buffer.add(data)
+            else:
+                self.finish()
 
     def _handle(self):
         while True:

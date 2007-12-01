@@ -120,14 +120,12 @@ class FDBufferedWriter(object):
         return len(self._buf)
 
 
-class FDBufferedReader(object):
+class FDReader(object):
 
-    def __init__(self, event_loop, fd, callback, eof_callback=lambda: None):
+    def __init__(self, event_loop, fd, callback, eof_callback):
         self._fd = fd
         self._callback = callback
         self._eof_callback = eof_callback
-        self._buffer = protocol_simple.InputBuffer()
-        self._buffer.connect(self._handle)
         # TODO: extend to do flow control
         self._watch = event_loop.make_watch_with_error_handler(
             fd, lambda: select.POLLIN, self._read_data, self._error_handler)
@@ -152,9 +150,28 @@ class FDBufferedReader(object):
             self.finish()
         else:
             if len(data) != 0:
-                self._buffer.add(data)
+                self._callback(data)
             else:
                 self.finish()
+
+
+class FDForwader(object):
+
+    def __init__(self, event_loop, input_fd, output_fd):
+        writer = FDBufferedWriter(event_loop, output_fd)
+        FDReader(event_loop, input_fd, writer.write, writer.end_of_stream)
+
+
+class FDBufferedReader(object):
+
+    def __init__(self, event_loop, fd, callback, eof_callback=lambda: None):
+        self._callback = callback
+        self._buffer = protocol_simple.InputBuffer()
+        self._buffer.connect(self._handle)
+        self._reader = FDReader(event_loop, fd, self._buffer.add, eof_callback)
+
+    def finish(self):
+        self._reader.finish()
 
     def _handle(self):
         while True:

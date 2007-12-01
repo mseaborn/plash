@@ -95,6 +95,51 @@ class FDBufferedWriterTest(protocol_event_loop_test.EventLoopTestCase):
         self.assertEquals(os.read(pipe_read.fileno(), 100), "")
 
 
+class FDReaderTest(protocol_event_loop_test.EventLoopTestCase):
+
+    def test_end_of_stream(self):
+        got = []
+        def callback(data):
+            got.append(data)
+        def eof_callback():
+            got.append("EOF")
+        loop = self.make_event_loop()
+        # Unix domain sockets report EOF from read() but pipes will
+        # return an error from poll() instead.
+        pipe_read, pipe_write = protocol_stream.socketpair()
+        reader = protocol_stream.FDReader(loop, pipe_read, callback,
+                                          eof_callback)
+        self.assertTrue(loop.will_block())
+        os.write(pipe_write.fileno(), "hello world")
+        self.assertTrue(not loop.will_block())
+        loop.once_safely()
+        self.assertEquals(got, ["hello world"])
+        del pipe_write
+        loop.once_safely()
+        self.assertEquals(got, ["hello world", "EOF"])
+        self.assertTrue(not loop.is_listening())
+
+    def test_reading_with_econnreset(self):
+        # If A has written data when B has not read and B has closed
+        # its socket, when A tries to read it will get ECONNRESET.
+        got = []
+        def callback(data):
+            got.append(data)
+        def eof_callback():
+            got.append("EOF")
+        loop = self.make_event_loop()
+        sock1, sock2 = protocol_stream.socketpair()
+        reader = protocol_stream.FDBufferedReader(loop, sock1, callback,
+                                                  eof_callback)
+        self.assertTrue(loop.will_block())
+        # Ordering is significant here.  If we close sock2 first,
+        # writing to sock1 will simply raise EPIPE.
+        os.write(sock1.fileno(), "this data gets dropped but causes ECONNRESET")
+        del sock2
+        loop.once_safely()
+        self.assertEquals(got, ["EOF"])
+
+
 class FDBufferedReaderTest(protocol_event_loop_test.EventLoopTestCase):
 
     def test_end_of_stream(self):
@@ -120,22 +165,36 @@ class FDBufferedReaderTest(protocol_event_loop_test.EventLoopTestCase):
         self.assertEquals(got, ["hello", "world", "EOF"])
         self.assertTrue(not loop.is_listening())
 
-    def test_reading_with_econnreset(self):
-        # If A has written data when B has not read and B has closed
-        # its socket, when A tries to read it will get ECONNRESET.
-        got = []
-        def callback(data):
-            got.append(data)
-        def eof_callback():
-            got.append("EOF")
+
+class FDForwardTest(protocol_event_loop_test.EventLoopTestCase):
+
+    def test_forwarding(self):
         loop = self.make_event_loop()
-        sock1, sock2 = protocol_stream.socketpair()
-        reader = protocol_stream.FDBufferedReader(loop, sock1, callback,
-                                                  eof_callback)
+        pipe_read2, pipe_write = protocol_stream.make_pipe()
+        pipe_read, pipe_write2 = protocol_stream.make_pipe()
+        protocol_stream.FDForwader(loop, pipe_read2, pipe_write2)
         self.assertTrue(loop.will_block())
-        # Ordering is significant here.  If we close sock2 first,
-        # writing to sock1 will simply raise EPIPE.
-        os.write(sock1.fileno(), protocol_simple.make_message("blah"))
-        del sock2
-        loop.once_safely()
-        self.assertEquals(got, ["EOF"])
+        self.assertEquals(poll_fd(pipe_read), 0)
+        os.write(pipe_write.fileno(), "hello world")
+        loop.once_safely() # read iteration
+        loop.once_safely() # write iteration
+        self.assertEquals(poll_fd(pipe_read), select.POLLIN)
+        self.assertEquals(os.read(pipe_read.fileno(), 1000), "hello world")
+
+    def test_closing_on_read_end(self):
+        loop = self.make_event_loop()
+        pipe_read2, pipe_write = protocol_stream.make_pipe()
+        pipe_read, pipe_write2 = protocol_stream.make_pipe()
+        protocol_stream.FDForwader(loop, pipe_read2, pipe_write2)
+        del pipe_read2
+        del pipe_write2
+        self.assertTrue(loop.will_block())
+        self.assertEquals(poll_fd(pipe_read), 0)
+        os.write(pipe_write.fileno(), "hello world")
+        del pipe_write
+        loop.once_safely() # read iteration
+        loop.once_safely() # write iteration
+        self.assertEquals(poll_fd(pipe_read), select.POLLHUP | select.POLLIN)
+        self.assertEquals(os.read(pipe_read.fileno(), 1000), "hello world")
+        self.assertEquals(poll_fd(pipe_read), select.POLLHUP)
+        self.assertEquals(os.read(pipe_read.fileno(), 1000), "")

@@ -21,7 +21,7 @@ import os
 import select
 import socket
 
-import protocol_simple
+import plash.comms.simple
 
 
 class WrappedFD(object):
@@ -166,7 +166,7 @@ class FDBufferedReader(object):
 
     def __init__(self, event_loop, fd, callback, eof_callback=lambda: None):
         self._callback = callback
-        self._buffer = protocol_simple.InputBuffer()
+        self._buffer = plash.comms.simple.InputBuffer()
         self._buffer.connect(self._handle)
         self._reader = FDReader(event_loop, fd, self._buffer.add, eof_callback)
 
@@ -176,8 +176,8 @@ class FDBufferedReader(object):
     def _handle(self):
         while True:
             try:
-                message = protocol_simple.read_message(self._buffer)
-            except protocol_simple.IncompleteMessageException:
+                message = plash.comms.simple.read_message(self._buffer)
+            except plash.comms.simple.IncompleteMessageException:
                 break
             else:
                 self._callback(message)

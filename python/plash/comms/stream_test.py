@@ -23,17 +23,16 @@ import select
 import socket
 import unittest
 
-from protocol_cap_test import poll_fd
-import protocol_cap_test
-import protocol_event_loop_test
-import protocol_simple
-import protocol_stream
+from plash.comms.cap_test import poll_fd
+import plash.comms.event_loop_test
+import plash.comms.simple
+import plash.comms.stream as stream
 
 
 class FDWrapperTest(unittest.TestCase):
 
     def test_fds_are_freed(self):
-        pipe_read, pipe_write = protocol_stream.make_pipe()
+        pipe_read, pipe_write = stream.make_pipe()
         fd = pipe_read.fileno()
         fcntl.fcntl(fd, fcntl.F_GETFL)
         del pipe_read
@@ -41,7 +40,7 @@ class FDWrapperTest(unittest.TestCase):
                           lambda: fcntl.fcntl(fd, fcntl.F_GETFL))
 
 
-class SocketListenerTest(protocol_event_loop_test.EventLoopTestCase):
+class SocketListenerTest(plash.comms.event_loop_test.EventLoopTestCase):
 
     def test_listener(self):
         loop = self.make_event_loop()
@@ -49,8 +48,7 @@ class SocketListenerTest(protocol_event_loop_test.EventLoopTestCase):
         got = []
         def callback(sock):
             got.append(sock)
-        protocol_stream.SocketListener(loop, socket.AF_UNIX, socket_path,
-                                       callback)
+        stream.SocketListener(loop, socket.AF_UNIX, socket_path, callback)
         self.assertTrue(loop.will_block())
         sock = socket.socket(socket.AF_UNIX)
         sock.connect(socket_path)
@@ -58,12 +56,12 @@ class SocketListenerTest(protocol_event_loop_test.EventLoopTestCase):
         self.assertEquals(len(got), 1)
 
 
-class FDBufferedWriterTest(protocol_event_loop_test.EventLoopTestCase):
+class FDBufferedWriterTest(plash.comms.event_loop_test.EventLoopTestCase):
 
     def test_writing(self):
         loop = self.make_event_loop()
-        pipe_read, pipe_write = protocol_stream.make_pipe()
-        writer = protocol_stream.FDBufferedWriter(loop, pipe_write)
+        pipe_read, pipe_write = stream.make_pipe()
+        writer = stream.FDBufferedWriter(loop, pipe_write)
         self.assertEquals(writer.buffered_size(), 0)
         writer.write("hello")
         self.assertEquals(writer.buffered_size(), 5)
@@ -73,8 +71,8 @@ class FDBufferedWriterTest(protocol_event_loop_test.EventLoopTestCase):
 
     def test_writing_to_closed_pipe(self):
         loop = self.make_event_loop()
-        pipe_read, pipe_write = protocol_stream.make_pipe()
-        writer = protocol_stream.FDBufferedWriter(loop, pipe_write)
+        pipe_read, pipe_write = stream.make_pipe()
+        writer = stream.FDBufferedWriter(loop, pipe_write)
         writer.write("hello")
         del pipe_read
         self.assertEquals(writer._connection_broken, False)
@@ -83,8 +81,8 @@ class FDBufferedWriterTest(protocol_event_loop_test.EventLoopTestCase):
 
     def test_writing_end_of_stream_with_data_buffered(self):
         loop = self.make_event_loop()
-        pipe_read, pipe_write = protocol_stream.make_pipe()
-        writer = protocol_stream.FDBufferedWriter(loop, pipe_write)
+        pipe_read, pipe_write = stream.make_pipe()
+        writer = stream.FDBufferedWriter(loop, pipe_write)
         del pipe_write
         writer.write("hello")
         writer.end_of_stream()
@@ -95,7 +93,7 @@ class FDBufferedWriterTest(protocol_event_loop_test.EventLoopTestCase):
         self.assertEquals(os.read(pipe_read.fileno(), 100), "")
 
 
-class FDReaderTest(protocol_event_loop_test.EventLoopTestCase):
+class FDReaderTest(plash.comms.event_loop_test.EventLoopTestCase):
 
     def test_end_of_stream(self):
         got = []
@@ -106,9 +104,8 @@ class FDReaderTest(protocol_event_loop_test.EventLoopTestCase):
         loop = self.make_event_loop()
         # Unix domain sockets report EOF from read() but pipes will
         # return an error from poll() instead.
-        pipe_read, pipe_write = protocol_stream.socketpair()
-        reader = protocol_stream.FDReader(loop, pipe_read, callback,
-                                          eof_callback)
+        pipe_read, pipe_write = stream.socketpair()
+        reader = stream.FDReader(loop, pipe_read, callback, eof_callback)
         self.assertTrue(loop.will_block())
         os.write(pipe_write.fileno(), "hello world")
         self.assertTrue(not loop.will_block())
@@ -128,9 +125,8 @@ class FDReaderTest(protocol_event_loop_test.EventLoopTestCase):
         def eof_callback():
             got.append("EOF")
         loop = self.make_event_loop()
-        sock1, sock2 = protocol_stream.socketpair()
-        reader = protocol_stream.FDBufferedReader(loop, sock1, callback,
-                                                  eof_callback)
+        sock1, sock2 = stream.socketpair()
+        reader = stream.FDBufferedReader(loop, sock1, callback, eof_callback)
         self.assertTrue(loop.will_block())
         # Ordering is significant here.  If we close sock2 first,
         # writing to sock1 will simply raise EPIPE.
@@ -140,7 +136,7 @@ class FDReaderTest(protocol_event_loop_test.EventLoopTestCase):
         self.assertEquals(got, ["EOF"])
 
 
-class FDBufferedReaderTest(protocol_event_loop_test.EventLoopTestCase):
+class FDBufferedReaderTest(plash.comms.event_loop_test.EventLoopTestCase):
 
     def test_end_of_stream(self):
         got = []
@@ -151,12 +147,12 @@ class FDBufferedReaderTest(protocol_event_loop_test.EventLoopTestCase):
         loop = self.make_event_loop()
         # Unix domain sockets report EOF from read() but pipes will
         # return an error from poll() instead.
-        pipe_read, pipe_write = protocol_stream.socketpair()
-        reader = protocol_stream.FDBufferedReader(loop, pipe_read, callback,
-                                                  eof_callback)
+        pipe_read, pipe_write = stream.socketpair()
+        reader = stream.FDBufferedReader(loop, pipe_read, callback,
+                                         eof_callback)
         self.assertTrue(loop.will_block())
-        os.write(pipe_write.fileno(), protocol_simple.make_message("hello"))
-        os.write(pipe_write.fileno(), protocol_simple.make_message("world"))
+        os.write(pipe_write.fileno(), plash.comms.simple.make_message("hello"))
+        os.write(pipe_write.fileno(), plash.comms.simple.make_message("world"))
         self.assertTrue(not loop.will_block())
         loop.once_safely()
         self.assertEquals(got, ["hello", "world"])
@@ -166,13 +162,13 @@ class FDBufferedReaderTest(protocol_event_loop_test.EventLoopTestCase):
         self.assertTrue(not loop.is_listening())
 
 
-class FDForwardTest(protocol_event_loop_test.EventLoopTestCase):
+class FDForwardTest(plash.comms.event_loop_test.EventLoopTestCase):
 
     def test_forwarding(self):
         loop = self.make_event_loop()
-        pipe_read2, pipe_write = protocol_stream.make_pipe()
-        pipe_read, pipe_write2 = protocol_stream.make_pipe()
-        protocol_stream.FDForwader(loop, pipe_read2, pipe_write2)
+        pipe_read2, pipe_write = stream.make_pipe()
+        pipe_read, pipe_write2 = stream.make_pipe()
+        stream.FDForwader(loop, pipe_read2, pipe_write2)
         self.assertTrue(loop.will_block())
         self.assertEquals(poll_fd(pipe_read), 0)
         os.write(pipe_write.fileno(), "hello world")
@@ -183,9 +179,9 @@ class FDForwardTest(protocol_event_loop_test.EventLoopTestCase):
 
     def test_closing_on_read_end(self):
         loop = self.make_event_loop()
-        pipe_read2, pipe_write = protocol_stream.make_pipe()
-        pipe_read, pipe_write2 = protocol_stream.make_pipe()
-        protocol_stream.FDForwader(loop, pipe_read2, pipe_write2)
+        pipe_read2, pipe_write = stream.make_pipe()
+        pipe_read, pipe_write2 = stream.make_pipe()
+        stream.FDForwader(loop, pipe_read2, pipe_write2)
         del pipe_read2
         del pipe_write2
         self.assertTrue(loop.will_block())

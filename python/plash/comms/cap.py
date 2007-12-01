@@ -20,8 +20,8 @@
 import struct
 import weakref
 
-import protocol_simple
-import protocol_stream
+import plash.comms.simple
+import plash.comms.stream
 
 
 NAMESPACE_RECEIVER = 0
@@ -151,7 +151,7 @@ class ConnectionPrivate(object):
         self._exports = exports
 
     def _send(self, data):
-        self._writer.write(protocol_simple.make_message(data))
+        self._writer.write(plash.comms.simple.make_message(data))
 
     # Encode outgoing objects to IDs
     def _object_to_wire_id(self, obj):
@@ -373,8 +373,8 @@ def make_connection(event_loop, socket_fd, caps_export, import_count=0):
         writer.end_of_stream()
 
     export_table = ExportTablePreservingEQ(caps_export)
-    writer = protocol_stream.FDBufferedWriter(event_loop, socket_fd)
+    writer = plash.comms.stream.FDBufferedWriter(event_loop, socket_fd)
     connection = ConnectionPrivate(event_loop, writer, disconnect, export_table)
-    reader = protocol_stream.FDBufferedReader(
+    reader = plash.comms.stream.FDBufferedReader(
         event_loop, socket_fd, connection.handle_message, on_eof_or_fd_error)
     return connection.get_initial_imported_objects(import_count)

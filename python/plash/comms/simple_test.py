@@ -19,32 +19,32 @@
 
 import unittest
 
-import protocol_simple
+import plash.comms.simple
 
 
 class SimpleProtocolEncodingTest(unittest.TestCase):
 
     def test_padding(self):
         for i in range(20):
-            self.assertEquals((i + protocol_simple.pad_size(i)) % 4, 0)
-            self.assertEquals(i + protocol_simple.pad_size(i),
-                              protocol_simple.round_up_to_word(i))
+            self.assertEquals((i + plash.comms.simple.pad_size(i)) % 4, 0)
+            self.assertEquals(i + plash.comms.simple.pad_size(i),
+                              plash.comms.simple.round_up_to_word(i))
 
     def test_message_encoding(self):
-        buf = protocol_simple.InputBuffer()
+        buf = plash.comms.simple.InputBuffer()
         got = []
 
         def callback():
             try:
-                got.append(protocol_simple.read_message(buf))
-            except protocol_simple.IncompleteMessageException:
+                got.append(plash.comms.simple.read_message(buf))
+            except plash.comms.simple.IncompleteMessageException:
                 pass
 
         buf.connect(callback)
-        buf.add(protocol_simple.make_message("hello"))
+        buf.add(plash.comms.simple.make_message("hello"))
         self.assertEquals(got, ["hello"])
         # Test handling incomplete messages
-        for char in protocol_simple.make_message("character at a time"):
+        for char in plash.comms.simple.make_message("character at a time"):
             buf.add(char)
         self.assertEquals(got, ["hello", "character at a time"])
 

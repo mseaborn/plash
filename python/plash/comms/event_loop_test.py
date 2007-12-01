@@ -23,8 +23,8 @@ import unittest
 
 import gobject
 
-import protocol_event_loop
-import protocol_stream
+import plash.comms.event_loop
+import plash.comms.stream
 import testrunner
 
 
@@ -45,7 +45,7 @@ def glib_poll_fds(fd_flags):
         # could result in busy waits if you ignore error conditions on
         # FDs.
         watch_id = gobject.io_add_watch(
-            fd, flags_requested | protocol_event_loop.ERROR_FLAGS, handler)
+            fd, flags_requested | plash.comms.event_loop.ERROR_FLAGS, handler)
         watch_ids.append(watch_id)
     may_block = False
     gobject.main_context_default().iteration(may_block)
@@ -57,7 +57,7 @@ def glib_poll_fds(fd_flags):
 
 def checked_poll_fds(fd_flags, timeout=None):
     # Check that glib gives the same results as poll().
-    ready_fds1 = protocol_event_loop.poll_fds(fd_flags, timeout)
+    ready_fds1 = plash.comms.event_loop.poll_fds(fd_flags, timeout)
     if timeout == 0:
         ready_fds2 = glib_poll_fds(fd_flags)
         assert ready_fds1 == ready_fds2, (ready_fds1, ready_fds2)
@@ -78,7 +78,7 @@ class GlibTests(unittest.TestCase):
             gobject.main_context_default().iteration(may_block)
             return False
 
-        pipe_read, pipe_write = protocol_stream.make_pipe()
+        pipe_read, pipe_write = plash.comms.stream.make_pipe()
         gobject.io_add_watch(pipe_read, select.POLLIN, handler)
         os.write(pipe_write.fileno(), "hello")
         may_block = False
@@ -89,14 +89,14 @@ class GlibTests(unittest.TestCase):
 class EventLoopTestCase(testrunner.CombinationTestCase):
 
     def setup_poll_event_loop(self):
-        self.loop = protocol_event_loop.EventLoop(poll_fds=checked_poll_fds)
+        self.loop = plash.comms.event_loop.EventLoop(poll_fds=checked_poll_fds)
         def on_exception(exc_type, exc_value, exc_traceback):
             self.mark_failure(exc_value)
             raise
         self.loop.set_excepthook(on_exception)
 
     def setup_glib_event_loop(self):
-        self.loop = protocol_event_loop.GlibEventLoop()
+        self.loop = plash.comms.event_loop.GlibEventLoop()
         def on_exception(exc_type, exc_value, exc_traceback):
             self.mark_failure(exc_value)
             raise
@@ -112,7 +112,7 @@ class EventLoopTests(EventLoopTestCase):
     def test_reading(self):
         loop = self.make_event_loop()
         self.assertTrue(loop.will_block())
-        pipe_read, pipe_write = protocol_stream.make_pipe()
+        pipe_read, pipe_write = plash.comms.stream.make_pipe()
 
         got = []
         def callback(flags):
@@ -129,7 +129,7 @@ class EventLoopTests(EventLoopTestCase):
 
     def test_removing_watch_on_error(self):
         loop = self.make_event_loop()
-        pipe_read, pipe_write = protocol_stream.make_pipe()
+        pipe_read, pipe_write = plash.comms.stream.make_pipe()
 
         got_callbacks = []
         def callback(flags):
@@ -146,7 +146,7 @@ class EventLoopTests(EventLoopTestCase):
 
     def test_error_callback(self):
         loop = self.make_event_loop()
-        pipe_read, pipe_write = protocol_stream.make_pipe()
+        pipe_read, pipe_write = plash.comms.stream.make_pipe()
         del pipe_write
 
         got_callbacks = []
@@ -166,7 +166,7 @@ class EventLoopTests(EventLoopTestCase):
                 loop.once_safely()
 
         loop = self.make_event_loop()
-        pipe_read, pipe_write = protocol_stream.make_pipe()
+        pipe_read, pipe_write = plash.comms.stream.make_pipe()
         loop.make_watch(pipe_read, lambda: select.POLLIN, handler)
         os.write(pipe_write.fileno(), "hello")
         loop.once_safely()
@@ -177,7 +177,7 @@ class EventLoopTests(EventLoopTestCase):
             raise AssertionError()
 
         loop = self.make_event_loop()
-        pipe_read, pipe_write = protocol_stream.make_pipe()
+        pipe_read, pipe_write = plash.comms.stream.make_pipe()
         watch = loop.make_watch(pipe_read, lambda: select.POLLIN, callback)
         os.write(pipe_write.fileno(), "hello")
 
@@ -195,7 +195,7 @@ class EventLoopTests(EventLoopTestCase):
             raise AssertionError()
 
         loop = self.make_event_loop()
-        pipe_read, pipe_write = protocol_stream.make_pipe()
+        pipe_read, pipe_write = plash.comms.stream.make_pipe()
         del pipe_write
         watch = loop.make_error_watch(pipe_read, callback)
 

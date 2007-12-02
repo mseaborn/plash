@@ -56,6 +56,18 @@ class SocketListenerTest(plash.comms.event_loop_test.EventLoopTestCase):
         self.assertEquals(len(got), 1)
 
 
+def find_pipe_buffer_size():
+    # The size of a pipe's buffer is 64k on Linux, but let's not
+    # assume that.
+    pipe_read, pipe_write = stream.make_pipe()
+    fcntl.fcntl(pipe_write.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
+    data = "x" * 4096
+    written = 0
+    while poll_fd(pipe_write) & select.POLLOUT != 0:
+        written += os.write(pipe_write.fileno(), data)
+    return written
+
+
 class FDBufferedWriterTest(plash.comms.event_loop_test.EventLoopTestCase):
 
     def test_writing(self):
@@ -92,6 +104,44 @@ class FDBufferedWriterTest(plash.comms.event_loop_test.EventLoopTestCase):
         self.assertEquals(poll_fd(pipe_read), select.POLLHUP)
         self.assertEquals(os.read(pipe_read.fileno(), 100), "")
 
+    def test_writing_to_full_buffer(self):
+        # Checks that the writer does not write when the FD's buffer
+        # is full, and checks that it does not block.
+        loop = self.make_event_loop()
+        pipe_read, pipe_write = stream.make_pipe()
+        writer = stream.FDBufferedWriter(loop, pipe_write)
+        bufferfuls = 5
+        size = find_pipe_buffer_size() * bufferfuls
+        writer.write("x" * size)
+        loop.once_safely()
+        # Nothing is reading pipe_read, so writer should still have
+        # unwritten data.
+        assert writer.buffered_size() > 0
+        assert writer.buffered_size() < size
+        # But reading should allow the backlog to clear.
+        for i in range(bufferfuls):
+            self.assertEquals(poll_fd(pipe_read), select.POLLIN)
+            os.read(pipe_read.fileno(), size)
+            loop.run_awhile()
+        self.assertEquals(writer.buffered_size(), 0)
+
+    def test_fd_flags_not_changed(self):
+        loop = self.make_event_loop()
+        pipe_read, pipe_write = stream.make_pipe()
+        def check_flags():
+            flags = fcntl.fcntl(pipe_write.fileno(), fcntl.F_GETFL)
+            self.assertEquals(flags, os.O_WRONLY)
+        check_flags()
+        writer = stream.FDBufferedWriter(loop, pipe_write)
+        check_flags()
+        writer.write("hello")
+        loop.once_safely()
+        # If FDBufferedWriter sets O_NONBLOCK, it should do so only
+        # temporarily, because it could confuse other processes that
+        # share the FD.  Changing the flags temporarily is still not
+        # ideal though.
+        check_flags()
+
 
 class FDReaderTest(plash.comms.event_loop_test.EventLoopTestCase):
 
@@ -126,7 +176,7 @@ class FDReaderTest(plash.comms.event_loop_test.EventLoopTestCase):
             got.append("EOF")
         loop = self.make_event_loop()
         sock1, sock2 = stream.socketpair()
-        reader = stream.FDBufferedReader(loop, sock1, callback, eof_callback)
+        reader = stream.FDReader(loop, sock1, callback, eof_callback)
         self.assertTrue(loop.will_block())
         # Ordering is significant here.  If we close sock2 first,
         # writing to sock1 will simply raise EPIPE.
@@ -134,6 +184,45 @@ class FDReaderTest(plash.comms.event_loop_test.EventLoopTestCase):
         del sock2
         loop.once_safely()
         self.assertEquals(got, ["EOF"])
+
+    def test_read_buffer_size(self):
+        got = []
+        def callback(data):
+            got.append(data)
+        loop = self.make_event_loop()
+        sock1, sock2 = stream.socketpair()
+        reader = stream.FDReader(loop, sock1, callback, lambda: None,
+                                 get_buffer_size=lambda: 2)
+        os.write(sock2.fileno(), "hello")
+        loop.once_safely()
+        self.assertEquals(got, ["he"])
+        loop.once_safely()
+        self.assertEquals(got, ["he", "ll"])
+        loop.once_safely()
+        self.assertEquals(got, ["he", "ll", "o"])
+
+    def test_reader_flow_control(self):
+        # Checks whether the buffer size of the reader can be changed.
+        got = []
+        def callback(data):
+            got.append(data)
+        loop = self.make_event_loop()
+        sock1, sock2 = stream.socketpair()
+        read_size = 2
+        reader = stream.FDReader(loop, sock1, callback, lambda: None,
+                                 get_buffer_size=lambda: read_size)
+        os.write(sock2.fileno(), "hello world")
+        loop.once_safely()
+        self.assertEquals(got, ["he"])
+        # Setting the read buffer size to zero disables reading.
+        read_size = 0
+        reader.update_buffer_size()
+        self.assertTrue(loop.will_block())
+        # But we can set the read buffer back to a non-zero size.
+        read_size = 6
+        reader.update_buffer_size()
+        loop.once_safely()
+        self.assertEquals(got, ["he", "llo wo"])
 
 
 class FDBufferedReaderTest(plash.comms.event_loop_test.EventLoopTestCase):
@@ -164,11 +253,15 @@ class FDBufferedReaderTest(plash.comms.event_loop_test.EventLoopTestCase):
 
 class FDForwardTest(plash.comms.event_loop_test.EventLoopTestCase):
 
-    def test_forwarding(self):
-        loop = self.make_event_loop()
+    def _make_forwarded_pipe(self, loop):
         pipe_read2, pipe_write = stream.make_pipe()
         pipe_read, pipe_write2 = stream.make_pipe()
-        stream.FDForwader(loop, pipe_read2, pipe_write2)
+        stream.FDForwarder(loop, pipe_read2, pipe_write2)
+        return pipe_read, pipe_write
+
+    def test_forwarding(self):
+        loop = self.make_event_loop()
+        pipe_read, pipe_write = self._make_forwarded_pipe(loop)
         self.assertTrue(loop.will_block())
         self.assertEquals(poll_fd(pipe_read), 0)
         os.write(pipe_write.fileno(), "hello world")
@@ -179,11 +272,7 @@ class FDForwardTest(plash.comms.event_loop_test.EventLoopTestCase):
 
     def test_closing_on_read_end(self):
         loop = self.make_event_loop()
-        pipe_read2, pipe_write = stream.make_pipe()
-        pipe_read, pipe_write2 = stream.make_pipe()
-        stream.FDForwader(loop, pipe_read2, pipe_write2)
-        del pipe_read2
-        del pipe_write2
+        pipe_read, pipe_write = self._make_forwarded_pipe(loop)
         self.assertTrue(loop.will_block())
         self.assertEquals(poll_fd(pipe_read), 0)
         os.write(pipe_write.fileno(), "hello world")
@@ -194,3 +283,26 @@ class FDForwardTest(plash.comms.event_loop_test.EventLoopTestCase):
         self.assertEquals(os.read(pipe_read.fileno(), 1000), "hello world")
         self.assertEquals(poll_fd(pipe_read), select.POLLHUP)
         self.assertEquals(os.read(pipe_read.fileno(), 1000), "")
+
+    def test_flow_control(self):
+        # Usually with pipes, a writer cannot keep writing while the
+        # reader is not reading.  Check that forwarding preserves
+        # that.
+        big_limit = find_pipe_buffer_size() * 10
+        loop = self.make_event_loop()
+        pipe_read, pipe_write = self._make_forwarded_pipe(loop)
+        fcntl.fcntl(pipe_write.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
+        data = "x" * 4096
+        written = 0
+        while poll_fd(pipe_write) & select.POLLOUT != 0:
+            assert written < big_limit
+            written += os.write(pipe_write.fileno(), data)
+            loop.run_awhile()
+        assert written > 0
+        # Reading should allow more data to be written.  We have to
+        # read at least PIPE_BUF bytes, otherwise poll() will not
+        # report the pipe as writable to the FDForwarder.
+        os.read(pipe_read.fileno(), 4096)
+        self.assertEquals(poll_fd(pipe_write), 0)
+        loop.run_awhile()
+        self.assertEquals(poll_fd(pipe_write), select.POLLOUT)

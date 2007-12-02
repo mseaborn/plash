@@ -17,6 +17,7 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 # USA.
 
+import fcntl
 import os
 import select
 import socket
@@ -63,10 +64,32 @@ class SocketListener(object):
         self._callback(sock2)
 
 
+def write_nonblocking(fd, data):
+    # Set non-blocking mode temporarily.  We restore the old flags in
+    # order not to interfere with other processes that might use the
+    # FD later (e.g. when the FD is a tty).  Note that if the FD is
+    # shared with another process which uses it concurrently, it could
+    # unset the flag, leading to a denial of service when this process
+    # blocks.  It could also lead to O_NONBLOCK being left set.
+    # TODO:
+    #  * Use send() with MSG_DONTWAIT on FDs that support it (currently,
+    #    on Linux, only sockets).
+    #  * Always write less than PIPE_BUF when writing to a pipe.
+    #    On Linux that will not block if pipe() reported POLLOUT, even
+    #    when O_NONBLOCK is not set.
+    original_flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+    fcntl.fcntl(fd, fcntl.F_SETFL, original_flags | os.O_NONBLOCK)
+    try:
+        return os.write(fd, data)
+    finally:
+        fcntl.fcntl(fd, fcntl.F_SETFL, original_flags)
+
+
 class FDBufferedWriter(object):
 
-    def __init__(self, event_loop, fd):
+    def __init__(self, event_loop, fd, on_buffered_size_changed=lambda: None):
         self._fd = fd
+        self._on_buffered_size_changed = on_buffered_size_changed
         self._buf = ""
         self._eof_requested = False
         self._connection_broken = False
@@ -84,13 +107,14 @@ class FDBufferedWriter(object):
         # SIGPIPE so that this can return EPIPE instead of killing the
         # process when writing to a pipe with no reader.
         try:
-            written = os.write(self._fd.fileno(), self._buf)
+            written = write_nonblocking(self._fd.fileno(), self._buf)
         except OSError:
             self._error_handler(0)
         else:
             self._buf = self._buf[written:]
             self._watch.update_flags()
             self._check_for_disconnect()
+            self._on_buffered_size_changed()
 
     def _error_handler(self, flags):
         # An error occurred, so no more data can be written.
@@ -98,6 +122,7 @@ class FDBufferedWriter(object):
         self._buf = ""
         self._connection_broken = True
         self._watch.remove_watch()
+        self._on_buffered_size_changed()
 
     def _check_for_disconnect(self):
         if self._eof_requested and len(self._buf) == 0:
@@ -109,6 +134,7 @@ class FDBufferedWriter(object):
         if not self._eof_requested and not self._connection_broken:
             self._buf += data
             self._watch.update_flags()
+            self._on_buffered_size_changed()
 
     def end_of_stream(self):
         # Declares that no more data will be written.  Any buffered
@@ -122,13 +148,24 @@ class FDBufferedWriter(object):
 
 class FDReader(object):
 
-    def __init__(self, event_loop, fd, callback, eof_callback):
+    def __init__(self, event_loop, fd, callback, eof_callback,
+                 get_buffer_size=lambda: 1024):
         self._fd = fd
         self._callback = callback
         self._eof_callback = eof_callback
+        self._get_buffer_size = get_buffer_size
         # TODO: extend to do flow control
         self._watch = event_loop.make_watch_with_error_handler(
-            fd, lambda: select.POLLIN, self._read_data, self._error_handler)
+            fd, self._get_poll_flags, self._read_data, self._error_handler)
+
+    def _get_poll_flags(self):
+        if self._get_buffer_size() > 0:
+            return select.POLLIN
+        else:
+            return 0
+
+    def update_buffer_size(self):
+        self._watch.update_flags()
 
     def finish(self):
         eof_callback = self._eof_callback
@@ -145,7 +182,7 @@ class FDReader(object):
         # read() can return ECONNRESET if the other end closed its
         # connection without reading all the data it had been sent.
         try:
-            data = os.read(self._fd.fileno(), 1024)
+            data = os.read(self._fd.fileno(), self._get_buffer_size())
         except OSError:
             self.finish()
         else:
@@ -155,11 +192,23 @@ class FDReader(object):
                 self.finish()
 
 
-class FDForwader(object):
+class FDForwarder(object):
 
     def __init__(self, event_loop, input_fd, output_fd):
-        writer = FDBufferedWriter(event_loop, output_fd)
-        FDReader(event_loop, input_fd, writer.write, writer.end_of_stream)
+        self._writer = FDBufferedWriter(
+            event_loop, output_fd,
+            on_buffered_size_changed=self._on_buffered_size_changed)
+        self._reader = FDReader(event_loop, input_fd,
+                                self._writer.write,
+                                self._writer.end_of_stream,
+                                get_buffer_size=self._get_read_size)
+
+    def _on_buffered_size_changed(self):
+        self._reader.update_buffer_size()
+
+    def _get_read_size(self):
+        buf_size = 1000
+        return buf_size - self._writer.buffered_size()
 
 
 class FDBufferedReader(object):

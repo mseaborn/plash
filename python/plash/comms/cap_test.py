@@ -22,6 +22,7 @@ import select
 import socket
 import unittest
 
+from plash.comms.event_loop import poll_fd
 import plash.comms.cap as cap
 import plash.comms.event_loop
 import plash.comms.event_loop_test
@@ -45,12 +46,6 @@ class CapProtocolEncodingTest(unittest.TestCase):
         self.assertEquals(
             cap.decode_pocp_message(cap.make_drop_message(789)),
             ("drop", 789))
-
-
-def poll_fd(fd):
-    fd_flags = {fd.fileno(): plash.comms.event_loop.REQUESTABLE_FLAGS}
-    ready = dict(plash.comms.event_loop.poll_fds(fd_flags, 0))
-    return ready.get(fd.fileno(), 0)
 
 
 def tcp_socketpair():

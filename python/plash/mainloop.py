@@ -17,19 +17,24 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 # USA.
 
-import plash_core
+import gobject
 
-_use_glib = False
+import plash_core
+import plash.comms.event_loop
+
+
+event_loop = plash.comms.event_loop.GlibEventLoop()
+
 
 def use_gtk_mainloop():
     use_glib_mainloop()
 
 def use_glib_mainloop():
     """Enable use of Gtk/Glib's top-level event loop, instead of
-    Plash's built-in event loop.
+    Plash's built-in event loop.  This is now a no-op since we always
+    use Glib's event loop.
     """
-    global _use_glib
-    _use_glib = True
+    pass
 
 
 _reasons_count = 0
@@ -55,9 +60,6 @@ def run_server():
     """Run the top-level loop.  Returns when this process is no longer
     exporting any object references.
     """
-    if _use_glib:
-        import gobject
-        while plash_core.cap_server_exporting() or _reasons_count > 0:
-            gobject.main_context_default().iteration()
-    else:
-        plash_core.run_server()
+    while (plash_core.cap_server_exporting() or _reasons_count > 0 or
+           event_loop.is_listening()):
+        gobject.main_context_default().iteration()

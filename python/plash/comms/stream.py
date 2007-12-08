@@ -22,6 +22,7 @@ import os
 import select
 import socket
 
+from plash.comms.event_loop import poll_fd
 import plash.comms.simple
 
 
@@ -87,9 +88,11 @@ def write_nonblocking(fd, data):
 
 class FDBufferedWriter(object):
 
-    def __init__(self, event_loop, fd, on_buffered_size_changed=lambda: None):
+    def __init__(self, event_loop, fd, on_buffered_size_changed=lambda: None,
+                 on_unwritable=lambda: None):
         self._fd = fd
         self._on_buffered_size_changed = on_buffered_size_changed
+        self._on_unwritable = on_unwritable
         self._buf = ""
         self._eof_requested = False
         self._connection_broken = False
@@ -122,12 +125,14 @@ class FDBufferedWriter(object):
         self._buf = ""
         self._connection_broken = True
         self._watch.remove_watch()
+        self._on_unwritable()
         self._on_buffered_size_changed()
 
     def _check_for_disconnect(self):
         if self._eof_requested and len(self._buf) == 0:
             self._fd = None
             self._watch.remove_watch()
+            self._on_unwritable()
 
     def write(self, data):
         # Should this raise an exception if called after end_of_stream()?
@@ -144,6 +149,12 @@ class FDBufferedWriter(object):
 
     def buffered_size(self):
         return len(self._buf)
+
+    def write_pending(self):
+        while (self._fd is not None and
+               len(self._buf) > 0 and
+               poll_fd(self._fd) & select.POLLOUT != 0):
+            self._handler(0)
 
 
 class FDReader(object):
@@ -179,10 +190,13 @@ class FDReader(object):
         self.finish()
 
     def _read_data(self, flags):
+        self._read_some_data(self._get_buffer_size())
+
+    def _read_some_data(self, buf_size):
         # read() can return ECONNRESET if the other end closed its
         # connection without reading all the data it had been sent.
         try:
-            data = os.read(self._fd.fileno(), self._get_buffer_size())
+            data = os.read(self._fd.fileno(), buf_size)
         except OSError:
             self.finish()
         else:
@@ -191,13 +205,20 @@ class FDReader(object):
             else:
                 self.finish()
 
+    def read_pending(self):
+        while (self._fd is not None and
+               poll_fd(self._fd) & select.POLLIN != 0):
+            self._read_some_data(1000)
+
 
 class FDForwarder(object):
 
-    def __init__(self, event_loop, input_fd, output_fd):
+    def __init__(self, event_loop, input_fd, output_fd, buf_size=1024):
+        self._buf_size = buf_size
         self._writer = FDBufferedWriter(
             event_loop, output_fd,
-            on_buffered_size_changed=self._on_buffered_size_changed)
+            on_buffered_size_changed=self._on_buffered_size_changed,
+            on_unwritable=self._on_unwritable)
         self._reader = FDReader(event_loop, input_fd,
                                 self._writer.write,
                                 self._writer.end_of_stream,
@@ -207,8 +228,14 @@ class FDForwarder(object):
         self._reader.update_buffer_size()
 
     def _get_read_size(self):
-        buf_size = 1000
-        return buf_size - self._writer.buffered_size()
+        return self._buf_size - self._writer.buffered_size()
+
+    def _on_unwritable(self):
+        self._reader.finish()
+
+    def flush(self):
+        self._reader.read_pending()
+        self._writer.write_pending()
 
 
 class FDBufferedReader(object):

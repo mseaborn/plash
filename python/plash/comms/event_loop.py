@@ -164,6 +164,12 @@ def poll_fds(fd_flags, timeout=None):
     return poller.poll(timeout)
 
 
+def poll_fd(fd):
+    fd_flags = {fd.fileno(): REQUESTABLE_FLAGS}
+    ready = dict(poll_fds(fd_flags, 0))
+    return ready.get(fd.fileno(), 0)
+
+
 REQUESTABLE_FLAGS = select.POLLIN | select.POLLOUT | select.POLLPRI
 
 ERROR_FLAGS = select.POLLERR | select.POLLHUP | select.POLLNVAL

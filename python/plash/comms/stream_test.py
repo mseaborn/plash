@@ -23,7 +23,7 @@ import select
 import socket
 import unittest
 
-from plash.comms.cap_test import poll_fd
+from plash.comms.event_loop import poll_fd
 import plash.comms.event_loop_test
 import plash.comms.simple
 import plash.comms.stream as stream
@@ -256,12 +256,12 @@ class FDForwardTest(plash.comms.event_loop_test.EventLoopTestCase):
     def _make_forwarded_pipe(self, loop):
         pipe_read2, pipe_write = stream.make_pipe()
         pipe_read, pipe_write2 = stream.make_pipe()
-        stream.FDForwarder(loop, pipe_read2, pipe_write2)
-        return pipe_read, pipe_write
+        forwarder = stream.FDForwarder(loop, pipe_read2, pipe_write2)
+        return pipe_read, pipe_write, forwarder
 
     def test_forwarding(self):
         loop = self.make_event_loop()
-        pipe_read, pipe_write = self._make_forwarded_pipe(loop)
+        pipe_read, pipe_write, forwarder = self._make_forwarded_pipe(loop)
         self.assertTrue(loop.will_block())
         self.assertEquals(poll_fd(pipe_read), 0)
         os.write(pipe_write.fileno(), "hello world")
@@ -272,7 +272,7 @@ class FDForwardTest(plash.comms.event_loop_test.EventLoopTestCase):
 
     def test_closing_on_read_end(self):
         loop = self.make_event_loop()
-        pipe_read, pipe_write = self._make_forwarded_pipe(loop)
+        pipe_read, pipe_write, forwarder = self._make_forwarded_pipe(loop)
         self.assertTrue(loop.will_block())
         self.assertEquals(poll_fd(pipe_read), 0)
         os.write(pipe_write.fileno(), "hello world")
@@ -283,6 +283,14 @@ class FDForwardTest(plash.comms.event_loop_test.EventLoopTestCase):
         self.assertEquals(os.read(pipe_read.fileno(), 1000), "hello world")
         self.assertEquals(poll_fd(pipe_read), select.POLLHUP)
         self.assertEquals(os.read(pipe_read.fileno(), 1000), "")
+        self.assertFalse(loop.is_listening())
+
+    def test_closing_when_no_reader(self):
+        loop = self.make_event_loop()
+        pipe_read, pipe_write, forwarder = self._make_forwarded_pipe(loop)
+        del pipe_read
+        loop.once_safely()
+        self.assertFalse(loop.is_listening())
 
     def test_flow_control(self):
         # Usually with pipes, a writer cannot keep writing while the
@@ -290,7 +298,7 @@ class FDForwardTest(plash.comms.event_loop_test.EventLoopTestCase):
         # that.
         big_limit = find_pipe_buffer_size() * 10
         loop = self.make_event_loop()
-        pipe_read, pipe_write = self._make_forwarded_pipe(loop)
+        pipe_read, pipe_write, forwarder = self._make_forwarded_pipe(loop)
         fcntl.fcntl(pipe_write.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
         data = "x" * 4096
         written = 0
@@ -306,3 +314,12 @@ class FDForwardTest(plash.comms.event_loop_test.EventLoopTestCase):
         self.assertEquals(poll_fd(pipe_write), 0)
         loop.run_awhile()
         self.assertEquals(poll_fd(pipe_write), select.POLLOUT)
+
+    def test_flushing(self):
+        loop = self.make_event_loop()
+        pipe_read, pipe_write, forwarder = self._make_forwarded_pipe(loop)
+        os.write(pipe_write.fileno(), "hello world")
+        forwarder.flush()
+        fcntl.fcntl(pipe_read.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
+        data = os.read(pipe_read.fileno(), 1000)
+        self.assertEquals(data, "hello world")

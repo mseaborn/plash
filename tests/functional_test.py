@@ -155,6 +155,17 @@ class PolaRunTestsMixin(object):
         check_subprocess_status(proc.wait())
         self.assertEquals(stdout, data)
 
+    def test_cat_large(self):
+        data = "Hello world!\nThis is test data." * (4096 / 32)
+        write_file("file", data)
+        proc = subprocess.Popen(
+            [self._pola_run, "-B", "--prog", "cat", "-fa", "file"],
+            stdout=subprocess.PIPE)
+        stdout, stderr = proc.communicate()
+        check_subprocess_status(proc.wait())
+        self.assertEquals(len(stdout), len(data))
+        self.assertEquals(stdout, data)
+
     def test_bash_exec(self):
         proc = subprocess.Popen(
             [self._pola_run, "-B", "--cwd", "/",

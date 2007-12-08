@@ -24,6 +24,7 @@ import socket
 import unittest
 
 from plash.comms.event_loop import poll_fd
+import plash.comms.cap_test
 import plash.comms.event_loop_test
 import plash.comms.simple
 import plash.comms.stream as stream
@@ -224,6 +225,23 @@ class FDReaderTest(plash.comms.event_loop_test.EventLoopTestCase):
         loop.once_safely()
         self.assertEquals(got, ["he", "llo wo"])
 
+    def test_end_of_stream_multiple_reads(self):
+        got = []
+        def callback(data):
+            got.append(data)
+        def eof_callback():
+            got.append("EOF")
+        loop = self.make_event_loop()
+        pipe_read, pipe_write = stream.socketpair()
+        reader = stream.FDReader(loop, pipe_read, callback, eof_callback,
+                                 get_buffer_size=lambda: 2)
+        self.assertTrue(loop.will_block())
+        os.write(pipe_write.fileno(), "hello world")
+        del pipe_write
+        loop.once_safely()
+        self.assertEquals(got, ["he", "llo world", "EOF"])
+        self.assertTrue(not loop.is_listening())
+
 
 class FDBufferedReaderTest(plash.comms.event_loop_test.EventLoopTestCase):
 
@@ -323,3 +341,116 @@ class FDForwardTest(plash.comms.event_loop_test.EventLoopTestCase):
         fcntl.fcntl(pipe_read.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
         data = os.read(pipe_read.fileno(), 1000)
         self.assertEquals(data, "hello world")
+
+
+def get_known_flags():
+    return dict(
+        (value, name)
+        for name, value in select.__dict__.iteritems()
+        if name.startswith("POLL"))
+
+
+def decode_poll_flags(flags):
+    known_flags = get_known_flags()
+    names = []
+    for bit in range(32):
+        flag = 1 << bit
+        if flags & flag != 0:
+            names.append(known_flags.get(flag, str(flag)))
+    if len(names) == 0:
+        return "0"
+    else:
+        return "|".join(names)
+
+
+def get_poll_flag_table():
+    output = []
+    pipe_size = find_pipe_buffer_size()
+
+    def example(name, fd):
+        flags = poll_fd(fd)
+        output.append("%-30s %s" % (decode_poll_flags(flags), name))
+
+    class Wrapper(object):
+        def __init__(self, fd):
+            self._fd = fd
+        def fileno(self):
+            return self._fd
+
+    def unwrap(fd):
+        return os.dup(fd.fileno())
+
+    def unwrap_pair((fd1, fd2)):
+        return unwrap(fd1), unwrap(fd2)
+
+    def pair_pending_data(pair, size):
+        read_fd, write_fd = pair
+        os.write(write_fd.fileno(), "x" * size)
+        return pair
+
+    def example_pair(name, maker, i):
+        fd_pair = unwrap_pair(maker())
+        fd = fd_pair[i]
+        example(name, Wrapper(fd))
+        os.close(fd_pair[1 - i])
+        example(name + " (other closed)", Wrapper(fd))
+
+    def shutdown(pair, shut_type):
+        # The socket is not necessarily AF_UNIX but the socket module
+        # shouldn't actually use those arguments.
+        sock = socket.fromfd(os.dup(pair[1].fileno()),
+                             socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.shutdown(shut_type)
+        return pair
+
+    def example_socket(name, maker):
+        example_pair(name, maker, 0)
+        example_pair(name + " (SHUT_RD)",
+                     lambda: shutdown(maker(), socket.SHUT_RD), 0)
+        example_pair(name + " (SHUT_WR)",
+                     lambda: shutdown(maker(), socket.SHUT_WR), 0)
+        example_pair(name + " (SHUT_RDWR)",
+                     lambda: shutdown(maker(), socket.SHUT_RDWR), 0)
+
+    def make_pty():
+        fd1, fd2 = os.openpty()
+        return stream.WrappedFD(fd1), stream.WrappedFD(fd2)
+
+    def make_pty_eof():
+        fd1, fd2 = make_pty()
+        # Send Ctrl-D, the console EOF character
+        os.write(fd1.fileno(), chr(4))
+        return fd1, fd2
+
+    for side, name in [(0, "read"), (1, "write")]:
+        example_pair(
+            "pipe: %s" % name,
+            lambda: stream.make_pipe(), side)
+        example_pair(
+            "pipe: %s, pending data" % name,
+            lambda: pair_pending_data(stream.make_pipe(), pipe_size), side)
+    example_socket("socket: Unix", stream.socketpair)
+    example_socket("socket: TCP", plash.comms.cap_test.tcp_socketpair)
+    example_pair("tty master", make_pty, 0)
+    example_pair("tty slave", make_pty, 1)
+    example_pair("tty slave (send Ctrl-D)", make_pty_eof, 1)
+    example("/dev/null: write", open("/dev/null", "w"))
+    example("/dev/null: read", open("/dev/null", "r"))
+    example("file: write", open("/tmp/file", "w"))
+    example("file: read", open("/tmp/file", "r"))
+    return output
+
+
+class TestPollFlagsTable(unittest.TestCase):
+
+    def test_getting_table(self):
+        get_poll_flag_table()
+
+
+def main():
+    for entry in get_poll_flag_table():
+        print entry
+
+
+if __name__ == "__main__":
+    main()

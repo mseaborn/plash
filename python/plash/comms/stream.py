@@ -137,6 +137,9 @@ class FDBufferedWriter(object):
     def write(self, data):
         # Should this raise an exception if called after end_of_stream()?
         if not self._eof_requested and not self._connection_broken:
+            # This could attempt to write the data to the FD in
+            # non-blocking mode, instead of waiting until the next
+            # event loop iteration.
             self._buf += data
             self._watch.update_flags()
             self._on_buffered_size_changed()
@@ -187,6 +190,14 @@ class FDReader(object):
         eof_callback()
 
     def _error_handler(self, flags):
+        if flags & select.POLLHUP != 0:
+            # The writer has closed the connection and can write no
+            # more.  We can't use the event loop to read any remaining
+            # data because poll() would always return POLLHUP, and we
+            # don't need the event loop anyway because there are no
+            # more notifications to get.  Reading here is not bounded
+            # by get_buffer_size() any more.
+            self.read_pending()
         self.finish()
 
     def _read_data(self, flags):

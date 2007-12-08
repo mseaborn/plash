@@ -31,11 +31,10 @@ wrap_fd = plash_core.wrap_fd
 
 
 def ForwardFD(source_fd, dest_fd, buf_size=1024):
-    # TODO: pass buf_size through
     # TODO: take event_loop as an argument
     event_loop = plash.mainloop.event_loop
     return plash.comms.stream.FDForwarder(event_loop, wrap_fd(source_fd),
-                                          wrap_fd(dest_fd))
+                                          wrap_fd(dest_fd), buf_size)
 
 
 def proxy_input_fd(fd):

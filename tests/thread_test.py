@@ -26,8 +26,7 @@ import unittest
 import plash.mainloop
 import plash.pola_run_args
 import plash.process
-
-import libc_test
+import plash.process_test
 
 
 # TODO: remove when FsObjReal stops changing the cwd
@@ -81,7 +80,7 @@ class ThreadTest(unittest.TestCase):
         plash.mainloop.run_server()
         pid2, status = os.wait()
         self.assertEquals(pid, pid2)
-        libc_test.check_exit_status(status)
+        plash.process_test.check_exit_status(status)
 
     def test_sequential(self):
         self._run_test("test_sequential")

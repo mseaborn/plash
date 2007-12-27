@@ -30,6 +30,10 @@ import plash_core
 wrap_fd = plash_core.wrap_fd
 
 
+def dup_and_wrap_fd(fd):
+    return wrap_fd(os.dup(fd))
+
+
 def ForwardFD(source_fd, dest_fd, buf_size=1024):
     # TODO: take event_loop as an argument
     event_loop = plash.mainloop.event_loop

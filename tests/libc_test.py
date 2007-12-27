@@ -29,6 +29,7 @@ import plash.mainloop
 import plash.namespace as ns
 import plash.pola_run_args
 import plash.process
+import plash.process_test
 
 
 prototypes = r"""
@@ -59,20 +60,6 @@ class TempMaker(object):
     def destroy(self):
         for tmp_dir in self._dirs:
             shutil.rmtree(tmp_dir)
-
-
-class ProcessExitError(Exception):
-
-    pass
-
-
-def check_exit_status(status):
-    if os.WIFEXITED(status):
-        if os.WEXITSTATUS(status) != 0:
-            raise ProcessExitError("Process exited with status %i" %
-                                   os.WEXITSTATUS(status))
-    else:
-        raise ProcessExitError("Status %i" % status)
 
 
 class LogProxy(plash.marshal.Pyobj_marshal):
@@ -214,7 +201,7 @@ int main()
         plash.mainloop.run_server()
         pid2, status = os.wait()
         self.assertEquals(pid, pid2)
-        check_exit_status(status)
+        plash.process_test.check_exit_status(status)
 
     def test_library(self):
         def run():

@@ -208,11 +208,15 @@ class EventLoop(EventLoopBase):
         self._watches = []
         self._poll_fds = poll_fds
         self._excepthook = ExcepthookProxy()
+        self._call_queue = []
 
     def make_watch_with_error_handler(self, fd, get_flags, callback,
                                       error_callback):
         return FDWatch(self._watches, self._excepthook.excepthook,
                        fd, get_flags, callback, error_callback)
+
+    def call_later(self, func):
+        self._call_queue.append(func)
 
     def set_excepthook(self, func):
         self._excepthook.set(func)
@@ -246,28 +250,50 @@ class EventLoop(EventLoopBase):
         ready = self._poll_fds(self._get_fd_flags(), 0)
         return len(ready) == 0
 
+    def _run_call_queue(self):
+        did_something = False
+        # TODO: the call queue should somehow be interleaved with
+        # polling FDs, rather than running to completion first.
+        while len(self._call_queue) > 0:
+            func = self._call_queue.pop(0)
+            try:
+                func()
+            except:
+                self._excepthook.excepthook(*sys.exc_info())
+            did_something = True
+        return did_something
+
+    def _iteration(self, may_block):
+        did_something = self._run_call_queue()
+        if may_block:
+            timeout = None
+        else:
+            timeout = 0
+        ready = dict(self._poll_fds(self._get_fd_flags(), timeout))
+        if len(ready) > 0:
+            self._process_ready(ready)
+            did_something = True
+        return did_something
+
     def once(self):
-        ready = dict(self._poll_fds(self._get_fd_flags()))
-        self._process_ready(ready)
+        self._iteration(may_block=True)
 
     def once_safely(self):
-        ready = dict(self._poll_fds(self._get_fd_flags(), 0))
-        assert len(ready) != 0, self._get_fd_flags()
-        self._process_ready(ready)
+        did_something = self._iteration(may_block=False)
+        assert did_something, self._get_fd_flags()
 
     def run(self):
         while True:
-            ready = dict(self._poll_fds(self._get_fd_flags()))
-            self._process_ready(ready)
+            self._iteration(may_block=True)
 
     def run_awhile(self):
         while True:
-            ready = dict(self._poll_fds(self._get_fd_flags(), 0))
-            if len(ready) == 0:
+            did_something = self._iteration(may_block=False)
+            if not did_something:
                 break
-            self._process_ready(ready)
 
     def _process_ready(self, ready):
+        # TODO: make more efficient: iterate over ready FDs instead of watches
         for watch in self._watches:
             fd = watch.fd.fileno()
             if fd in ready:
@@ -281,6 +307,7 @@ class GlibEventLoop(EventLoopBase):
         self._watches = []
         self._excepthook = ExcepthookProxy()
         self._registered = True
+        self._call_queue_ids = set()
 
     def make_watch_with_error_handler(self, fd, get_flags, callback,
                                       error_callback):
@@ -289,6 +316,17 @@ class GlibEventLoop(EventLoopBase):
         if self._registered:
             watch.register()
         return watch
+
+    def call_later(self, func):
+        def wrapper():
+            self._call_queue_ids.remove(source_id)
+            try:
+                func()
+            except:
+                self._excepthook.excepthook(*sys.exc_info())
+            return False
+        source_id = gobject.idle_add(wrapper)
+        self._call_queue_ids.add(source_id)
 
     def set_excepthook(self, func):
         self._excepthook.set(func)
@@ -320,12 +358,11 @@ class GlibEventLoop(EventLoopBase):
     def is_listening(self):
         return len(self._watches) > 0
 
-    def register(self):
-        for watch in self._watches:
-            watch.register()
-        self._registered = True
-
-    def unregister(self):
-        for watch in self._watches:
-            watch.unregister()
+    def destroy(self):
+        for watch in self._watches[:]:
+            watch.remove_watch()
+        assert not self.is_listening()
+        for source_id in self._call_queue_ids:
+            gobject.source_remove(source_id)
+        self._call_queue_ids.clear()
         self._registered = False

@@ -86,6 +86,18 @@ def write_nonblocking(fd, data):
         fcntl.fcntl(fd, fcntl.F_SETFL, original_flags)
 
 
+# O_ACCMODE is not defined in the "os" module, but should be
+O_ACCMODE = os.O_RDONLY | os.O_WRONLY | os.O_RDWR
+
+def fd_is_writable(fd):
+    access_mode = fcntl.fcntl(fd, fcntl.F_GETFL) & O_ACCMODE
+    return access_mode != os.O_RDONLY
+
+def fd_is_readable(fd):
+    access_mode = fcntl.fcntl(fd, fcntl.F_GETFL) & O_ACCMODE
+    return access_mode != os.O_WRONLY
+
+
 class FDBufferedWriter(object):
 
     def __init__(self, event_loop, fd, on_buffered_size_changed=lambda: None,
@@ -98,6 +110,8 @@ class FDBufferedWriter(object):
         self._connection_broken = False
         self._watch = event_loop.make_watch_with_error_handler(
             fd, self._get_flags, self._handler, self._error_handler)
+        if not fd_is_writable(fd.fileno()):
+            event_loop.call_later(lambda: self._error_handler(0))
 
     def _get_flags(self):
         if len(self._buf) == 0:
@@ -171,6 +185,8 @@ class FDReader(object):
         # TODO: extend to do flow control
         self._watch = event_loop.make_watch_with_error_handler(
             fd, self._get_poll_flags, self._read_data, self._error_handler)
+        if not fd_is_readable(fd.fileno()):
+            event_loop.call_later(self.finish)
 
     def _get_poll_flags(self):
         if self._get_buffer_size() > 0:

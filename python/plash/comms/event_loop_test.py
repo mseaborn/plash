@@ -101,7 +101,7 @@ class EventLoopTestCase(testrunner.CombinationTestCase):
             self.mark_failure(exc_value)
             raise
         self.loop.set_excepthook(on_exception)
-        self.on_teardown(lambda: self.loop.unregister())
+        self.on_teardown(lambda: self.loop.destroy())
 
     def make_event_loop(self):
         return self.loop
@@ -172,6 +172,15 @@ class EventLoopTests(EventLoopTestCase):
         loop.once_safely()
         self.assertEquals(len(got), limit)
 
+    def test_call_later(self):
+        loop = self.make_event_loop()
+        calls = []
+        loop.call_later(lambda: calls.append("call 1"))
+        loop.call_later(lambda: calls.append("call 2"))
+        loop.once_safely()
+        # Ordering is significant
+        self.assertEquals(calls, ["call 1", "call 2"])
+
     def test_exception_in_callback(self):
         def callback(flags):
             raise AssertionError()
@@ -206,6 +215,31 @@ class EventLoopTests(EventLoopTestCase):
         loop.once_safely()
         self.assertEquals(len(got_exceptions), 1)
         self.assertTrue(watch.destroyed)
+
+    def test_exception_in_call_later_callback(self):
+        def callback():
+            raise AssertionError()
+
+        loop = self.make_event_loop()
+        loop.call_later(callback)
+
+        got_exceptions = []
+        def handle_exception(*args):
+            got_exceptions.append(args)
+        loop.set_excepthook(handle_exception)
+        loop.once_safely()
+        self.assertEquals(len(got_exceptions), 1)
+
+
+class GlibEventLoopTests(unittest.TestCase):
+
+    def test_noninterference(self):
+        loop = plash.comms.event_loop.GlibEventLoop()
+        self.assertTrue(loop.will_block())
+        loop.call_later(lambda: None)
+        self.assertFalse(loop.will_block())
+        loop.destroy()
+        self.assertTrue(loop.will_block())
 
 
 if __name__ == "__main__":

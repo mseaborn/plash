@@ -69,6 +69,36 @@ def find_pipe_buffer_size():
     return written
 
 
+class ReadabilityAndWritabilityTests(unittest.TestCase):
+
+    def test_sockets(self):
+        sock1, sock2 = stream.socketpair()
+        for sock in (sock1, sock2):
+            self.assertTrue(stream.fd_is_readable(sock))
+            self.assertTrue(stream.fd_is_writable(sock))
+
+    def test_pipes(self):
+        pipe_read, pipe_write = stream.make_pipe()
+        self.assertTrue(stream.fd_is_readable(pipe_read))
+        self.assertFalse(stream.fd_is_writable(pipe_read))
+        self.assertFalse(stream.fd_is_readable(pipe_write))
+        self.assertTrue(stream.fd_is_writable(pipe_write))
+
+    def test_poll_annoying_behaviour(self):
+        pipe_read, pipe_write = stream.make_pipe()
+        # It would be more useful if poll() returned POLLIN and
+        # POLLOUT for unreadable and unwritable FDs respectively,
+        # indicating that read() and write() would not block.
+        # We do not rely on the behaviour tested here; in fact, we
+        # work around it.
+        self.assertEquals(poll_fd(pipe_read) & select.POLLOUT, 0)
+        self.assertEquals(poll_fd(pipe_write) & select.POLLIN, 0)
+        # However, select() behaves more usefully:
+        read_fds, write_fds, except_fds = select.select(
+            [], [pipe_write.fileno()], [], 0)
+        self.assertEquals(len(write_fds), 1)
+
+
 class FDBufferedWriterTest(plash.comms.event_loop_test.EventLoopTestCase):
 
     def test_writing(self):
@@ -142,6 +172,17 @@ class FDBufferedWriterTest(plash.comms.event_loop_test.EventLoopTestCase):
         # share the FD.  Changing the flags temporarily is still not
         # ideal though.
         check_flags()
+
+    def test_writing_to_unwritable_fd(self):
+        got = []
+        loop = self.make_event_loop()
+        writer = stream.FDBufferedWriter(
+            loop, open("/dev/null", "r"),
+            on_unwritable=lambda: got.append("broken"))
+        loop.once_safely()
+        self.assertTrue(writer._watch.destroyed)
+        self.assertEquals(got, ["broken"])
+        self.assertFalse(loop.is_listening())
 
 
 class FDReaderTest(plash.comms.event_loop_test.EventLoopTestCase):
@@ -242,6 +283,17 @@ class FDReaderTest(plash.comms.event_loop_test.EventLoopTestCase):
         self.assertEquals(got, ["he", "llo world", "EOF"])
         self.assertTrue(not loop.is_listening())
 
+    def test_reading_from_unreadable_fd(self):
+        got = []
+        loop = self.make_event_loop()
+        reader = stream.FDReader(loop, open("/dev/null", "w"),
+                                 lambda data: got.append(data),
+                                 lambda: got.append("EOF"))
+        loop.once_safely()
+        self.assertTrue(reader._watch.destroyed)
+        self.assertEquals(got, ["EOF"])
+        self.assertFalse(loop.is_listening())
+
 
 class FDBufferedReaderTest(plash.comms.event_loop_test.EventLoopTestCase):
 
@@ -341,6 +393,22 @@ class FDForwardTest(plash.comms.event_loop_test.EventLoopTestCase):
         fcntl.fcntl(pipe_read.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
         data = os.read(pipe_read.fileno(), 1000)
         self.assertEquals(data, "hello world")
+
+    def test_forwarding_from_unreadable_fd(self):
+        loop = self.make_event_loop()
+        pipe_read, pipe_write = stream.make_pipe()
+        forwarder = stream.FDForwarder(loop, open("/dev/null", "w"), pipe_write)
+        del pipe_write
+        loop.once_safely()
+        self.assertEquals(os.read(pipe_read.fileno(), 1000), "")
+
+    def test_forwarding_to_unwritable_fd(self):
+        loop = self.make_event_loop()
+        pipe_read, pipe_write = stream.make_pipe()
+        forwarder = stream.FDForwarder(loop, pipe_read, open("/dev/null", "r"))
+        del pipe_read
+        loop.once_safely()
+        self.assertEquals(poll_fd(pipe_write), select.POLLERR | select.POLLOUT)
 
 
 def get_known_flags():

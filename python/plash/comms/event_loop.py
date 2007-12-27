@@ -190,14 +190,6 @@ class EventLoopBase(object):
         return self.make_watch_with_error_handler(fd, get_flags, callback,
                                                   error_callback)
 
-    def make_error_watch(self, fd, error_callback):
-        def get_flags():
-            return 0
-        def ready_callback(flags):
-            pass
-        return self.make_watch_with_error_handler(fd, get_flags, ready_callback,
-                                                  error_callback)
-
 
 class EventLoop(EventLoopBase):
 

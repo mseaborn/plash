@@ -95,8 +95,11 @@ class ReadabilityAndWritabilityTests(unittest.TestCase):
         self.assertEquals(poll_fd(pipe_write) & select.POLLIN, 0)
         # However, select() behaves more usefully:
         read_fds, write_fds, except_fds = select.select(
-            [], [pipe_write.fileno()], [], 0)
+            [], [open(os.devnull, "r")], [], 0)
         self.assertEquals(len(write_fds), 1)
+        read_fds, write_fds, except_fds = select.select(
+            [open(os.devnull, "w")], [], [], 0)
+        self.assertEquals(len(read_fds), 1)
 
 
 class FDBufferedWriterTest(plash.comms.event_loop_test.EventLoopTestCase):

@@ -153,7 +153,8 @@ class EventLoopTests(EventLoopTestCase):
         def error_callback(flags):
             got_callbacks.append(flags)
 
-        loop.make_error_watch(pipe_read, error_callback)
+        loop.make_watch_with_error_handler(pipe_read, lambda: 0,
+                                           lambda flags: None, error_callback)
         loop.once_safely()
         self.assertEquals(got_callbacks, [select.POLLHUP])
 
@@ -206,7 +207,8 @@ class EventLoopTests(EventLoopTestCase):
         loop = self.make_event_loop()
         pipe_read, pipe_write = plash.comms.stream.make_pipe()
         del pipe_write
-        watch = loop.make_error_watch(pipe_read, callback)
+        watch = loop.make_watch_with_error_handler(
+            pipe_read, lambda: 0, lambda flags: None, callback)
 
         got_exceptions = []
         def handle_exception(*args):

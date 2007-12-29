@@ -20,6 +20,7 @@
 import struct
 import weakref
 
+import plash_core
 import plash.comms.simple
 import plash.comms.stream
 
@@ -267,10 +268,14 @@ class ConnectionPrivate(object):
             self._disconnect()
 
 
-class PlashObjectBase(object):
+# TODO: Don't depend on plash_core.  The C module should import its
+# base class from a pure-Python module instead.
+PlashObjectBase = plash_core.Pyobj
 
-    # No methods at all, so that __getattr__ works for call logger
-    pass
+# class PlashObjectBase(object):
+#
+#     # No methods at all, so that __getattr__ works for call logger
+#     pass
 
 
 # TODO: move somewhere else

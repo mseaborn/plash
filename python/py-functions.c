@@ -209,6 +209,7 @@ static void plpy_make_conn2(cap_t obj, region_t r, struct cap_args args,
 #if 1
     import = cap_make_connection(r, fd, export_caps, import_count,
 				 "to-client");
+    caps_free(export_caps);
     *result = pl_pack(r, METHOD_R_MAKE_CONN2, "C",
 		      cap_seq_make(import, import_count));
 #else

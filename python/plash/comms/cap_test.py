@@ -99,10 +99,8 @@ class CallLogger(cap.PlashObjectBase):
     def __init__(self):
         self.calls = []
 
-    def __getattr__(self, attr):
-        def func(*args):
-            self.calls.append((attr, args))
-        return func
+    def cap_invoke(self, *args):
+        self.calls.append(("cap_invoke", args))
 
 
 class SocketPairTestCase(plash.comms.event_loop_test.EventLoopTestCase):
@@ -120,7 +118,9 @@ class SocketPairTestCase(plash.comms.event_loop_test.EventLoopTestCase):
         self.socketpair = tcp_socketpair
 
 
-class CapProtocolTests(SocketPairTestCase):
+class CapProtocolTestsMixin(object):
+
+    base_class = cap.PlashObjectBase
 
     def _read_to_list(self, loop, socket_fd):
         messages = []
@@ -139,7 +139,7 @@ class CapProtocolTests(SocketPairTestCase):
         loop = self.make_event_loop()
         sock1, sock2 = self.socketpair()
         got = self._read_to_list(loop, sock1)
-        imported_objects = cap.make_connection(loop, sock2, [], 10)
+        imported_objects = self.make_connection(loop, sock2, [], 10)
         # Should work for any sequence of valid indexes
         for index in (0, 0, 1, 2):
             imported_objects[index].cap_invoke(("body data", (), ()))
@@ -155,7 +155,7 @@ class CapProtocolTests(SocketPairTestCase):
         loop = self.make_event_loop()
         sock1, sock2 = self.socketpair()
         got = self._read_to_list(loop, sock1)
-        [imported] = cap.make_connection(loop, sock2, [], 1)
+        [imported] = self.make_connection(loop, sock2, [], 1)
         arg_objects = [cap.PlashObject() for i in range(10)]
         imported.cap_invoke(("body", tuple(arg_objects), ()))
         loop.run_awhile()
@@ -166,9 +166,13 @@ class CapProtocolTests(SocketPairTestCase):
                        [cap.encode_wire_id(cap.NAMESPACE_SENDER, index)
                         for index in range(10)], "body")])
         # Check internal state of the connection
-        self.assertEquals(
-            imported._connection._exports.get_all_exports(),
+        self.check_exports(
+            imported,
             dict((index, arg_objects[index]) for index in range(10)))
+
+    def check_exports(self, imported, exports):
+        self.assertEquals(
+            imported._connection._exports.get_all_exports(), exports)
 
     def test_sending_references_preserves_eq(self):
         calls = []
@@ -179,7 +183,7 @@ class CapProtocolTests(SocketPairTestCase):
         loop = self.make_event_loop()
         sock1, sock2 = self.socketpair()
         got = self._read_to_list(loop, sock1)
-        [imported] = cap.make_connection(loop, sock2, [], 1)
+        [imported] = self.make_connection(loop, sock2, [], 1)
         writer = plash.comms.stream.FDBufferedWriter(loop, sock1)
         object1 = Object()
         object2 = Object()
@@ -207,7 +211,7 @@ class CapProtocolTests(SocketPairTestCase):
         loop = self.make_event_loop()
         sock1, sock2 = self.socketpair()
         exported_objects = [CallLogger() for i in range(10)]
-        cap.make_connection(loop, sock1, exported_objects)
+        self.make_connection(loop, sock1, exported_objects)
         writer = plash.comms.stream.FDBufferedWriter(loop, sock2)
         # Should work for any sequence of valid indexes
         for index in (0, 0, 1, 2):
@@ -229,7 +233,7 @@ class CapProtocolTests(SocketPairTestCase):
         loop = self.make_event_loop()
         sock1, sock2 = self.socketpair()
         exported = Object()
-        cap.make_connection(loop, sock1, [exported])
+        self.make_connection(loop, sock1, [exported])
         writer = plash.comms.stream.FDBufferedWriter(loop, sock2)
         # Should work for any sequence of indexes
         indexes = [6, 2, 52, 8, 4]
@@ -244,9 +248,13 @@ class CapProtocolTests(SocketPairTestCase):
         self.assertEquals(len(caps), len(indexes))
         # Check internal state of received proxy objects
         for index, received_obj in zip(indexes, caps):
-            assert isinstance(received_obj, cap.RemoteObject)
-            self.assertEquals(received_obj._object_id, index)
-            self.assertEquals(received_obj._single_use, False)
+            assert isinstance(received_obj, self.base_class), received_obj
+            self.check_remote_object(received_obj, object_id=index,
+                                     single_use=False)
+
+    def check_remote_object(self, obj, object_id, single_use):
+        self.assertEquals(obj._object_id, object_id)
+        self.assertEquals(obj._single_use, single_use)
 
     def test_receiving_references_preserves_eq(self):
         calls = []
@@ -256,7 +264,7 @@ class CapProtocolTests(SocketPairTestCase):
 
         loop = self.make_event_loop()
         sock1, sock2 = self.socketpair()
-        cap.make_connection(loop, sock1, [Object()])
+        self.make_connection(loop, sock1, [Object()])
         got = self._read_to_list(loop, sock2)
         writer = plash.comms.stream.FDBufferedWriter(loop, sock2)
         writer.write(plash.comms.simple.make_message(
@@ -285,7 +293,7 @@ class CapProtocolTests(SocketPairTestCase):
         loop = self.make_event_loop()
         sock1, sock2 = self.socketpair()
         got = self._read_to_list(loop, sock1)
-        imported_objects = cap.make_connection(loop, sock2, [], 100)
+        imported_objects = list(self.make_connection(loop, sock2, [], 100))
         imported_objects[42] = None
         loop.run_awhile()
         decoded = [cap.decode_pocp_message(data) for data in got]
@@ -297,7 +305,7 @@ class CapProtocolTests(SocketPairTestCase):
         loop = self.make_event_loop()
         sock1, sock2 = self.socketpair()
         got = self._read_to_list(loop, sock1)
-        imported_objects = cap.make_connection(loop, sock2, [], 1)
+        imported_objects = self.make_connection(loop, sock2, [], 1)
         del sock2
         del imported_objects
         loop.run_awhile()
@@ -317,8 +325,8 @@ class CapProtocolTests(SocketPairTestCase):
 
         loop = self.make_event_loop()
         sock1, sock2 = self.socketpair()
-        cap.make_connection(loop, sock1, [Object(index)
-                                          for index in range(100)])
+        self.make_connection(loop, sock1, [Object(index)
+                                           for index in range(100)])
         writer = plash.comms.stream.FDBufferedWriter(loop, sock2)
         # Should work for any sequence of indexes
         indexes = [5, 10, 56, 1, 0]
@@ -331,8 +339,8 @@ class CapProtocolTests(SocketPairTestCase):
     def test_dropping_all_exported_references(self):
         loop = self.make_event_loop()
         sock1, sock2 = self.socketpair()
-        cap.make_connection(loop, sock1, [cap.PlashObject()
-                                          for index in range(100)])
+        self.make_connection(loop, sock1, [cap.PlashObject()
+                                           for index in range(100)])
         del sock1
         writer = plash.comms.stream.FDBufferedWriter(loop, sock2)
         for index in range(100):
@@ -352,7 +360,7 @@ class CapProtocolTests(SocketPairTestCase):
 
             loop = self.make_event_loop()
             sock1, sock2 = self.socketpair()
-            imported = cap.make_connection(
+            imported = self.make_connection(
                 loop, sock1, [Object(index) for index in range(10)],
                 import_count)
             del sock2
@@ -360,21 +368,22 @@ class CapProtocolTests(SocketPairTestCase):
             self.assertTrue(not loop.is_listening())
             self.assertEquals(sorted(deleted), range(10))
             for imported_object in imported:
-                self.assertFalse(imported_object._connection._connected)
+                self.check_not_connected(imported_object)
                 imported_object.cap_invoke(
                     ("message that will get ignored", (), ()))
+
+    def check_not_connected(self, obj):
+        self.assertFalse(obj._connection._connected)
 
     def test_handling_dropped_connection_econnreset(self):
         import_count = 1
         loop = self.make_event_loop()
         sock1, sock2 = self.socketpair()
-        imported = cap.make_connection(
-            loop, sock1, [],
-            import_count)
+        imported = self.make_connection(loop, sock1, [], import_count)
         # Try to trigger an ECONNRESET condition by writing data which
         # is not read before the other end closes the connection.
         imported[0].cap_invoke(("data", (), ()))
-        loop.once_safely()
+        loop.run_awhile()
         del sock2
         loop.once_safely()
 
@@ -383,7 +392,7 @@ class CapProtocolTests(SocketPairTestCase):
         sock1, sock2 = self.socketpair()
         # This connection neither imports nor exports any references,
         # so it starts off moribund.
-        cap.make_connection(loop, sock1, [])
+        self.make_connection(loop, sock1, [])
         del sock1
         self.assertTrue(self._connection_dropped(sock2))
 
@@ -396,7 +405,7 @@ class CapProtocolTests(SocketPairTestCase):
         loop = self.make_event_loop()
         sock1, sock2 = self.socketpair()
         exported = Object()
-        cap.make_connection(loop, sock1, [exported])
+        self.make_connection(loop, sock1, [exported])
         del sock1
         received = self._read_to_list(loop, sock2)
         writer = plash.comms.stream.FDBufferedWriter(loop, sock2)
@@ -412,12 +421,11 @@ class CapProtocolTests(SocketPairTestCase):
         self.assertEquals(len(calls), 1)
         data, caps, fds = calls[0]
         [received_obj] = caps
-        assert isinstance(received_obj, cap.RemoteObject)
-        self.assertEquals(received_obj._object_id, 1234)
-        self.assertEquals(received_obj._single_use, True)
-        assert received_obj._connection is not None
+        assert isinstance(received_obj, self.base_class), received_obj
+        self.check_remote_object(received_obj, object_id=1234, single_use=True)
+        self.check_object_used_up(received_obj, used_up=False)
         received_obj.cap_invoke(("some return message", (), ()))
-        assert received_obj._connection is None
+        self.check_object_used_up(received_obj, used_up=True)
 
         # This tests sending a message and immediately disconnecting.
         # The message should be queued, not dropped.  The message
@@ -430,9 +438,18 @@ class CapProtocolTests(SocketPairTestCase):
               [], "some return message")])
         self.assertTrue(self._connection_dropped(sock2))
 
+    def check_object_used_up(self, obj, used_up):
+        self.assertEquals(obj._connection is None, used_up)
+
     # TODO: check receiving bogus IDs
 
     # TODO: check receiving bogus messages
+
+
+class CapProtocolPythonTests(CapProtocolTestsMixin, SocketPairTestCase):
+
+    def make_connection(self, *args, **kwargs):
+        return cap.make_connection(*args, **kwargs)
 
 
 class CapProtocolEndToEndTests(SocketPairTestCase):

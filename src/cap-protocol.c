@@ -730,7 +730,11 @@ cap_t *cap_make_connection(region_t r, int sock_fd,
   cap_t *import;
   struct connection *conn;
   assert(sock_fd >= 0);
-  if(import_count == 0 && export.size == 0) return 0; /* useless connection */
+  if(import_count == 0 && export.size == 0) {
+    /* useless connection */
+    close(sock_fd);
+    return NULL;
+  }
   conn = amalloc(sizeof(struct connection));
 
 #ifdef DO_LOG

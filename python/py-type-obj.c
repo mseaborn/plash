@@ -141,9 +141,9 @@ static PyObject *plpy_compare(plpy_obj *obj1, PyObject *obj2)
 }
 */
 
-static int plpy_obj_hash(plpy_obj *self)
+static long plpy_obj_hash(plpy_obj *self)
 {
-  return (int) self->obj;
+  return (long) self->obj;
 }
 
 

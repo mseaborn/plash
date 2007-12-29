@@ -20,6 +20,11 @@
 #include "libc-comms.h"
 
 
+int new_mkfifoat(int dir_fd, const char *pathname, unsigned int mode);
+int new_xmknodat(int ver, int dir_fd, const char *path, mode_t mode,
+		 dev_t *dev);
+
+
 export(new_mkfifoat, mkfifoat);
 
 int new_mkfifoat(int dir_fd, const char *pathname, unsigned int mode)
@@ -32,7 +37,8 @@ int new_mkfifoat(int dir_fd, const char *pathname, unsigned int mode)
 export(new_xmknodat, __xmknodat);
 export(new_xmknodat, __GI___xmknodat);
 
-int new_xmknodat(int ver, int dir_fd, const char *path, mode_t mode, dev_t dev)
+int new_xmknodat(int ver, int dir_fd, const char *path, mode_t mode,
+		 dev_t *dev)
 {
   __set_errno(ENOSYS);
   return -1;

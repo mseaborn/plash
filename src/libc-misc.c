@@ -118,6 +118,7 @@ int new_unlink(const char *pathname);
 int new_unlinkat(int dir_fd, const char *pathname, int flags);
 int new_rmdir(const char *pathname);
 int new_statfs(const char *path, struct statfs *buf);
+int new_statfs64(const char *path, struct statfs64 *buf);
 int new_setxattr(const char *path, const char *name,
 		 const void *value, size_t size, int flags);
 ssize_t new_getxattr(const char *path, const char *name,
@@ -1532,6 +1533,7 @@ int new_statfs(const char *path, struct statfs *buf)
     buf->f_bavail = free;
     buf->f_files = free;
     buf->f_ffree = free;
+    /* buf->f_fsid is a struct */
     buf->f_namelen = 1024;
     return 0;
   }
@@ -1539,6 +1541,28 @@ int new_statfs(const char *path, struct statfs *buf)
     __set_errno(ENOSYS);
     return -1;
   }
+}
+
+
+export_weak_alias(new_statfs64, statfs64);
+export(new_statfs64, __statfs64);
+
+int new_statfs64(const char *path, struct statfs64 *buf)
+{
+  struct statfs st;
+  if(new_statfs(path, &st) < 0)
+    return -1;
+  memset(buf, 0, sizeof(struct statfs64));
+  buf->f_type = st.f_type;
+  buf->f_bsize = st.f_bsize;
+  buf->f_blocks = st.f_blocks;
+  buf->f_bfree = st.f_bfree;
+  buf->f_bavail = st.f_bavail;
+  buf->f_files = st.f_files;
+  buf->f_ffree = st.f_ffree;
+  buf->f_fsid = st.f_fsid;
+  buf->f_namelen = st.f_namelen;
+  return 0;
 }
 
 

@@ -432,6 +432,7 @@ plpy_make_log_from_fd(cap_t obj1, region_t r, struct cap_args args,
   int fd;
   if(pl_unpack(r, args, METHOD_MAKE_LOG_FROM_FD, "f", &fd)) {
     cap_t log_obj = make_log_from_fd(fd);
+    plpy_close(fd);
     *result = pl_pack(r, METHOD_R_CAP, "c", log_obj);
   }
   else {

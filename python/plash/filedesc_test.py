@@ -64,6 +64,7 @@ class Proc(object):
             func()
         self.pid = forked(process)
         self.pipe_write = pipe_write
+        os.close(pipe_read)
 
     def start(self):
         os.write(self.pipe_write, "x")
@@ -209,6 +210,7 @@ class ForwardTest(unittest.TestCase):
             got += buf
         self.assertEquals(got, "hello world")
         pids.wait()
+        os.close(fd)
 
     def test_broken_pipe(self):
         """Check that forwarding to a broken pipe does not kill the

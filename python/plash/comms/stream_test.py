@@ -465,11 +465,12 @@ def get_poll_flag_table():
         example(name, Wrapper(fd))
         os.close(fd_pair[1 - i])
         example(name + " (other closed)", Wrapper(fd))
+        os.close(fd_pair[i])
 
     def shutdown(pair, shut_type):
         # The socket is not necessarily AF_UNIX but the socket module
         # shouldn't actually use those arguments.
-        sock = socket.fromfd(os.dup(pair[1].fileno()),
+        sock = socket.fromfd(pair[1].fileno(),
                              socket.AF_UNIX, socket.SOCK_STREAM)
         sock.shutdown(shut_type)
         return pair

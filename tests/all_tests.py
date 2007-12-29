@@ -79,7 +79,6 @@ def main(args):
             if hasattr(module, "get_test_suite"):
                 suite.addTests(module.get_test_suite(module, temp_maker))
             else:
-                suite.addTests(loader.loadTestsFromModule(module))
                 suite.addTests(testrunner.load_tests_from_module(module))
         runner = unittest.TextTestRunner(verbosity=verbosity)
         result = runner.run(suite)

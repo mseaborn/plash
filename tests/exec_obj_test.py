@@ -92,6 +92,9 @@ class ExecutableObjectTest(unittest.TestCase):
         # TODO: compare directly, instead of comparing reprs.
         # Python wrappers of C Plash objects don't preserve EQ.
         self.assertEquals(repr(args["Root"]), repr(proc.root_dir))
+        # Break cycle: call list contains root dir, which refers back
+        # to the ExecObj
+        calls[:] = []
 
 
 if __name__ == "__main__":

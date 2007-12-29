@@ -391,6 +391,7 @@ void plpy_pyobj_cap_call(struct filesys_obj *obj1, region_t r,
     if(!plpy_cap_args_from_py(r, result, result2)) {
       *result2 = cap_args_d(mk_int(r, METHOD_FAIL));
     }
+    Py_DECREF(result);
   }
   Py_DECREF(args2);
 }

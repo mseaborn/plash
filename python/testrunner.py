@@ -17,10 +17,16 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 # USA.
 
+import gc
 import inspect
+import os
 import shutil
+import signal
+import subprocess
 import sys
 import tempfile
+import time
+import types
 import unittest
 
 
@@ -32,15 +38,15 @@ __unittest = 1
 class TestCaseBase(object):
 
     @classmethod
-    def get_test_suite(cls):
+    def get_test_cases(cls):
         raise NotImplementedError()
 
 
 class TestCase(TestCaseBase):
 
     @classmethod
-    def get_test_suite(cls):
-        suite = unittest.TestSuite()
+    def get_test_cases(cls):
+        tests = []
 
         def add_test(method_name):
             test_name = "%s.%s.%s" % (cls.__module__, cls.__name__, method_name)
@@ -52,14 +58,12 @@ class TestCase(TestCaseBase):
                     instance.check_for_pending_failures()
                 finally:
                     instance.tearDown()
-            def test_wrapper(results):
-                run_single_test(results, test_name, test_body)
-            suite.addTest(test_wrapper)
+            tests.append((test_name, test_body))
 
         for method_name, method in inspect.getmembers(cls):
             if method_name.startswith("test_"):
                 add_test(method_name)
-        return suite
+        return tests
 
     def setUp(self):
         self.__on_teardown = []
@@ -111,8 +115,8 @@ class TestCase(TestCaseBase):
 class CombinationTestCase(TestCase):
 
     @classmethod
-    def get_test_suite(cls):
-        suite = unittest.TestSuite()
+    def get_test_cases(cls):
+        tests = []
 
         def add_test(method_names):
             test_name = "%s.%s.%s" % (cls.__module__, cls.__name__,
@@ -126,13 +130,11 @@ class CombinationTestCase(TestCase):
                     instance.check_for_pending_failures()
                 finally:
                     instance.tearDown()
-            def test_wrapper(results):
-                run_single_test(results, test_name, test_body)
-            suite.addTest(test_wrapper)
+            tests.append((test_name, test_body))
 
         for method_names in cls.get_method_combinations():
             add_test(method_names)
-        return suite
+        return tests
 
     @classmethod
     def get_method_combinations(cls):
@@ -187,9 +189,99 @@ class TestCaseName(object):
         return None
 
 
+def get_fd_set():
+    return set(int(fd) for fd in os.listdir("/proc/self/fd"))
+
+
+def get_fd_description(fd):
+    try:
+        return os.readlink("/proc/self/fd/%i" % fd)
+    except OSError:
+        # get_fd_set() tends to return the FD for the directory opened
+        # to get the listing.
+        return "<readlink failed>"
+
+
+def check_for_fd_leak(func):
+    garbage_before = gc.garbage[:]
+    fds_before = get_fd_set()
+    func()
+    while True:
+        fds_after = get_fd_set()
+        fds_leaked = fds_after.difference(fds_before)
+        if len(fds_leaked) == 0:
+            break
+        # In the future it might be useful to record which tests
+        # created cycles that required collecting.
+        # Also, running a collection is relatively slow, so these leak
+        # checks could be made optional.
+        collected = gc.collect()
+        if collected == 0:
+            break
+    garbage_after = gc.garbage[:]
+    garbage_leaked = set(garbage_after).difference(garbage_before)
+    if len(garbage_leaked) > 0:
+        # This leak could be attributed to the wrong test if the test
+        # responsible does not trigger a collection but a later one
+        # does.
+        raise AssertionError(
+            "Unfreeable cycles leaked (found in gc.garbage): %r" %
+            garbage_leaked)
+    if len(fds_leaked) > 0:
+        descriptions = [(fd, get_fd_description(fd)) for fd in fds_leaked]
+        raise AssertionError("FDs leaked: %s" % descriptions)
+
+
+def strace_wrapper(func):
+    proc = subprocess.Popen(["strace", "-p", str(os.getpid())])
+    # There is a race condition here: we want to wait until strace has
+    # attached to this process.
+    time.sleep(0.1)
+    try:
+        func()
+    finally:
+        os.kill(proc.pid, signal.SIGTERM)
+
+
+def get_cases_from_unittest_class(cls):
+    tests = []
+
+    def add_test(method_name):
+        test_name = "%s.%s.%s" % (cls.__module__, cls.__name__, method_name)
+        def test_body():
+            instance = cls(method_name) # Argument not actually used
+            instance.setUp()
+            try:
+                getattr(instance, method_name)()
+            finally:
+                instance.tearDown()
+        tests.append((test_name, test_body))
+
+    for method_name in dir(cls):
+        if method_name.startswith("test"):
+            add_test(method_name)
+    return tests
+
+
+def make_test_suite_from_cases(tests):
+    suite = unittest.TestSuite()
+    def add_test(test_name, test_func):
+        def test_wrapper(results):
+            run_single_test(results, test_name,
+                            lambda: check_for_fd_leak(test_func))
+        suite.addTest(test_wrapper)
+    for test_name, test_func in tests:
+        add_test(test_name, test_func)
+    return suite
+
+
 def load_tests_from_module(module):
     suite = unittest.TestSuite()
     for name, obj in module.__dict__.iteritems():
         if isinstance(obj, type) and issubclass(obj, TestCaseBase):
-            suite.addTest(obj.get_test_suite())
+            suite.addTest(make_test_suite_from_cases(obj.get_test_cases()))
+        elif (isinstance(obj, (type, types.ClassType)) and
+              issubclass(obj, unittest.TestCase)):
+            suite.addTest(make_test_suite_from_cases(
+                    get_cases_from_unittest_class(obj)))
     return suite

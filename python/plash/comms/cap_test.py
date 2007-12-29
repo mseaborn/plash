@@ -251,6 +251,10 @@ class CapProtocolTestsMixin(object):
             assert isinstance(received_obj, self.base_class), received_obj
             self.check_remote_object(received_obj, object_id=index,
                                      single_use=False)
+        # Break "distributed" cycle:  The connection refers to the
+        # "exported" object, which refers to imported objects via
+        # "calls", which refer to the connection.
+        calls[:] = []
 
     def check_remote_object(self, obj, object_id, single_use):
         self.assertEquals(obj._object_id, object_id)
@@ -517,6 +521,9 @@ class CapProtocolEndToEndTests(SocketPairTestCase):
         self.assertEquals(calls,
                           ["call a", "call b", "call a", "call b",
                            "return b", "return a", "return b", "return a"])
+        # Break "distributed" cycle
+        a.other = None
+        b.other = None
 
     def test_return_continuation_dropped(self):
         calls = []

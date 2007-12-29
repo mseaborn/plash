@@ -76,8 +76,9 @@ def main(args):
     temp_maker = libc_test.TempMaker()
     try:
         for module in get_test_case_modules(search_paths):
-            if hasattr(module, "get_test_suite"):
-                suite.addTests(module.get_test_suite(module, temp_maker))
+            if hasattr(module, "get_test_cases"):
+                suite.addTests(testrunner.make_test_suite_from_cases(
+                        module.get_test_cases(module, temp_maker)))
             else:
                 suite.addTests(testrunner.load_tests_from_module(module))
         runner = unittest.TextTestRunner(verbosity=verbosity)

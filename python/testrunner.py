@@ -190,16 +190,14 @@ class TestCaseName(object):
 
 
 def get_fd_set():
-    return set(int(fd) for fd in os.listdir("/proc/self/fd"))
+    # os.listdir() will return the FD for the temporarily-opened
+    # directory, so we need to filter afterwards.
+    return set(int(fd) for fd in os.listdir("/proc/self/fd")
+               if os.path.exists("/proc/self/fd/%s" % fd))
 
 
 def get_fd_description(fd):
-    try:
-        return os.readlink("/proc/self/fd/%i" % fd)
-    except OSError:
-        # get_fd_set() tends to return the FD for the directory opened
-        # to get the listing.
-        return "<readlink failed>"
+    return os.readlink("/proc/self/fd/%i" % fd)
 
 
 def check_for_fd_leak(func):

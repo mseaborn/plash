@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import testrunner
 import unittest
 
 import plash.env
@@ -170,6 +171,7 @@ int main()
             f()
         finally:
             os.fchdir(start_dir)
+            os.close(start_dir)
 
     def test_native(self):
         def run():
@@ -1237,20 +1239,20 @@ int main(int argc, char **argv)
     return os.path.join(tmp_dir, "test-case")
 
 
-def get_test_suite(module, temp_maker):
+def get_test_cases(module, temp_maker):
     cases = [x for x in module.__dict__.values()
              if isinstance(x, type) and issubclass(x, LibcTest)]
     tmp_dir = temp_maker.make_temp_dir()
     executable = compile_into_one_executable(cases, tmp_dir)
-    suite = unittest.TestSuite()
+    tests = []
     for case in cases:
         class Case(case):
             def _compile_executable(self):
                 return executable
             main_args = [case.entry]
         Case.__name__ = case.__name__
-        suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(Case))
-    return suite
+        tests.extend(testrunner.get_cases_from_unittest_class(Case))
+    return tests
 
 def run_tests(suite):
     runner = unittest.TextTestRunner(verbosity=1)

@@ -77,13 +77,16 @@ class ProcessSetup(object):
     """Processes the command line arguments accepted by pola-run.
     Grant a process a subset of the caller's authority."""
 
-    def __init__(self, proc):
+    def __init__(self, proc, parent_environ=None):
         self.proc = proc
         self.caller_root = None
         self.cwd = None
         self.namespace_empty = True
         self.powerbox = False
         self.pet_name = None
+        if parent_environ is None:
+            parent_environ = os.environ
+        self._parent_environ = parent_environ
 
     # -f<flags> <filename>
     def bind_at_same(self, flags_arg, args):
@@ -182,17 +185,38 @@ class ProcessSetup(object):
         self.proc.fds[fd] = plash_core.wrap_fd(os.dup(fd))
 
     # --x11: Grant access to X Window System displays
+    # TODO: Pass through only one Xauthority entry, instead of passing
+    # them all.  Grant only one X11-unix socket, instead of granting
+    # them all.
     def grant_x11_access(self, args):
-        self.proc.get_namespace().resolve_populate(
-            self.caller_root, "/tmp/.X11-unix/",
-            flags=ns.FS_FOLLOW_SYMLINKS | ns.FS_OBJECT_RW)
-        if "DISPLAY" in os.environ:
-            self.proc.env["DISPLAY"] = os.environ["DISPLAY"]
-        if "XAUTHORITY" in os.environ:
-            self.proc.env["XAUTHORITY"] = os.environ["XAUTHORITY"]
+        # Note that /tmp/.X11-unix might not exist if the system is
+        # using only TCP sockets or does not even use X.
+        # TODO: don't use FS_OBJECT_RW, because that potentially
+        # allows directory entries to be added and removed.  We only
+        # need to grant the ability to connect to sockets, which
+        # FS_READ_ONLY blocks.
+        try:
             self.proc.get_namespace().resolve_populate(
-                self.caller_root, os.environ['XAUTHORITY'],
-                flags=ns.FS_FOLLOW_SYMLINKS)
+                self.caller_root, "/tmp/.X11-unix/",
+                flags=ns.FS_FOLLOW_SYMLINKS | ns.FS_OBJECT_RW)
+        except plash.namespace.ReturnUnmarshalError:
+            pass
+        if "DISPLAY" in self._parent_environ:
+            self.proc.env["DISPLAY"] = self._parent_environ["DISPLAY"]
+
+        xauthority_file = self._parent_environ.get("XAUTHORITY")
+        if xauthority_file is not None:
+            self.proc.env["XAUTHORITY"] = xauthority_file
+        if xauthority_file is None and "HOME" in self._parent_environ:
+            xauthority_file = os.path.join(self._parent_environ["HOME"],
+                                           ".Xauthority")
+        if xauthority_file is not None:
+            try:
+                self.proc.get_namespace().resolve_populate(
+                    self.caller_root, xauthority_file,
+                    flags=ns.FS_FOLLOW_SYMLINKS)
+            except plash.namespace.ReturnUnmarshalError:
+                pass
 
     def grant_network_access(self, args):
         self.handle_args(

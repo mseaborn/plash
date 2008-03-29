@@ -18,6 +18,7 @@
 # USA.
 
 import os
+import subprocess
 
 
 def ensure_dir_exists(dir_path):
@@ -25,8 +26,15 @@ def ensure_dir_exists(dir_path):
         os.mkdir(dir_path)
     return dir_path
 
+
 def get_arch():
-    return "i386"
+    proc = subprocess.Popen(["dpkg-architecture", "-qDEB_HOST_ARCH"],
+                            stdout=subprocess.PIPE)
+    stdout, stderr = proc.communicate()
+    rc = proc.wait()
+    assert rc == 0, rc
+    return stdout.strip()
+
 
 def get_cache_dir():
     if "PLASH_PKG_CACHE_DIR" in os.environ:

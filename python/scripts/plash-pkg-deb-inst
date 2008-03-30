@@ -30,8 +30,8 @@ import os
 import sys
 
 import plash_core
-import plash.namespace as ns
 import plash.mainloop
+import plash.pola_run_args
 import plash.process
 
 import plash_pkg.config
@@ -50,14 +50,29 @@ STDOUT_FILENO = 1
 STDERR_FILENO = 2
 
 
+class Promise(object):
+
+    def __init__(self):
+        self.resolved = False
+        self.val = None
+
+    def resolve(self, val):
+        self.resolved = True
+        self.val = val
+
+    def sync(self, event_loop):
+        while not self.resolved:
+            event_loop.once()
+        return self.val
+
+
 class InteractiveMode(object):
 
     def __init__(self, proc, setup):
         self._fd_forwarders = setup.grant_proxy_terminal_access()
 
-    def finished(self):
-        for forwarder in self._fd_forwarders:
-            forwarder.flush()
+    def get_forwarders(self):
+        return self._fd_forwarders
 
 
 class NoninteractiveMode(object):
@@ -70,8 +85,8 @@ class NoninteractiveMode(object):
         proc.fds[STDOUT_FILENO] = output_fd
         proc.fds[STDERR_FILENO] = output_fd
 
-    def finished(self):
-        self._forwarder.flush()
+    def get_forwarders(self):
+        return [self._forwarder]
 
 
 def init_package(unpack_cache, app_dir, pkg, control_script, args):
@@ -93,14 +108,15 @@ def init_package(unpack_cache, app_dir, pkg, control_script, args):
         proc.args = args
         helper = NoninteractiveMode(proc, setup)
         pid = proc.spawn()
-        reason_to_run = plash.mainloop.ReasonToRun()
-        def child_exit_callback(pid_unused, status):
-            reason_to_run.dispose()
-            helper.finished()
-        gobject.child_watch_add(pid, child_exit_callback)
+        rc_promise = Promise()
+        plash.pola_run_args.on_flushed_child_exit(pid, helper.get_forwarders(),
+                                                  rc_promise.resolve)
+        rc = rc_promise.sync(plash.mainloop.event_loop)
         # TODO: give error if process's exit status is non-zero
-        # TODO: ensure we stop running server when child process exits
-        plash.mainloop.run_server()
+        if rc != 0:
+            sys.stdout.write("Process exited with return code %i\n" % rc)
+            sys.stdout.flush()
+
 
 def init_packages(unpack_cache, app_dir):
     fh = open(os.path.join(app_dir, "package-list"), "r")

@@ -325,18 +325,41 @@ def return_status_and_fork_to_background(exit_status):
         os._exit(exit_status)
 
 
-def flush_and_return_status_on_child_exit(pid, fd_forwarders):
+def flush_multiple_forwarders(fd_forwarders, callback):
+    # It might be better to implement this using promises.
+    counter = [len(fd_forwarders)]
+    def on_flush():
+        counter[0] -= 1
+        if counter[0] == 0:
+            callback()
+
+    for forwarder in fd_forwarders:
+        forwarder.flush(on_flush)
+
+
+def convert_wait_status(status):
+    if os.WIFEXITED(status):
+        return os.WEXITSTATUS(status)
+    elif os.WIFSIGNALED(status):
+        return 101
+    else:
+        return 102
+
+
+def on_flushed_child_exit(pid, fd_forwarders, callback):
     reason_to_run = plash.mainloop.ReasonToRun()
 
-    def callback(pid_unused, status):
+    def exit_callback(pid_unused, status):
         reason_to_run.dispose()
-        for forwarder in fd_forwarders:
-            forwarder.flush()
-        if os.WIFEXITED(status):
-            return_status_and_fork_to_background(os.WEXITSTATUS(status))
-        elif os.WIFSIGNALED(status):
-            return_status_and_fork_to_background(101)
-        else:
-            return_status_and_fork_to_background(102)
+        def on_flush():
+            callback(status)
+        flush_multiple_forwarders(fd_forwarders, on_flush)
 
-    gobject.child_watch_add(pid, callback)
+    gobject.child_watch_add(pid, exit_callback)
+
+
+def flush_and_return_status_on_child_exit(pid, fd_forwarders):
+    def callback(status):
+        return_status_and_fork_to_background(convert_wait_status(status))
+
+    on_flushed_child_exit(pid, fd_forwarders, callback)

@@ -101,13 +101,13 @@ def fd_is_readable(fd):
 class FDBufferedWriter(object):
 
     def __init__(self, event_loop, fd, on_buffered_size_changed=lambda: None,
-                 on_unwritable=lambda: None):
+                 on_unwritable=lambda: None, on_write=lambda size: None):
         self._fd = fd
         self._on_buffered_size_changed = on_buffered_size_changed
         self._on_unwritable = on_unwritable
+        self._on_write = on_write
         self._buf = ""
         self._eof_requested = False
-        self._connection_broken = False
         self._watch = event_loop.make_watch_with_error_handler(
             fd, self._get_flags, self._handler, self._error_handler)
         if not fd_is_writable(fd.fileno()):
@@ -132,12 +132,12 @@ class FDBufferedWriter(object):
             self._watch.update_flags()
             self._check_for_disconnect()
             self._on_buffered_size_changed()
+            self._on_write(written)
 
     def _error_handler(self, flags):
         # An error occurred, so no more data can be written.
         self._fd = None
         self._buf = ""
-        self._connection_broken = True
         self._watch.remove_watch()
         self._on_unwritable()
         self._on_buffered_size_changed()
@@ -150,7 +150,7 @@ class FDBufferedWriter(object):
 
     def write(self, data):
         # Should this raise an exception if called after end_of_stream()?
-        if not self._eof_requested and not self._connection_broken:
+        if not self._eof_requested and self._fd is not None:
             # This could attempt to write the data to the FD in
             # non-blocking mode, instead of waiting until the next
             # event loop iteration.
@@ -167,11 +167,10 @@ class FDBufferedWriter(object):
     def buffered_size(self):
         return len(self._buf)
 
-    def write_pending(self):
-        while (self._fd is not None and
-               len(self._buf) > 0 and
-               poll_fd(self._fd) & select.POLLOUT != 0):
-            self._handler(0)
+    def is_finished_writing(self):
+        # Writing is finished if end_of_stream() was called and all
+        # buffered data was written, or if an error occurred.
+        return self._fd is None
 
 
 class FDReader(object):
@@ -182,7 +181,6 @@ class FDReader(object):
         self._callback = callback
         self._eof_callback = eof_callback
         self._get_buffer_size = get_buffer_size
-        # TODO: extend to do flow control
         self._watch = event_loop.make_watch_with_error_handler(
             fd, self._get_poll_flags, self._read_data, self._error_handler)
         if not fd_is_readable(fd.fileno()):
@@ -245,11 +243,17 @@ class FDForwarder(object):
         self._writer = FDBufferedWriter(
             event_loop, output_fd,
             on_buffered_size_changed=self._on_buffered_size_changed,
-            on_unwritable=self._on_unwritable)
+            on_unwritable=self._on_unwritable,
+            on_write=self._on_write)
         self._reader = FDReader(event_loop, input_fd,
                                 self._writer.write,
                                 self._writer.end_of_stream,
                                 get_buffer_size=self._get_read_size)
+        # We track when the writer has written past certain points.
+        # The counter could be implemented in FDBufferedWriter, but
+        # FDForwarder is currently the only thing that needs this.
+        self._bytes_written = 0
+        self._sync_handlers = []
 
     def _on_buffered_size_changed(self):
         self._reader.update_buffer_size()
@@ -259,10 +263,33 @@ class FDForwarder(object):
 
     def _on_unwritable(self):
         self._reader.finish()
+        sync_handlers = self._sync_handlers
+        self._sync_handlers = []
+        for bytes_read, synced_callback in sync_handlers:
+            synced_callback()
 
-    def flush(self):
+    def _on_write(self, byte_count):
+        self._bytes_written += byte_count
+        self._check_for_completed_flushes()
+
+    def _check_for_completed_flushes(self):
+        while len(self._sync_handlers) > 0:
+            bytes_read, synced_callback = self._sync_handlers[0]
+            if self._bytes_written >= bytes_read:
+                self._sync_handlers.pop(0)
+                # Might consider calling this using call_later.
+                synced_callback()
+            else:
+                break
+
+    def _call_back_when_writes_synced(self, callback):
+        bytes_read = self._bytes_written + self._writer.buffered_size()
+        self._sync_handlers.append((bytes_read, callback))
+        self._check_for_completed_flushes()
+
+    def flush(self, callback):
         self._reader.read_pending()
-        self._writer.write_pending()
+        self._call_back_when_writes_synced(callback)
 
 
 class FDBufferedReader(object):

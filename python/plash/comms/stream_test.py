@@ -17,6 +17,7 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 # USA.
 
+import errno
 import fcntl
 import os
 import select
@@ -121,9 +122,10 @@ class FDBufferedWriterTest(plash.comms.event_loop_test.EventLoopTestCase):
         writer = stream.FDBufferedWriter(loop, pipe_write)
         writer.write("hello")
         del pipe_read
-        self.assertEquals(writer._connection_broken, False)
+        self.assertEquals(writer.is_finished_writing(), False)
         loop.once_safely()
-        self.assertEquals(writer._connection_broken, True)
+        self.assertEquals(writer.is_finished_writing(), True)
+        self.assertFalse(loop.is_listening())
 
     def test_writing_end_of_stream_with_data_buffered(self):
         loop = self.make_event_loop()
@@ -186,6 +188,30 @@ class FDBufferedWriterTest(plash.comms.event_loop_test.EventLoopTestCase):
         self.assertTrue(writer._watch.destroyed)
         self.assertEquals(got, ["broken"])
         self.assertFalse(loop.is_listening())
+
+    def test_on_finished_callback(self):
+        got = []
+        def on_finished():
+            got.append("finish")
+
+        loop = self.make_event_loop()
+        pipe_read, pipe_write = stream.make_pipe()
+        writer = stream.FDBufferedWriter(loop, pipe_write,
+                                         on_unwritable=on_finished)
+        writer.write("hello")
+        loop.once_safely()
+        self.assertEquals(writer.buffered_size(), 0)
+        # Writer is not finished merely because it has no data buffered.
+        self.assertEquals(got, [])
+        writer.write("world")
+        writer.end_of_stream()
+        # Nor is the writer finished because end_of_stream() has been called.
+        self.assertEquals(got, [])
+        loop.once_safely()
+        # Writer is finished once end_of_stream() has been called and
+        # either all buffered data has been written or an error was
+        # reached.
+        self.assertEquals(got, ["finish"])
 
 
 class FDReaderTest(plash.comms.event_loop_test.EventLoopTestCase):
@@ -285,6 +311,27 @@ class FDReaderTest(plash.comms.event_loop_test.EventLoopTestCase):
         loop.once_safely()
         self.assertEquals(got, ["he", "llo world", "EOF"])
         self.assertTrue(not loop.is_listening())
+
+    def test_aborting_reading(self):
+        got = []
+        loop = self.make_event_loop()
+        pipe_read, pipe_write = stream.socketpair()
+        os.write(pipe_write.fileno(), "hello world")
+        reader = stream.FDReader(loop, pipe_read,
+                                 lambda data: got.append(data),
+                                 lambda: got.append("EOF"))
+        del pipe_read
+        # Calling finish() stops the reader from reading any more.
+        reader.finish()
+        self.assertFalse(loop.is_listening())
+        self.assertEquals(got, ["EOF"])
+        # The reader should drop its FD so the pipe should now be broken.
+        try:
+            os.write(pipe_write.fileno(), "hello world")
+        except OSError, exn:
+            self.assertEquals(exn.errno, errno.EPIPE)
+        else:
+            raise AssertionError("Did not raise EPIPE")
 
     def test_reading_from_unreadable_fd(self):
         got = []
@@ -388,14 +435,74 @@ class FDForwardTest(plash.comms.event_loop_test.EventLoopTestCase):
         loop.run_awhile()
         self.assertEquals(poll_fd(pipe_write), select.POLLOUT)
 
-    def test_flushing(self):
+    def test_flushing_simple_case(self):
         loop = self.make_event_loop()
         pipe_read, pipe_write, forwarder = self._make_forwarded_pipe(loop)
         os.write(pipe_write.fileno(), "hello world")
-        forwarder.flush()
+        self.assertEquals(forwarder._writer.buffered_size(), 0)
+        got = []
+        def on_flushed():
+            got.append("flushed")
+        forwarder.flush(on_flushed)
+        # Pending data gets read immediately.
+        self.assertEquals(forwarder._writer.buffered_size(), 11)
+        # Buts it's not until we go around the event loop that it's written.
+        loop.once_safely()
         fcntl.fcntl(pipe_read.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
         data = os.read(pipe_read.fileno(), 1000)
         self.assertEquals(data, "hello world")
+        self.assertEquals(got, ["flushed"])
+
+    def test_flushing_when_unable_to_write(self):
+        pipe_size = find_pipe_buffer_size()
+        data_written = "h" * pipe_size
+        loop = self.make_event_loop()
+        pipe_read, pipe_write, forwarder = self._make_forwarded_pipe(loop)
+        os.write(pipe_write.fileno(), data_written)
+        # Forwarder will forward some but not all the data we just wrote.
+        loop.run_awhile()
+
+        # Flushing can read all pending data, but it can't always
+        # write all the buffered data.
+        got = []
+        def on_flushed():
+            got.append("flushed")
+        forwarder.flush(on_flushed)
+        fcntl.fcntl(pipe_read.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
+        data_read = os.read(pipe_read.fileno(), pipe_size)
+        remaining = forwarder._writer.buffered_size()
+        assert remaining > 0, remaining
+        self.assertEquals(len(data_read) + remaining, len(data_written))
+        self.assertEquals(got, [])
+
+        # The data should get completely written and we should get
+        # notified.
+        loop.once_safely()
+        data_read += os.read(pipe_read.fileno(), pipe_size)
+        self.assertEquals(forwarder._writer.buffered_size(), 0)
+        self.assertEquals(len(data_read), len(data_written))
+        self.assertEquals(data_read, data_written)
+        self.assertEquals(got, ["flushed"])
+
+        # Note that the forwarder still works.  flush() does not revoke it.
+        os.write(pipe_write.fileno(), "hello")
+        loop.run_awhile()
+        self.assertEquals(os.read(pipe_read.fileno(), pipe_size), "hello")
+
+    def test_flushing_with_broken_write_stream(self):
+        loop = self.make_event_loop()
+        pipe_read, pipe_write, forwarder = self._make_forwarded_pipe(loop)
+        os.write(pipe_write.fileno(), "hello world")
+        got = []
+        def on_flushed():
+            got.append("flushed")
+        # The flush should count as completed if the forwarder gets an
+        # error writing to its write stream, e.g. because the pipe is
+        # broken.
+        del pipe_read
+        forwarder.flush(on_flushed)
+        loop.once_safely()
+        self.assertEquals(got, ["flushed"])
 
     def test_forwarding_from_unreadable_fd(self):
         loop = self.make_event_loop()

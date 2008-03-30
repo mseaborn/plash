@@ -49,13 +49,10 @@ class TestEnvironment(unittest.TestCase):
 
     def setUp(self):
         self.tmp_dirs = []
-        self.start_cwd = os.getcwd()
 
     def tearDown(self):
         for tmp_dir in self.tmp_dirs:
             shutil.rmtree(tmp_dir)
-        # Restoring cwd only needed while FsObjReal corrupts cwd
-        os.chdir(self.start_cwd)
 
     def make_temp_dir(self):
         dir_path = tempfile.mkdtemp(prefix="plash-test")

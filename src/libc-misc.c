@@ -366,7 +366,7 @@ int new_close(int fd)
     fds_slot_clear(fd);
     rc = kernel_close(fd);
   }
-  plash_plash_unlock();
+  plash_libc_unlock();
   return rc;
 }
 

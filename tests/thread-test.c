@@ -38,12 +38,16 @@
    directories it created.  This way, they can be run repeatedly. */
 
 
+pthread_mutex_t counter_lock = PTHREAD_ADAPTIVE_MUTEX_INITIALIZER_NP;
 int counter = 0;
 
 char *alloc_filename(const char *base)
 {
+  pthread_mutex_lock(&counter_lock);
+  int number = counter++;
+  pthread_mutex_unlock(&counter_lock);
   char *str;
-  int rc = asprintf(&str, "%s-%i", base, counter++);
+  int rc = asprintf(&str, "%s-%i", base, number);
   assert(rc >= 0);
   return str;
 }

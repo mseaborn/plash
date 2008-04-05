@@ -192,13 +192,15 @@ int libc_get_fs_op(cap_t *result)
 
 int req_and_reply(region_t r, seqt_t msg, seqf_t *reply)
 {
-  struct cap_args result;
-  if(plash_init() < 0) return -1;
-  if(!fs_server) { __set_errno(ENOSYS); return -1; }
-
   plash_libc_lock();
+  cap_t fs_op_server;
+  if(libc_get_fs_op(&fs_op_server) < 0) {
+    plash_libc_unlock();
+    return -1;
+  }
 
-  cap_call(fs_server, r,
+  struct cap_args result;
+  cap_call(fs_op_server, r,
 	   cap_args_make(msg, caps_empty, fds_empty),
 	   &result);
   caps_free(result.caps);
@@ -212,13 +214,15 @@ int req_and_reply(region_t r, seqt_t msg, seqf_t *reply)
 int req_and_reply_with_fds2(region_t r, seqt_t msg, fds_t fds,
 			    seqf_t *reply, fds_t *reply_fds)
 {
-  struct cap_args result;
-  if(plash_init() < 0) return -1;
-  if(!fs_server) { __set_errno(ENOSYS); return -1; }
-
   plash_libc_lock();
+  cap_t fs_op_server;
+  if(libc_get_fs_op(&fs_op_server) < 0) {
+    plash_libc_unlock();
+    return -1;
+  }
 
-  cap_call(fs_server, r,
+  struct cap_args result;
+  cap_call(fs_op_server, r,
 	   cap_args_make(msg, caps_empty, fds),
 	   &result);
   caps_free(result.caps);

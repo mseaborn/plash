@@ -343,8 +343,10 @@ export(new_close, __close_nocancel);
 
 int new_close(int fd)
 {
+  int rc;
   log_msg(MOD_MSG "close\n");
   log_fd(fd, "close");
+  plash_libc_lock();
   /* Make sure that comm_sock has been initialised */
   plash_init();
 
@@ -358,10 +360,14 @@ int new_close(int fd)
     if(libc_debug) fprintf(stderr, "libc: close(): refused to clobber fd %i\n", fd);
 #endif
     __set_errno(EBADF);
-    return -1;
+    rc = -1;
   }
-  fds_slot_clear(fd);
-  return kernel_close(fd);
+  else {
+    fds_slot_clear(fd);
+    rc = kernel_close(fd);
+  }
+  plash_plash_unlock();
+  return rc;
 }
 
 
@@ -376,6 +382,7 @@ int new_dup2(int source_fd, int dest_fd)
   log_msg(MOD_MSG "dup2\n");
   log_fd(source_fd, "dup2 source");
   log_fd(dest_fd, "dup2 dest");
+  plash_libc_lock();
   /* Make sure that comm_sock has been initialised */
   plash_init();
 
@@ -389,16 +396,18 @@ int new_dup2(int source_fd, int dest_fd)
     if(libc_debug) fprintf(stderr, "libc: dup2(): refused to clobber fd %i\n", dest_fd);
 #endif
     __set_errno(EINVAL);
-    return -1;
+    rc = -1;
   }
-  
-  rc = kernel_dup2(source_fd, dest_fd);
-  if(rc >= 0) {
-    /* Make sure our entry for the destination FD is removed. */
-    fds_slot_clear(dest_fd);
-    
-    /* To do: copy the g_fds entry from source_fd to dest_fd. */
+  else {
+    rc = kernel_dup2(source_fd, dest_fd);
+    if(rc >= 0) {
+      /* Make sure our entry for the destination FD is removed. */
+      fds_slot_clear(dest_fd);
+
+      /* TODO: copy the g_fds entry from source_fd to dest_fd. */
+    }
   }
+  plash_libc_unlock();
   return rc;
 }
 

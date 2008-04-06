@@ -47,6 +47,60 @@ int new_execve(const char *cmd_filename, char *const argv[],
 	       char *const envp[]);
 
 
+static int clone_connection(void)
+{
+  int fd = -1;
+  region_t r = region_make();
+
+  plash_libc_lock();
+  if(plash_init() < 0)
+    goto exit;
+  if(!fs_server || !conn_maker) {
+    __set_errno(ENOSYS);
+    goto exit;
+  }
+
+  struct cap_args result;
+  cap_t new_fs_server;
+  cap_call(fs_server, r,
+	   cap_args_d(mk_int(r, METHOD_FSOP_COPY)),
+	   &result);
+  if(!pl_unpack(r, result, METHOD_R_CAP, "c", &new_fs_server)) {
+    __set_errno(ENOSYS);
+    goto exit;
+  }
+
+  cap_t *a = region_alloc(r, process_caps.size * sizeof(cap_t));
+  seqf_t list = seqf_string(process_caps_names);
+  seqf_t elt;
+  int i = 0;
+  while(parse_cap_list(list, &elt, &list)) {
+    assert(i < process_caps.size);
+    if(seqf_equal(elt, seqf_string("fs_op"))) {
+      a[i] = new_fs_server;
+    }
+    else {
+      a[i] = process_caps.caps[i];
+    }
+    i++;
+  }
+  assert(i == process_caps.size);
+
+  cap_t *imports; /* Contents not used */
+  fd = conn_maker->vtable->make_conn(conn_maker, r,
+				     cap_seq_make(a, process_caps.size),
+				     0 /* import_count */, &imports);
+  filesys_obj_free(new_fs_server);
+  if(fd < 0) {
+    __set_errno(ENOSYS);
+  }
+ exit:
+  plash_libc_unlock();
+  region_free(r);
+  return fd;
+}
+
+
 export_weak_alias(new_fork, fork);
 export_weak_alias(new_fork, __fork);
 export_weak_alias(new_fork, vfork);
@@ -62,86 +116,29 @@ export(new_fork, __GI___vfork);
    chosen the latter. */
 pid_t new_fork(void)
 {
-  region_t r;
-
-  cap_t new_fs_server;
-  int fd;
-  struct cap_args result;
-  
-  if(plash_init() < 0) return -1;
-  if(!fs_server || !conn_maker) { __set_errno(ENOSYS); return -1; }
-
-  r = region_make();
-  cap_call(fs_server, r,
-	   cap_args_d(mk_int(r, METHOD_FSOP_COPY)),
-	   &result);
-  if(!pl_unpack(r, result, METHOD_R_CAP, "c", &new_fs_server)) {
-    region_free(r);
-    __set_errno(ENOSYS);
+  int fd = clone_connection();
+  if(fd < 0)
     return -1;
-  }
 
-  {
-    cap_t *a = region_alloc(r, process_caps.size * sizeof(cap_t));
-    cap_t *imports; /* Contents not used */
-    seqf_t list = seqf_string(process_caps_names);
-    seqf_t elt;
-    int i = 0;
-    while(parse_cap_list(list, &elt, &list)) {
-      assert(i < process_caps.size);
-      if(seqf_equal(elt, seqf_string("fs_op"))) {
-	a[i] = new_fs_server;
-      }
-      else {
-	a[i] = process_caps.caps[i];
-      }
-      i++;
-    }
-    assert(i == process_caps.size);
-
-    fd = conn_maker->vtable->make_conn(conn_maker, r,
-				       cap_seq_make(a, process_caps.size),
-				       0 /* import_count */, &imports);
-    filesys_obj_free(new_fs_server);
-    if(fd < 0) {
-      region_free(r);
-      __set_errno(ENOSYS);
-      return -1;
+  pid_t pid = kernel_fork();
+  if(pid == 0) {
+    /* Now running in subprocess.  Note that no other threads are
+       running at this point. */
+    int comm_sock_saved = comm_sock;
+    /* This sets comm_sock to -1.  We save comm_sock and restore it. */
+    plash_libc_reset_connection();
+    comm_sock = comm_sock_saved;
+    
+    if(kernel_dup2(fd, comm_sock) < 0) {
+      if(libc_debug) fprintf(stderr, "libc: fork(): dup2() failed\n");
+      /* Fail quietly at this point. */
+      unsetenv("PLASH_COMM_FD");
     }
   }
-
-  {
-    pid_t pid;
-    region_free(r);
-    pid = kernel_fork();
-    if(pid == 0) {
-      int comm_sock_saved = comm_sock;
-      /* This sets comm_sock to -1.  We save comm_sock and restore it. */
-      plash_libc_reset_connection();
-      comm_sock = comm_sock_saved;
-      
-      if(kernel_dup2(fd, comm_sock) < 0) {
-	if(libc_debug) fprintf(stderr, "libc: fork(): dup2() failed\n");
-	/* Fail quietly at this point. */
-	unsetenv("PLASH_COMM_FD");
-      }
-      kernel_close(fd);
-      /* This may not work in some cases, if a program empties
-	 out the environment */
-      /* However, it's not needed as we keep the indexes the same */
-      /* setenv("PLASH_CAPS", "fs_op;conn_maker;fs_op_maker", 1); */
-      return 0;
-    }
-    else if(pid < 0) {
-      kernel_close(fd);
-      return -1;
-    }
-    else {
-      kernel_close(fd);
-      return pid;
-    }
-  }
+  kernel_close(fd);
+  return pid;
 }
+
 
 static int exec_object(cap_t obj, int argc, const char **argv,
 		       const char **envp)

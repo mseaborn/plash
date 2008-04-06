@@ -321,10 +321,7 @@ export(new_execve, __execve);
    bytes waiting on the socket to read, nor should we have buffered any
    unprocessed bytes from the socket, because the server is only supposed
    to send us replies. */
-/* Based on sysdeps/unix/sysv/linux/execve.c */
 /* The const qualifiers glibc uses for execve are somewhat stupid. */
-extern void __pthread_kill_other_threads_np (void);
-weak_extern (__pthread_kill_other_threads_np)
 int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
 {
   region_t r = region_make();
@@ -345,6 +342,7 @@ int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
     }
   }
 
+  plash_libc_lock();
   if(plash_init() < 0) { __set_errno(ENOSYS); goto error; }
   if(!fs_server) {
     if(libc_debug) fprintf(stderr, "libc: execve: fs_server not defined\n");
@@ -392,10 +390,10 @@ int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
     m_end(&ok, &msg);
     if(ok && result.fds.count == 0 && result.caps.size == 1) {
       cap_t exec_obj = result.caps.caps[0];
-      region_free(r);
-      return exec_object(exec_obj, argc,
-			 (const char **) argv,
-			 (const char **) envp);
+      exec_object(exec_obj, argc,
+		  (const char **) argv,
+		  (const char **) envp);
+      goto error;
     }
   }
   {
@@ -414,6 +412,7 @@ int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
   if(libc_debug) fprintf(stderr, "libc: execve: bad response\n");
   __set_errno(ENOSYS);
  error:
+  plash_libc_unlock();
   region_free(r);
   return -1;
 }

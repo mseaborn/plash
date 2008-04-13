@@ -13,7 +13,10 @@ function link_source
 function configure_glibc
 {
   mkdir -p glibc-build
-  (cd glibc-source && autoconf) || false
+  # TODO: create an autogen.sh script for glibc and use that.
+  # "autoconf" only regenerates the top-level configure script,
+  # not the configure fragments at other levels.
+  # (cd glibc-source && autoconf) || false
   (cd glibc-build &&
    ../glibc-source/configure \
     --host=$(dpkg-architecture -qDEB_HOST_GNU_TYPE) \

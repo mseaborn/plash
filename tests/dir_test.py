@@ -332,6 +332,9 @@ class TestRealDir(TestDirMixin, unittest.TestCase):
         stat1 = dir1.dir_traverse("file").fsobj_stat()
         dir1.dir_rename("file", dir2, "dest")
         stat2 = dir2.dir_traverse("dest").fsobj_stat()
+        # Don't compare ctime, because it gets updated on a rename.
+        del stat1["st_ctime"]
+        del stat2["st_ctime"]
         self.assertEquals(stat1, stat2)
 
 

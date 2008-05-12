@@ -547,10 +547,6 @@ int handle_arguments(region_t r, struct state *state,
   return 0;
 }
 
-/* Use the LD_LIBRARY_PATH environment variable rather than the
-   --library-path argument to ld-linux.so.2. */
-static int ld_library_env = 1;
-
 static void args_to_exec_elf_program
   (region_t r, struct state *state, const char *executable_filename,
    int argc, const char **argv,
@@ -578,17 +574,18 @@ static void args_to_exec_elf_program
       *cmd_out = PLASH_SETUID_BIN_INSTALL "/run-as-anonymous";
     }
     if(debug) argv2[i++] = "--debug";
-    /* NB. When running inside the Plash environment, run-as-anonymous
-       is statically linked and so won't unset LD_LIBRARY_PATH, so we
-       don't need to restore it. */
-    if(ld_library_env && !under_plash) {
-      char *path = getenv("LD_LIBRARY_PATH");
+    const char *ld_library_path = getenv("LD_LIBRARY_PATH");
+    if(!under_plash) {
+      if(ld_library_path)
+	ld_library_path = flatten_str(r, mk_printf(r, "%s:%s", LIB_INSTALL,
+						   ld_library_path));
+      else
+	ld_library_path = LIB_INSTALL;
+    }
+    if(ld_library_path) {
       argv2[i++] = "-s";
-      argv2[i++] =
-	flatten_str(r, cat2(r, mk_string(r, "LD_LIBRARY_PATH=" LIB_INSTALL),
-			    path ? cat2(r, mk_string(r, ":"),
-					mk_string(r, path))
-			         : seqt_empty));
+      argv2[i++] = flatten_str(r, mk_printf(r, "LD_LIBRARY_PATH=%s",
+					    ld_library_path));
     }
     /* Make sure LD_PRELOAD is copied through.  It might have been set in
        our current environment using the --env option. */
@@ -601,10 +598,6 @@ static void args_to_exec_elf_program
       }
     }
     argv2[i++] = "/special/ld-linux.so.2";
-    if(!ld_library_env) {
-      argv2[i++] = "--library-path";
-      argv2[i++] = PLASH_LD_LIBRARY_PATH;
-    }
   }
   else {
     *cmd_out = sandbox_prog;

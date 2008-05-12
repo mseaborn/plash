@@ -87,35 +87,6 @@ struct dir_stack *copy_cwd(struct filesys_obj *root_dir)
 }
 
 
-/* Saves the current working directory so that we can restore it
-   later, because filesysobj-real.c will change the cwd arbitrarily.
-   This will not be necessary once we change filesysobj-real.c to
-   restore the cwd for us. */
-
-static int saved_cwd = -1; /* File descriptor, or -1 */
-
-static int cwd_save()
-{
-  assert(saved_cwd == -1);
-  saved_cwd = open(".", O_RDONLY | O_DIRECTORY);
-  if(saved_cwd < 0) { return -1; }
-  return 0;
-}
-
-static int cwd_restore()
-{
-  assert(saved_cwd >= 0);
-  return fchdir(saved_cwd);
-}
-
-static void cwd_discard()
-{
-  assert(saved_cwd >= 0);
-  close(saved_cwd);
-  saved_cwd = -1;
-}
-
-
 struct arg_list {
   const char *str;
   struct arg_list *prev;
@@ -486,10 +457,6 @@ int handle_arguments(region_t r, struct state *state,
 	return 1;
       }
       filename = argv[i++];
-      if(cwd_restore() < 0) {
-	perror(NAME_MSG "cwd_restore");
-	return 1;
-      }
       log_fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0666);
       if(log_fd < 0) {
 	fprintf(stderr, NAME_MSG _("Error opening \"%s\": %s\n"),
@@ -650,11 +617,6 @@ int main(int argc, char **argv)
   
   struct state state;
   init_state(&state);
-
-  if(cwd_save() < 0) {
-    perror(NAME_MSG "cwd_save");
-    return 1;
-  }
 
   /* Don't call gtk_init(): don't open an X11 connection at this stage,
      because we don't know if we'll need one and X11 might not be
@@ -845,8 +807,6 @@ int main(int argc, char **argv)
       if(state.server_as_parent ? pid > 0 : pid == 0) {
 	close(socks[0]);
 
-	cwd_discard();
-	
 	cap_make_connection(r, socks[1], cap_seq_make(caps, cap_count),
 			    0, "to-client");
 	caps_free(cap_seq_make(caps, cap_count));
@@ -875,13 +835,6 @@ int main(int argc, char **argv)
 				 args_count2, args_array2,
 				 &cmd, &args_count2, &args_array2,
 				 state.debug);
-
-	/* Restoring the cwd here is only needed for test cases using
-	   the LD_PRELOADed library.  Otherwise, the cwd gets reset by
-	   run-as-anonymous or is ignored. */
-	cwd_restore();
-	cwd_discard();
-
 	if(under_plash) {
 	  __typeof__(plash_libc_kernel_execve) *kernel_execve =
 	    dlsym(RTLD_NEXT, "plash_libc_kernel_execve");

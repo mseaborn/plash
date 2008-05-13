@@ -66,7 +66,9 @@
    the kernel system call, while glibc provides no setuid32() symbol.
    In dietlibc, setuid() is the 16-bit syscall, and setuid32() is the
    32-bit syscall. */
-#ifdef USE_DIETLIBC
+/* However, x86-64 only has the new 32-bit syscall, and dietlibc doesn't
+   define setuid32() there.  That omission might be a dietlibc bug. */
+#if defined(__dietlibc__) && !defined(__x86_64__)
 #define setuid setuid32
 #define setgid setgid32
 #define getuid getuid32

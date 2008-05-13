@@ -30,23 +30,13 @@ set -e
 $CC -Wall -I../gensrc run-as-anonymous.c -o run-as-anonymous
 $CC -Wall -I../gensrc gc-uid-locks.c -o gc-uid-locks
 
-# Statically linked version
 if which diet >/dev/null; then
-  diet $CC -DIN_CHROOT_JAIL -DUSE_DIETLIBC \
-	-Wall -static -I../gensrc run-as-anonymous.c -o run-as-anonymous_static
+  STATIC_CC="diet $CC -fno-stack-protector"
 else
+  STATIC_CC="$CC"
   echo "dietlibc not found: statically linking with glibc instead"
   echo "This makes run-as-anonymous_static a lot bigger than it needs to be (400k instead of 18k)"
-  $CC -DIN_CHROOT_JAIL \
-	-Wall -static -I../gensrc run-as-anonymous.c -o run-as-anonymous_static
 fi
 
-setuid_root () {
-  chown root:root $1
-  chmod +s $1
-}
-
-# Let the install script do this now
-#setuid_root run-as-anonymous
-#setuid_root run-as-anonymous_static
-#setuid_root gc-uid-locks
+$STATIC_CC -DIN_CHROOT_JAIL \
+	-Wall -static -I../gensrc run-as-anonymous.c -o run-as-anonymous_static

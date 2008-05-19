@@ -83,6 +83,8 @@ function create_chroot_jail
   # Install dynamic linker (ld.so) inside chroot jail
   strip_install shobj/ld.so $DEST/$JAIL_INSTALL/ld-linux.so.2
   chmod +x $DEST/$JAIL_INSTALL/ld-linux.so.2
+
+  strip_install elf-chainloader/chainloader $DEST/$JAIL_DIR/chainloader
 }
 
 function install_libc

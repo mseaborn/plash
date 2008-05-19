@@ -104,6 +104,12 @@ class ProcessSpec(object):
                 args.extend(["-s", "%s=%s" % (var, env[var])])
         return args
 
+    def _chainloader_ldso_args(self):
+        ldso_fd = plash.filedesc.wrap_fd(os.open(
+                "/var/lib/plash-chroot-jail/special/ld-linux.so.2",
+                os.O_RDONLY))
+        return ["/chainloader", "%i" % self.add_fd(ldso_fd)]
+
     def _set_up_sandbox_prog(self):
         """Make sure run-as-anonymous is invoked."""
         if not plash.env.under_plash:
@@ -112,14 +118,14 @@ class ProcessSpec(object):
             else:
                 prefix_cmd = ["/usr/lib/plash/run-as-anonymous"]
                 prefix_cmd.extend(self.preserve_env(self.env))
-                prefix_cmd.append("/special/ld-linux.so.2")
+                prefix_cmd.extend(self._chainloader_ldso_args())
         else:
             if "PLASH_P_SANDBOX_PROG" in os.environ:
                 prefix_cmd = [os.environ["PLASH_P_SANDBOX_PROG"]]
             else:
                 prefix_cmd = ["/run-as-anonymous"]
                 prefix_cmd.extend(self.preserve_env(self.env))
-                prefix_cmd.append("/special/ld-linux.so.2")
+                prefix_cmd.extend(self._chainloader_ldso_args())
         orig_cmd = self.cmd
         self.cmd = prefix_cmd[0]
         self.args = prefix_cmd[1:] + [orig_cmd] + self.args

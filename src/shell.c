@@ -515,14 +515,15 @@ int flatten_args(region_t r, struct flatten_params *p,
   return 1;
 }
 
-void args_to_exec_elf_program
+int args_to_exec_elf_program
   (region_t r, const char *executable_filename,
    int argc, const char **argv,
-   const char **cmd_out, int *argc_out, const char ***argv_out)
+   const char **cmd_out, int *argc_out, const char ***argv_out,
+   struct fd_array *fds)
 {
   const char *sandbox_prog = getenv("PLASH_SANDBOX_PROG");
   int debug = 0;
-  int extra_args = 4 + (debug ? 1:0);
+  int extra_args = 5 + (debug ? 1:0);
   const char **argv2;
   int i, j;
   assert(argc >= 1);
@@ -535,7 +536,16 @@ void args_to_exec_elf_program
     if(debug) argv2[i++] = "--debug";
     argv2[i++] = "-s";
     argv2[i++] = "LD_LIBRARY_PATH=" LIB_INSTALL;
-    argv2[i++] = "/special/ld-linux.so.2";
+    argv2[i++] = "/chainloader";
+    int ldso_fd = open(PLASH_LDSO, O_RDONLY);
+    if(ldso_fd < 0) {
+      printf("plash: open: %s: %s\n", PLASH_LDSO, strerror(errno));
+      return -1;
+    }
+    region_add_finaliser(r, finalise_close_fd, (void *) ldso_fd);
+    int ldso_fd_number = array_get_free_index(fds);
+    array_set_fd(r, fds, ldso_fd_number, ldso_fd);
+    argv2[i++] = flatten_str(r, mk_printf(r, "%i", ldso_fd_number));
   }
   else {
     *cmd_out = sandbox_prog;
@@ -547,33 +557,7 @@ void args_to_exec_elf_program
   argv2[i] = NULL;
   *argc_out = i;
   *argv_out = argv2;
-}
-
-/* Not used, now that I have removed support for the "--fd" option
-   from ld.so. */
-void args_to_exec_elf_program_from_fd
-  (region_t r, int fd, int argc, const char **argv,
-   const char **cmd_out, int *argc_out, const char ***argv_out)
-{
-  int extra_args = 6;
-  int buf_size = 20;
-  char *buf = region_alloc(r, buf_size);
-  const char **argv2;
-  int i;
-
-  argv2 = region_alloc(r, (argc + extra_args + 1) * sizeof(char *));
-  argv2[0] = argv[0];
-  *cmd_out = PLASH_SETUID_BIN_INSTALL "/run-as-anonymous";
-  argv2[1] = "/special/ld-linux.so.2";
-  argv2[2] = "--library-path";
-  argv2[3] = PLASH_LD_LIBRARY_PATH;
-  argv2[4] = "--fd";
-  snprintf(buf, buf_size, "%i", fd);
-  argv2[5] = buf;
-  for(i = 0; i < argc; i++) { argv2[extra_args+i] = argv[i]; }
-  argv2[extra_args + argc] = NULL;
-  *argc_out = extra_args + argc;
-  *argv_out = argv2;
+  return 0;
 }
 
 int job_state(struct job *job)
@@ -1528,7 +1512,6 @@ int command_invocation_sec
   int executable_fd;
   int argc2;
   const char **argv2;
-  // int executable_fd2;
   const char *cmd_filename2; /* of interpreter for #! scripts */
   struct filesys_obj *root = 0;
   struct dir_stack *cwd;
@@ -1642,7 +1625,6 @@ int command_invocation_sec
   /* Handle scripts using the `#!' syntax. */
   if(exec_for_scripts(r, root, cwd,
 		      cmd_filename.data, executable_fd, arg_count + 1, argv,
-		      // &executable_fd2,
 		      NULL,
 		      &cmd_filename2,
 		      &argc2, &argv2, &err) < 0) {
@@ -1651,7 +1633,6 @@ int command_invocation_sec
     printf(": %s\n", strerror(err));
     goto error;
   }
-  // region_add_finaliser(r, finalise_close_fd, (void *) executable_fd2);
 
   /* Construct the connection to the server. */
   {
@@ -1721,30 +1702,21 @@ int command_invocation_sec
     
     {
       int proc_sock_fd;
-      // int proc_exec_fd;
       struct process_desc_sec *proc;
       struct process_spawn_list *proc_list;
 	
       proc_sock_fd = array_get_free_index(&p.fds);
       array_set_fd(r, &p.fds, proc_sock_fd, sock_fd);
-      /*
-      proc_exec_fd = array_get_free_index(&p.fds);
-      array_set_fd(r, &p.fds, proc_exec_fd, executable_fd2);
-      */
 	
       proc = region_alloc(r, sizeof(struct process_desc_sec));
       proc->d.fds.count = p.fds.count;
       proc->d.fds.fds = p.fds.fds;
       proc->comm_fd = proc_sock_fd;
       proc->caps_names = caps_names;
-#if 0
-      args_to_exec_elf_program_from_fd
-	(r, proc_exec_fd /* executable_fd */, argc2, argv2,
-	 &proc->d.cmd, &proc->d.argc, &proc->d.argv);
-#endif
-      args_to_exec_elf_program
-	(r, cmd_filename2, argc2, argv2,
-	 &proc->d.cmd, &proc->d.argc, &proc->d.argv);
+      if(args_to_exec_elf_program(r, cmd_filename2, argc2, argv2,
+				  &proc->d.cmd, &proc->d.argc, &proc->d.argv,
+				  &p.fds) < 0)
+	goto error;
       proc->d.set_up_process = set_up_sec_process;
 
       proc_list = region_alloc(r, sizeof(struct process_spawn_list));

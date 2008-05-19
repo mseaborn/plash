@@ -514,14 +514,14 @@ int handle_arguments(region_t r, struct state *state,
   return 0;
 }
 
-static void args_to_exec_elf_program
+static int args_to_exec_elf_program
   (region_t r, struct state *state, const char *executable_filename,
    int argc, const char **argv,
    const char **cmd_out, int *argc_out, const char ***argv_out,
    int debug)
 {
   const char *sandbox_prog;
-  int extra_args = 2 + (debug ? 1:0) + 2 + 2;
+  int extra_args = 7 + (debug ? 1:0);
   const char **argv2;
   int i, j;
 
@@ -564,7 +564,13 @@ static void args_to_exec_elf_program
 					 mk_string(r, str)));
       }
     }
-    argv2[i++] = "/special/ld-linux.so.2";
+    int ldso_fd = open(PLASH_LDSO, O_RDONLY);
+    if(ldso_fd < 0) {
+      perror("open: " PLASH_LDSO);
+      return -1;
+    }
+    argv2[i++] = "/chainloader";
+    argv2[i++] = flatten_str(r, mk_printf(r, "%i", ldso_fd));
   }
   else {
     *cmd_out = sandbox_prog;
@@ -576,6 +582,7 @@ static void args_to_exec_elf_program
   argv2[i] = NULL;
   *argc_out = i;
   *argv_out = argv2;
+  return 0;
 }
 
 
@@ -831,10 +838,11 @@ int main(int argc, char **argv)
 
       {
 	const char *cmd;
-	args_to_exec_elf_program(r, &state, executable_filename2,
-				 args_count2, args_array2,
-				 &cmd, &args_count2, &args_array2,
-				 state.debug);
+	if(args_to_exec_elf_program(r, &state, executable_filename2,
+				    args_count2, args_array2,
+				    &cmd, &args_count2, &args_array2,
+				    state.debug) < 0)
+	  return 1;
 	if(under_plash) {
 	  __typeof__(plash_libc_kernel_execve) *kernel_execve =
 	    dlsym(RTLD_NEXT, "plash_libc_kernel_execve");

@@ -584,7 +584,11 @@ install_libs_for_testing () {
 
 all_steps () {
   build_small_bits
-  (export CC; cd setuid && ./make-setuid.sh)
+  (export CC; cd setuid && ./make-setuid.sh) || false
+  (cd elf-chainloader
+   make
+   python test.py
+  ) || false
   setup_glibc_build
   ./make_objs.py
   build_preload_library

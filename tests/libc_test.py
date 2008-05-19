@@ -25,6 +25,7 @@ import tempfile
 import testrunner
 import unittest
 
+import plash_core
 import plash.env
 import plash.mainloop
 import plash.namespace as ns
@@ -142,6 +143,7 @@ void test_base()
 
     def tearDown(self):
         self._temp_maker.destroy()
+        plash_core.cap_close_all_connections()
 
     def _compile_executable(self):
         tmp_dir = self._temp_maker.make_temp_dir()

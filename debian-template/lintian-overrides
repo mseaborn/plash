@@ -11,3 +11,4 @@ plash: shared-lib-without-dependency-information ./var/lib/plash-chroot-jail/spe
 plash: shlib-with-executable-bit var/lib/plash-chroot-jail/special/ld-linux.so.2 0755
 # This runs setuid inside the jail so needs to be statically linked.
 plash: statically-linked-binary ./var/lib/plash-chroot-jail/run-as-anonymous
+plash: statically-linked-binary ./var/lib/plash-chroot-jail/chainloader

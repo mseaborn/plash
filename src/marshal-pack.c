@@ -185,6 +185,21 @@ int pl_unpack(region_t r, struct cap_args args, int method,
 	data_pos += sizeof(int);
 	break;
       }
+      case 's': {
+	seqf_t *ptr = va_arg(list, seqf_t *);
+	/* Read size */
+	if(data_pos + sizeof(int) > args_data.size)
+	  goto mismatch;
+	int size = *(int *) (args_data.data + data_pos);
+	data_pos += sizeof(int);
+	/* Get data */
+	if(data_pos + size > args_data.size)
+	  goto mismatch;
+	ptr->data = args_data.data + data_pos;
+	ptr->size = size;
+	data_pos += size;
+	break;
+      }
       case 'S': {
 	seqf_t *ptr = va_arg(list, seqf_t *);
 	ptr->data = args_data.data + data_pos;

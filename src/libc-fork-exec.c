@@ -314,7 +314,7 @@ export_weak_alias(new_execve, execve);
 export(new_execve, __execve);
 
 /* This execs an executable using a particular dynamic linker.
-   Won't work for shell scripts (using "#!") or for setuid executables. */
+   Won't work for setuid executables. */
 /* We don't need to do anything special to hand off the connection to
    the server to the executable that's taking over the process.
    The socket should be in a consistent state: there should not be any
@@ -354,63 +354,34 @@ int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
   if(fcntl(comm_sock, F_SETFD, 0) < 0) { goto error; }
       
   cap_call(fs_server, r,
-	   cap_args_d(cat5(r, mk_int(r, METHOD_FSOP_EXEC),
-			   mk_int(r, strlen(cmd_filename)),
-			   mk_string(r, cmd_filename),
-			   mk_int(r, args),
-			   argbuf_data(argbuf))),
+	   pl_pack(r, METHOD_FSOP_EXEC, "siS", seqf_string(cmd_filename),
+		   args, flatten_reuse(r, argbuf_data(argbuf))),
 	   &result);
-  {
-    seqf_t msg = flatten_reuse(r, result.data);
-    seqf_t cmd_filename2;
-    int argc;
-    int ok = 1;
-    m_int_const(&ok, &msg, METHOD_R_FSOP_EXEC);
-    m_lenblock(&ok, &msg, &cmd_filename2);
-    m_int(&ok, &msg, &argc);
-    if(ok && result.fds.count == 0 && result.caps.size == 0) {
-      int i;
-      char **argv2 = alloca((argc + 1) * sizeof(char *));
-      for(i = 0; i < argc; i++) {
-	seqf_t arg;
-	m_lenblock(&ok, &msg, &arg);
-	if(!ok) { __set_errno(EIO); goto error; }
-	argv2[i] = region_strdup_seqf(r, arg);
-      }
-      argv2[argc] = 0;
-      
-      kernel_execve(region_strdup_seqf(r, cmd_filename2), argv2, envp);
-      goto error;
+  seqf_t cmd_filename2;
+  int argc2;
+  seqf_t argv2_packed;
+  if(pl_unpack(r, result, METHOD_R_FSOP_EXEC, "siS", &cmd_filename2,
+	       &argc2, &argv2_packed)) {
+    int i;
+    char **argv2 = alloca((argc2 + 1) * sizeof(char *));
+    for(i = 0; i < argc2; i++) {
+      int ok = 1;
+      seqf_t arg;
+      m_lenblock(&ok, &argv2_packed, &arg);
+      if(!ok) { __set_errno(EIO); goto error; }
+      argv2[i] = region_strdup_seqf(r, arg);
     }
-  }
-  {
-    seqf_t msg = flatten_reuse(r, result.data);
-    int ok = 1;
-    m_int_const(&ok, &msg, METHOD_R_FSOP_EXEC_OBJECT);
-    m_end(&ok, &msg);
-    if(ok && result.fds.count == 0 && result.caps.size == 1) {
-      cap_t exec_obj = result.caps.caps[0];
-      exec_object(exec_obj, argc,
-		  (const char **) argv,
-		  (const char **) envp);
-      goto error;
-    }
-  }
-  {
-    seqf_t msg = flatten_reuse(r, result.data);
-    int err;
-    int ok = 1;
-    m_int_const(&ok, &msg, METHOD_FAIL);
-    m_int(&ok, &msg, &err);
-    m_end(&ok, &msg);
-    if(ok && result.caps.size == 0 && result.fds.count == 0) {
-      __set_errno(err);
-      goto error;
-    }
-  }
+    argv2[argc2] = 0;
 
-  if(libc_debug) fprintf(stderr, "libc: execve: bad response\n");
-  __set_errno(ENOSYS);
+    kernel_execve(region_strdup_seqf(r, cmd_filename2), argv2, envp);
+    goto error;
+  }
+  cap_t exec_obj;
+  if(pl_unpack(r, result, METHOD_R_FSOP_EXEC_OBJECT, "c", &exec_obj)) {
+    exec_object(exec_obj, argc, (const char **) argv, (const char **) envp);
+    goto error;
+  }
+  set_errno_from_result(r, result);
  error:
   plash_libc_unlock();
   region_free(r);

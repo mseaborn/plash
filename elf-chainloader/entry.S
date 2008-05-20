@@ -49,6 +49,10 @@ __unified_syscall:
 	movzbl	%al, %eax
 	mov	%rcx, %r10
 	syscall
+	cmpq	$-128, %rax
+	jbe	.Lnoerror
+	orq	$-1, %rax
+.Lnoerror:
 	ret
 
 #endif

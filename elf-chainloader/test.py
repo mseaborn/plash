@@ -67,11 +67,12 @@ env:
         proc = subprocess.Popen(["./chainloader"], stderr=subprocess.PIPE)
         stdout, stderr = proc.communicate()
         self.assertEquals(proc.wait(), 127)
-        assert stderr != ""
+        self.assertEquals(stderr, "chainloader: No arguments given\n"
+                          "Usage: chainloader <FD-number> <args>...\n")
 
     def test_fd_chainloader_environ(self):
         proc = subprocess.Popen(
-            ["bash", "-c", "env -i FOO=BAR BAZ=QUX "
+            ["bash", "-c", "exec env -i FOO=BAR BAZ=QUX "
              "./chainloader 10 /usr/bin/env 10<%s" % self._get_ld_so()],
             stdout=subprocess.PIPE)
         stdout, stderr = proc.communicate()
@@ -83,19 +84,20 @@ env:
                                 stderr=subprocess.PIPE)
         stdout, stderr = proc.communicate()
         self.assertEquals(proc.wait(), 127)
-        assert stderr != ""
+        self.assertEquals(stderr, "chainloader: error: read\n")
 
     def test_fd_chainloader_invalid_elf(self):
-        proc = subprocess.Popen(["sh", "-c", "./chainloader 10 10</dev/zero"],
-                                stderr=subprocess.PIPE)
+        proc = subprocess.Popen(
+            ["bash", "-c", "exec ./chainloader 10 10</dev/zero"],
+            stderr=subprocess.PIPE)
         stdout, stderr = proc.communicate()
         self.assertEquals(proc.wait(), 127)
-        assert stderr != ""
+        self.assertEquals(stderr, "chainloader: error: mmap\n")
 
     def test_chainloader_proc_cmdline(self):
         proc = subprocess.Popen(
             ["bash", "-c",
-             "./chainloader 10 /bin/cat /proc/self/cmdline 10<%s"
+             "exec ./chainloader 10 /bin/cat /proc/self/cmdline 10<%s"
              % self._get_ld_so()], stdout=subprocess.PIPE)
         stdout, stderr = proc.communicate()
         self.assertEquals(proc.wait(), 0)
@@ -127,7 +129,7 @@ env:
     def test_non_executable_stack(self):
         proc = subprocess.Popen(
             ["bash", "-c",
-             "./chainloader 10 /bin/cat /proc/self/maps 10<%s"
+             "exec ./chainloader 10 /bin/cat /proc/self/maps 10<%s"
              % self._get_ld_so()], stdout=subprocess.PIPE)
         stdout, stderr = proc.communicate()
         self.assertEquals(proc.wait(), 0)
@@ -135,14 +137,14 @@ env:
 
     def test_heap_using_sbrk(self):
         proc = subprocess.Popen(["bash", "-c",
-                                 "./chainloader 10 10<%s ./test-sbrk"
+                                 "exec ./chainloader 10 10<%s ./test-sbrk"
                                  % self._get_ld_so()])
         self.assertEquals(proc.wait(), 0)
 
     def test_heap_mapping(self):
         proc = subprocess.Popen(
             ["bash", "-c",
-             "./chainloader 10 /bin/cat /proc/self/maps 10<%s"
+             "exec ./chainloader 10 /bin/cat /proc/self/maps 10<%s"
              % self._get_ld_so()], stdout=subprocess.PIPE)
         stdout, stderr = proc.communicate()
         self.assertEquals(proc.wait(), 0)
@@ -154,7 +156,7 @@ env:
         # that uses sbrk().
         proc = subprocess.Popen(
             ["bash", "-c",
-             "./chainloader 10 10<%s /bin/bash -c 'echo bash works'"
+             "exec ./chainloader 10 10<%s /bin/bash -c 'echo bash works'"
              % self._get_ld_so()], stdout=subprocess.PIPE)
         stdout, stderr = proc.communicate()
         self.assertEquals(proc.wait(), 0)
@@ -178,7 +180,7 @@ env:
         ld_so_address = self._find_load_address(
             [ld_so, "/bin/cat", "/proc/self/maps"], ld_so)
         chainloader_address = self._find_load_address(
-            ["bash", "-c", "./chainloader 10 10<%s /bin/cat /proc/self/maps"
+            ["bash", "-c", "exec ./chainloader 10 10<%s /bin/cat /proc/self/maps"
              % ld_so], "chainloader")
         self.assert_in(ld_so_address,
                        ("80000000", # 32-bit kernel

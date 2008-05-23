@@ -212,7 +212,7 @@ int my_fstat(int type, int fd, void *buf)
     {
       seqf_t msg = flatten_reuse(r, result.data);
       int ok = 1;
-      m_int_const(&ok, &msg, METHOD_OKAY);
+      m_int_const(&ok, &msg, METHOD_R_FSOP_STAT);
       m_stat_info(&ok, &msg, type, buf);
       m_end(&ok, &msg);
       if(ok && result.fds.count == 0 && result.caps.size == 0) {

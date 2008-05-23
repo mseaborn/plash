@@ -17,9 +17,11 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 # USA.
 
-import plash_core
-import struct
+import cStringIO as StringIO
 import string
+import struct
+
+import plash_core
 
 
 class FormatStringError(Exception):
@@ -191,10 +193,19 @@ class M_r_stat:
     def unpack_a(self, a): return (self.unpack_r(a),)
 
 class M_fsop_exec:
+
+    def pack_a(self, filename, cmd_args):
+        ref, args2 = tree_pack(cmd_args)
+        return format_pack(methods_by_name["fsop_exec"]["code"],
+                           "si*", filename, ref, args2)
+
     def unpack_a(self, args):
         (filename, ref, args2) = format_unpack('si*', args)
         return (filename, tree_unpack(ref, args2))
-    def unpack_r(self, a): return self.unpack_a(a)
+
+    def unpack_r(self, a):
+        return self.unpack_a(a)
+
 class M_misc:
     def unpack_r(self, args):
         (ref, args2) = format_unpack('i*', args)
@@ -248,6 +259,7 @@ add_format('fsop_rmdir', 'dS')
 add_format('fsop_connect', 'fS')
 add_format('fsop_bind', 'fS')
 add_format('fsop_exec', M_fsop_exec())
+add_format('r_fsop_exec', 'siS') # This is not complete
 
 # Common response messages
 add_format('okay', '')
@@ -416,30 +428,83 @@ def format_unpack(pattern, msg):
     return tuple(args)
 
 
+TAG_INT = 0
+TAG_STRING = 1
+TAG_ARRAY = 2
+TAG_CAP = 3
+TAG_FD = 4
+
+
+class TreePacker(object):
+
+    def __init__(self):
+        self._data = StringIO.StringIO()
+        self._caps = []
+        self._fds = []
+
+    def _put_val(self, val):
+        if isinstance(val, int):
+            tag = TAG_INT
+            ref_val = self._data.tell()
+            self._data.write(struct.pack("i", val))
+        elif isinstance(val, str):
+            tag = TAG_STRING
+            ref_val = self._data.tell()
+            # Doesn't word align
+            self._data.write(struct.pack("i", len(val)))
+            self._data.write(val)
+        elif isinstance(val, (tuple, list)):
+            element_refs = [self._put_val(element) for element in val]
+            tag = TAG_ARRAY
+            ref_val = self._data.tell()
+            self._data.write(struct.pack("i", len(val)))
+            for element_ref in element_refs:
+                self._data.write(struct.pack("i", element_ref))
+        elif isinstance(val, plash_core.Pyobj):
+            tag = TAG_CAP
+            ref_val = len(self._caps)
+            self._caps.append(val)
+        elif isinstance(val, plash_core.FD):
+            tag = TAG_FD
+            ref_val = len(self._fds)
+            self._fds.append(val)
+        else:
+            raise Exception("Unknown type for encoding: %s" % type(val))
+        return tag | (ref_val << 3)
+
+    def pack(self, val):
+        ref = self._put_val(val)
+        args_tuple = (self._data.getvalue(),
+                      tuple(self._caps),
+                      tuple(self._fds))
+        return (ref, args_tuple)
+
+
+def tree_pack(val):
+    return TreePacker().pack(val)
+
+
 def get_int(data, i):
     (x,) = struct.unpack('i', data[i:i+int_size])
     return x
+
+
 def tree_unpack(ref, args):
     (data, caps, fds) = args
     type = ref & 7
     addr = ref >> 3
-    # int
-    if type == 0:
+    if type == TAG_INT:
         return get_int(data, addr)
-    # string
-    elif type == 1:
+    elif type == TAG_STRING:
         size = get_int(data, addr)
         return data[addr+int_size:addr+int_size+size]
-    # array
-    elif type == 2:
+    elif type == TAG_ARRAY:
         size = get_int(data, addr)
         return [tree_unpack(get_int(data, addr + int_size * (i+1)), args)
                 for i in range(size)]
-    # cap
-    elif type == 3:
+    elif type == TAG_CAP:
         return caps[addr]
-    # fd
-    elif type == 4:
+    elif type == TAG_FD:
         return fds[addr]
     else:
         raise UnpackError("Bad type code in reference: %i" % type)
@@ -537,7 +602,7 @@ add_method('fsop_stat', 'r_fsop_stat')
 add_method('fsop_readlink', 'r_fsop_readlink')
 add_method('fsop_chdir', 'okay')
 add_method('fsop_fchdir', 'okay')
-#add_method('fsop_dir_fstat', 'r_fsop_dir_fstat')
+add_method('fsop_dir_fstat', 'r_fsop_stat')
 add_method('fsop_getcwd', 'r_fsop_getcwd')
 add_method('fsop_dirlist', 'r_fsop_dirlist')
 add_method('fsop_access', 'okay')
@@ -552,6 +617,7 @@ add_method('fsop_unlink', 'okay')
 add_method('fsop_rmdir', 'okay')
 add_method('fsop_connect', 'okay')
 add_method('fsop_bind', 'okay')
+add_method('fsop_exec', 'r_fsop_exec')
 
 add_method('fsobj_type', 'r_fsobj_type')
 add_method('fsobj_stat', 'r_fsobj_stat')

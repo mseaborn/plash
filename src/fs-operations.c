@@ -1206,7 +1206,8 @@ int handle_fs_op_message(region_t r, struct process *proc,
 	  *log_reply = mk_string(r, "fail");
 	}
 	else {
-	  *reply = cat2(r, mk_int(r, METHOD_OKAY), pack_stat_info(r, &st));
+	  *reply = cat2(r, mk_int(r, METHOD_R_FSOP_STAT),
+			pack_stat_info(r, &st));
 	  *log_reply = mk_string(r, "ok");
 	}
 	dir_stack_free(n);
@@ -1224,6 +1225,7 @@ int handle_fs_op_message(region_t r, struct process *proc,
       log->op_name = "log";
       *log_msg = mk_leaf(r, msg);
       log->read_only = TRUE;
+      *reply = mk_int(r, METHOD_OKAY);
       return 0;
     }
   }

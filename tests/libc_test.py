@@ -75,12 +75,15 @@ class LogProxy(plash.marshal.Pyobj_marshal):
         return LogProxy(self._obj.fsop_copy(), self._calls)
 
     def cap_call(self, args):
-        args_unpacked = plash.marshal.unpack(args)
-        self._calls.append(args_unpacked)
-        if args_unpacked[0] == "fsop_copy":
-            return plash.marshal.pack("r_cap", self.fsop_copy())
+        method_name, args_unpacked = plash.marshal.unpack(args)
+        self._calls.append((method_name, args_unpacked))
+        if method_name == "fsop_copy":
+            result = plash.marshal.pack("r_cap", self.fsop_copy())
         else:
-            return self._obj.cap_call(args)
+            result = self._obj.cap_call(args)
+        # Check that we can unpack the result
+        plash.marshal.unpack(result)
+        return result
 
 
 class ProcessWithLogging(plash.process.ProcessSpecWithNamespace):

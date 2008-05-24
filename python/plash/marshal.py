@@ -210,7 +210,8 @@ class M_r_fsop_exec:
 
     def unpack_a(self, args):
         filename, ref, args2 = format_unpack("si*", args)
-        return filename, tree_unpack(ref, args2)
+        argv, fds = tree_unpack(ref, args2)
+        return filename, argv, fds
 
     def unpack_r(self, args):
         return self.unpack_a(args)

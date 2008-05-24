@@ -295,6 +295,14 @@ static inline seqf_t region_dup_seqf(region_t r, seqf_t x)
   return result;
 }
 
+static inline char *region_strdup(region_t r, const char *str)
+{
+  int len = strlen(str) + 1;
+  char *copy = region_alloc(r, len);
+  memcpy(copy, str, len);
+  return copy;
+}
+
 static inline char *region_strdup_seqf(region_t r, seqf_t x)
 {
   char *buf = region_alloc(r, x.size + 1);

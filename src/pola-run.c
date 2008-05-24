@@ -45,7 +45,6 @@
 #include "marshal-pack.h"
 #include "plash-libc.h"
 #include "powerbox.h"
-#include "config-read.h"
 #include "exec.h"
 #include "log.h"
 

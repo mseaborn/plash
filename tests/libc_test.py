@@ -1271,6 +1271,7 @@ if __name__ == "__main__":
     else:
         temp_maker = TempMaker()
         try:
-            run_tests(get_test_suite(__import__("__main__"), temp_maker))
+            cases = get_test_cases(__import__("__main__"), temp_maker)
+            run_tests(testrunner.make_test_suite_from_cases(cases))
         finally:
             temp_maker.destroy()

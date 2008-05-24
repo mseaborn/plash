@@ -30,7 +30,6 @@
 #include "resolve-filename.h"
 #include "comms.h"
 #include "config.h"
-#include "config-read.h"
 #include "serialise.h"
 #include "cap-protocol.h"
 #include "cap-utils.h"
@@ -377,21 +376,30 @@ static seqt_t pack_stat_info(region_t r, struct stat *st)
 	      mk_int(r, st->st_ctime)));
 }
 
-static void pack_exec_result(region_t r, seqf_t cmd_filename,
-			     int argc, const char **argv, seqt_t *reply)
+static bufref_t pack_string_array(region_t r, argmkbuf_t argbuf,
+				  int argc, const char **argv)
 {
-  argmkbuf_t argbuf = argbuf_make(r);
   bufref_t *array;
-  bufref_t args = argmk_array(argbuf, argc, &array);
+  bufref_t array_ref = argmk_array(argbuf, argc, &array);
   int i;
   for(i = 0; i < argc; i++)
     array[i] = argmk_str(argbuf, mk_string(r, argv[i]));
+  return array_ref;
+}
+
+static void pack_exec_result(region_t r, argmkbuf_t argbuf, seqf_t cmd_filename,
+			     int argc, const char **argv, bufref_t exec_fds,
+			     seqt_t *reply, fds_t *reply_fds)
+{
+  bufref_t args = pack_string_array(r, argbuf, argc, argv);
+  bufref_t pair = argmk_pair(argbuf, args, exec_fds);
 
   *reply = cat5(r, mk_int(r, METHOD_R_FSOP_EXEC),
 		mk_int(r, cmd_filename.size),
 		mk_leaf(r, cmd_filename),
-		mk_int(r, args),
+		mk_int(r, pair),
 		argbuf_data(argbuf));
+  *reply_fds = argbuf_fds(argbuf);
 }
 
 struct log_info {
@@ -507,7 +515,6 @@ int handle_fs_op_message(region_t r, struct process *proc,
     if(ok) {
       struct arg_m_buf argbuf = { msg, caps_empty, fds_empty };
       int argc;
-      int extra_args;
       const char **argv, **argv2;
       seqf_t cmd_filename2;
       int i;
@@ -568,15 +575,44 @@ int handle_fs_op_message(region_t r, struct process *proc,
 			  &executable_filename,
 			  &argc, &argv, &err) < 0) goto exec_fail;
 
-      extra_args = 1;
-      argv2 = region_alloc(r, (argc + extra_args) * sizeof(seqf_t));
+      argmkbuf_t argmkbuf = argbuf_make(r);
+      bufref_t exec_fds;
+      int extra_args;
+      char *ldso_path = getenv("PLASH_LDSO_PATH");
+      if(ldso_path) {
+	extra_args = 1;
+	argv2 = region_alloc(r, (argc + extra_args) * sizeof(seqf_t));
+	cmd_filename2 = seqf_string(ldso_path);
+	argv2[1] = executable_filename;
+
+	bufref_t *array;
+	exec_fds = argmk_array(argmkbuf, 0, &array); /* No FDs returned */
+      }
+      else {
+	extra_args = 2;
+	argv2 = region_alloc(r, (argc + extra_args) * sizeof(seqf_t));
+	cmd_filename2 = seqf_string("/chainloader");
+	argv2[1] = "fd-placeholder";
+	argv2[2] = executable_filename;
+
+	int ldso_fd = open(PLASH_LDSO, O_RDONLY);
+	if(ldso_fd < 0) {
+	  err = errno;
+	  goto exec_fail;
+	}
+	bufref_t *array;
+	exec_fds = argmk_array(argmkbuf, 1, &array);
+	array[0] = argmk_pair(argmkbuf,
+			      argmk_int(argmkbuf, 1), /* Index into argv */
+			      argmk_fd(argmkbuf, ldso_fd));
+      }
       assert(argc >= 1);
       argv2[0] = argv[0];
-      cmd_filename2 = seqf_string(pl_get_ldso_path());
-      argv2[1] = executable_filename;
-      for(i = 1; i < argc; i++) { argv2[extra_args + i] = argv[i]; }
+      for(i = 1; i < argc; i++)
+	argv2[extra_args + i] = argv[i];
 
-      pack_exec_result(r, cmd_filename2, argc + extra_args, argv2, reply);
+      pack_exec_result(r, argmkbuf, cmd_filename2, argc + extra_args, argv2,
+		       exec_fds, reply, reply_fds);
       *log_reply = mk_string(r, "ok");
       log->read_only = TRUE;
       return 0;

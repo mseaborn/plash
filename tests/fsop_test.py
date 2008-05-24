@@ -20,6 +20,7 @@
 import struct
 import unittest
 
+import plash_core
 import plash.env
 import plash.namespace
 
@@ -29,10 +30,14 @@ class FsOpTest(unittest.TestCase):
     def test_exec(self):
         fs_op = plash.namespace.make_fs_op(plash.env.get_root_dir())
         input_args = ["arg1", "argument2", "x"]
-        filename, argv = fs_op.fsop_exec("/bin/echo", ["argv0"] + input_args)
+        filename, argv, exec_fds = \
+            fs_op.fsop_exec("/bin/echo", ["argv0"] + input_args)
         # The start part of the result argv depends on ld.so location,
         # so we only check the end.
         self.assertEquals(argv[-len(input_args):], input_args)
+        for argv_index, fd in exec_fds:
+            assert isinstance(argv_index, int)
+            assert isinstance(fd, plash_core.FD)
 
 
 if __name__ == "__main__":

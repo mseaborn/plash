@@ -33,14 +33,6 @@
 #include "build-fs.h"
 
 
-char *region_strdup(region_t r, const char *str)
-{
-  int len = strlen(str) + 1;
-  char *copy = region_alloc(r, len);
-  memcpy(copy, str, len);
-  return copy;
-}
-
 char *region_printf(region_t r, const char *fmt, ...)
 {
   char *text, *copy;

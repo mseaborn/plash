@@ -300,10 +300,9 @@ static int exec_object(cap_t obj, int argc, const char **argv,
   return -1;
 }
 
-static int unpack_exec_result(region_t r, int argref, seqf_t packed_data,
-			      int *argc_result, char ***argv_result)
+static int unpack_string_array(region_t r, struct arg_m_buf argbuf, int argref,
+			       int *argc_result, char ***argv_result)
 {
-  struct arg_m_buf argbuf = { packed_data, caps_empty, fds_empty };
   int argc;
   const bufref_t *array;
   if(argm_array(&argbuf, argref, &argc, &array))
@@ -319,6 +318,47 @@ static int unpack_exec_result(region_t r, int argref, seqf_t packed_data,
   argv[argc] = NULL;
   *argc_result = argc;
   *argv_result = argv;
+  return 0;
+}
+
+static char *int_to_string(region_t r, int value)
+{
+  char buf[40];
+  int rc = snprintf(buf, sizeof(buf), "%i", value);
+  assert(rc > 0 && rc != sizeof(buf));
+  return region_strdup(r, buf);
+}
+
+static int unpack_exec_result(region_t r, int argref,
+			      seqf_t packed_data, fds_t fds,
+			      int *argc, char ***argv)
+{
+  struct arg_m_buf argbuf = { packed_data, caps_empty, fds };
+  bufref_t args, exec_fds;
+  if(argm_pair(&argbuf, argref, &args, &exec_fds))
+    return -1;
+  if(unpack_string_array(r, argbuf, args, argc, argv))
+    return -1;
+
+  int fds_count;
+  const bufref_t *fds_array;
+  if(argm_array(&argbuf, exec_fds, &fds_count, &fds_array))
+    return -1;
+  /* Substitute file descriptor arguments into the argv, overwriting
+     placeholder arguments. */
+  int i;
+  for(i = 0; i < fds_count; i++) {
+    bufref_t argv_index_ref, fd_ref;
+    int argv_index;
+    int fd;
+    if(argm_pair(&argbuf, fds_array[i], &argv_index_ref, &fd_ref) ||
+       argm_int(&argbuf, argv_index_ref, &argv_index) ||
+       argm_fd(&argbuf, fd_ref, &fd))
+      return -1;
+    if(!(0 <= argv_index && argv_index < *argc))
+      return -1;
+    (*argv)[argv_index] = int_to_string(r, fd);
+  }
   return 0;
 }
 
@@ -382,15 +422,18 @@ int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
   seqf_t cmd_filename2;
   int argv2_ref;
   seqf_t argv2_packed;
-  if(pl_unpack(r, result, METHOD_R_FSOP_EXEC, "siS", &cmd_filename2,
-	       &argv2_ref, &argv2_packed)) {
+  fds_t exec_fds;
+  if(pl_unpack(r, result, METHOD_R_FSOP_EXEC, "siSF", &cmd_filename2,
+	       &argv2_ref, &argv2_packed, &exec_fds)) {
     int argc2;
     char **argv2;
-    if(unpack_exec_result(r, argv2_ref, argv2_packed, &argc2, &argv2)) {
+    if(unpack_exec_result(r, argv2_ref, argv2_packed, exec_fds,
+			  &argc2, &argv2)) {
       __set_errno(EIO);
       goto error;
     }
     kernel_execve(region_strdup_seqf(r, cmd_filename2), argv2, envp);
+    close_fds(exec_fds);
     goto error;
   }
   cap_t exec_obj;

@@ -239,6 +239,13 @@ int pl_unpack(region_t r, struct cap_args args, int method,
 	*ptr = args.fds.fds[fds_pos++];
 	break;
       }
+      case 'F': {
+	fds_t *ptr = va_arg(list, fds_t *);
+	ptr->fds = args.fds.fds + fds_pos;
+	ptr->count = args.fds.count - fds_pos;
+	fds_pos = args.fds.count;
+	break;
+      }
       default:
 	assert(!"Unrecognised character format string");
 	return FALSE;

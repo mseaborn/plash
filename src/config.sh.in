@@ -56,10 +56,9 @@ PYTHON=@PYTHON@
 # Where to install to.
 # These paths are also compiled into the executables.
 JAIL_DIR=/var/lib/plash-chroot-jail
-JAIL_INSTALL=$JAIL_DIR/special
 PLASH_SETUID_BIN_INSTALL=/usr/lib/plash
 LIB_INSTALL=/usr/lib/plash/lib
-PLASH_LDSO=$JAIL_INSTALL/ld-linux.so.2
+PLASH_LDSO=$LIB_INSTALL/ld-linux.so.2
 
 # Where to install executables.
 PLASH_BIN_INSTALL=/usr/bin

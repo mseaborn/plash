@@ -104,10 +104,10 @@ class ProcessSpec(object):
                 args.extend(["-s", "%s=%s" % (var, env[var])])
         return args
 
+    ldso_path = "/usr/lib/plash/lib/ld-linux.so.2"
+
     def _chainloader_ldso_args(self):
-        ldso_fd = plash.filedesc.wrap_fd(os.open(
-                "/var/lib/plash-chroot-jail/special/ld-linux.so.2",
-                os.O_RDONLY))
+        ldso_fd = plash.filedesc.wrap_fd(os.open(self.ldso_path, os.O_RDONLY))
         return ["/chainloader", "%i" % self.add_fd(ldso_fd)]
 
     def _set_up_sandbox_prog(self):

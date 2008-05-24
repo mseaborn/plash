@@ -60,7 +60,6 @@ function create_chroot_jail
 {
   # Create chroot jail:  including "special" and "plash-uid-locks" dirs
   install -d $DEST/$JAIL_DIR
-  install -d $DEST/$JAIL_INSTALL
   install -d $DEST/$UID_LOCK_DIR
   # Create empty lock file
   > $DEST/$UID_LOCK_DIR/flock-file
@@ -80,10 +79,6 @@ function create_chroot_jail
   chmod +s $DEST/$PLASH_SETUID_BIN_INSTALL/gc-uid-locks
   chmod +s $DEST/$JAIL_DIR/run-as-anonymous
 
-  # Install dynamic linker (ld.so) inside chroot jail
-  strip_install shobj/ld.so $DEST/$JAIL_INSTALL/ld-linux.so.2
-  chmod +x $DEST/$JAIL_INSTALL/ld-linux.so.2
-
   strip_install elf-chainloader/chainloader $DEST/$JAIL_DIR/chainloader
 }
 
@@ -92,6 +87,10 @@ function install_libc
   # Install glibc's lib*.so files into /usr/lib/plash/lib
   install -d $DEST/$LIB_INSTALL
   ./src/install-libs.pl --dest-dir $DEST/$LIB_INSTALL
+
+  # Install dynamic linker (ld.so)
+  strip_install shobj/ld.so $DEST/$LIB_INSTALL/ld-linux.so.2
+  chmod +x $DEST/$LIB_INSTALL/ld-linux.so.2
 }
 
 function install_powerbox_hook_gtk

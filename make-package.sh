@@ -125,7 +125,6 @@ dh_gencontrol
 chown -R root.root debian/plash
 chmod -R g-ws debian/plash
 chmod go-rwx $CHROOT_JAIL/plash-uid-locks
-chmod +x $CHROOT_JAIL/special/ld-linux.so.2
 chmod +s debian/plash/usr/lib/plash/run-as-anonymous
 chmod +s debian/plash/usr/lib/plash/gc-uid-locks
 chmod +s $CHROOT_JAIL/run-as-anonymous

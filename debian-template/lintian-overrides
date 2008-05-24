@@ -5,10 +5,10 @@ plash: setuid-gid-binary usr/lib/plash/run-as-anonymous 6755 root/root
 plash: setuid-gid-binary usr/lib/plash/gc-uid-locks 6755 root/root
 plash: setuid-gid-binary var/lib/plash-chroot-jail/run-as-anonymous 6755 root/root
 plash: non-standard-dir-perm var/lib/plash-chroot-jail/plash-uid-locks/ 0700 != 0755
-plash: shared-lib-without-dependency-information ./var/lib/plash-chroot-jail/special/ld-linux.so.2
+plash: shared-lib-without-dependency-information ./usr/lib/plash/lib/ld-linux.so.2
 
 # E:
-plash: shlib-with-executable-bit var/lib/plash-chroot-jail/special/ld-linux.so.2 0755
+plash: shlib-with-executable-bit usr/lib/plash/lib/ld-linux.so.2 0755
 # This runs setuid inside the jail so needs to be statically linked.
 plash: statically-linked-binary ./var/lib/plash-chroot-jail/run-as-anonymous
 plash: statically-linked-binary ./var/lib/plash-chroot-jail/chainloader

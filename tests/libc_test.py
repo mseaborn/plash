@@ -725,6 +725,32 @@ void test_exec()
                           ["zeroth arg", "first arg", "second arg"])
 
 
+class TestExecNotFound(LibcTest):
+    # Check that execve() returns gracefully rather than invoking
+    # ld.so when the executable does not exist.  Programs rely on this
+    # for searching PATH.
+    entry = "test_exec_not_found"
+    code = r"""
+#include <errno.h>
+#include <unistd.h>
+void test_exec_not_found()
+{
+  char *const argv1[] = { "foo", "bar", "baz", NULL };
+  int rc1 = execve("/does-not-exist-1", argv1, environ);
+  assert(rc1 == -1 && errno == ENOENT);
+
+  char *const argv2[] = { "qux", "quux", "quuux", NULL };
+  int rc2 = execve("/does-not-exist-2", argv2, environ);
+  assert(rc2 == -1 && errno == ENOENT);
+}
+"""
+    def check(self):
+        self.assertCalled("fsop_exec", "/does-not-exist-1",
+                          ["foo", "bar", "baz"])
+        self.assertCalled("fsop_exec", "/does-not-exist-2",
+                          ["qux", "quux", "quuux"])
+
+
 class TestBind(LibcTest):
     entry = "test_bind"
     code = r"""

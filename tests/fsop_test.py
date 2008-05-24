@@ -28,12 +28,11 @@ class FsOpTest(unittest.TestCase):
 
     def test_exec(self):
         fs_op = plash.namespace.make_fs_op(plash.env.get_root_dir())
-        argv = ["arg0", "arg1", "argument2", "x"]
-        filename, argc, argv_packed = fs_op.fsop_exec("/bin/echo", argv)
+        input_args = ["arg1", "argument2", "x"]
+        filename, argv = fs_op.fsop_exec("/bin/echo", ["argv0"] + input_args)
         # The start part of the result argv depends on ld.so location,
         # so we only check the end.
-        assert argv_packed.endswith("".join([struct.pack("i", len(arg)) + arg
-                                             for arg in argv[1:]]))
+        self.assertEquals(argv[-len(input_args):], input_args)
 
 
 if __name__ == "__main__":

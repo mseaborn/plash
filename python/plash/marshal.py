@@ -206,6 +206,15 @@ class M_fsop_exec:
     def unpack_r(self, a):
         return self.unpack_a(a)
 
+class M_r_fsop_exec:
+
+    def unpack_a(self, args):
+        filename, ref, args2 = format_unpack("si*", args)
+        return filename, tree_unpack(ref, args2)
+
+    def unpack_r(self, args):
+        return self.unpack_a(args)
+
 class M_misc:
     def unpack_r(self, args):
         (ref, args2) = format_unpack('i*', args)
@@ -259,7 +268,7 @@ add_format('fsop_rmdir', 'dS')
 add_format('fsop_connect', 'fS')
 add_format('fsop_bind', 'fS')
 add_format('fsop_exec', M_fsop_exec())
-add_format('r_fsop_exec', 'siS') # This is not complete
+add_format('r_fsop_exec', M_r_fsop_exec())
 
 # Common response messages
 add_format('okay', '')

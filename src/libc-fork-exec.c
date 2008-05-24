@@ -300,6 +300,28 @@ static int exec_object(cap_t obj, int argc, const char **argv,
   return -1;
 }
 
+static int unpack_exec_result(region_t r, int argref, seqf_t packed_data,
+			      int *argc_result, char ***argv_result)
+{
+  struct arg_m_buf argbuf = { packed_data, caps_empty, fds_empty };
+  int argc;
+  const bufref_t *array;
+  if(argm_array(&argbuf, argref, &argc, &array))
+    return -1;
+  char **argv = region_alloc(r, (argc + 1) * sizeof(char *));
+  int i;
+  for(i = 0; i < argc; i++) {
+    seqf_t arg;
+    if(argm_str(&argbuf, array[i], &arg))
+      return -1;
+    argv[i] = region_strdup_seqf(r, arg);
+  }
+  argv[argc] = NULL;
+  *argc_result = argc;
+  *argv_result = argv;
+  return 0;
+}
+
 
 export(new_plash_libc_kernel_execve, plash_libc_kernel_execve);
 
@@ -358,21 +380,16 @@ int new_execve(const char *cmd_filename, char *const argv[], char *const envp[])
 		   args, flatten_reuse(r, argbuf_data(argbuf))),
 	   &result);
   seqf_t cmd_filename2;
-  int argc2;
+  int argv2_ref;
   seqf_t argv2_packed;
   if(pl_unpack(r, result, METHOD_R_FSOP_EXEC, "siS", &cmd_filename2,
-	       &argc2, &argv2_packed)) {
-    int i;
-    char **argv2 = alloca((argc2 + 1) * sizeof(char *));
-    for(i = 0; i < argc2; i++) {
-      int ok = 1;
-      seqf_t arg;
-      m_lenblock(&ok, &argv2_packed, &arg);
-      if(!ok) { __set_errno(EIO); goto error; }
-      argv2[i] = region_strdup_seqf(r, arg);
+	       &argv2_ref, &argv2_packed)) {
+    int argc2;
+    char **argv2;
+    if(unpack_exec_result(r, argv2_ref, argv2_packed, &argc2, &argv2)) {
+      __set_errno(EIO);
+      goto error;
     }
-    argv2[argc2] = 0;
-
     kernel_execve(region_strdup_seqf(r, cmd_filename2), argv2, envp);
     goto error;
   }

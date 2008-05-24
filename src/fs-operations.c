@@ -377,6 +377,23 @@ static seqt_t pack_stat_info(region_t r, struct stat *st)
 	      mk_int(r, st->st_ctime)));
 }
 
+static void pack_exec_result(region_t r, seqf_t cmd_filename,
+			     int argc, const char **argv, seqt_t *reply)
+{
+  argmkbuf_t argbuf = argbuf_make(r);
+  bufref_t *array;
+  bufref_t args = argmk_array(argbuf, argc, &array);
+  int i;
+  for(i = 0; i < argc; i++)
+    array[i] = argmk_str(argbuf, mk_string(r, argv[i]));
+
+  *reply = cat5(r, mk_int(r, METHOD_R_FSOP_EXEC),
+		mk_int(r, cmd_filename.size),
+		mk_leaf(r, cmd_filename),
+		mk_int(r, args),
+		argbuf_data(argbuf));
+}
+
 struct log_info {
   const char *op_name; /* Name of operation */
   int read_only; /* Whether the operation attempted was read-only */
@@ -557,30 +574,12 @@ int handle_fs_op_message(region_t r, struct process *proc,
       argv2[0] = argv[0];
       cmd_filename2 = seqf_string(pl_get_ldso_path());
       argv2[1] = executable_filename;
-      if(0) {
-	argv2[1] = "--library-path";
-	argv2[2] = PLASH_LD_LIBRARY_PATH;
-	argv2[3] = executable_filename;
-      }
       for(i = 1; i < argc; i++) { argv2[extra_args + i] = argv[i]; }
 
-      {
-	seqt_t got = seqt_empty;
-	int i;
-	for(i = 0; i < argc + extra_args; i++) {
-	  got = cat3(r, got,
-		     mk_int(r, strlen(argv2[i])),
-		     mk_string(r, argv2[i]));
-	}
-	*reply = cat5(r, mk_int(r, METHOD_R_FSOP_EXEC),
-		      mk_int(r, cmd_filename2.size),
-		      mk_leaf(r, cmd_filename2),
-		      mk_int(r, argc + extra_args),
-		      got);
-	*log_reply = mk_string(r, "ok");
-	log->read_only = TRUE;
-	return 0;
-      }
+      pack_exec_result(r, cmd_filename2, argc + extra_args, argv2, reply);
+      *log_reply = mk_string(r, "ok");
+      log->read_only = TRUE;
+      return 0;
     exec_fail:
       return err;
     }

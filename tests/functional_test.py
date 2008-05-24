@@ -209,33 +209,36 @@ class PolaRunTestsMixin(object):
 #!/bin/sh
 echo "script output"
 """)
-        proc = subprocess.Popen(
-            [self._pola_run, "-B", "-f", ".", "-e", "./script"],
-            stdout=subprocess.PIPE)
-        stdout, stderr = proc.communicate()
-        check_subprocess_status(proc.wait())
-        self.assertEquals(stdout, "script output\n")
+        for command in (["./script"], ["sh", "-c", "./script"]):
+            proc = subprocess.Popen(
+                [self._pola_run, "-B", "-f", ".", "-e"] + command,
+                stdout=subprocess.PIPE)
+            stdout, stderr = proc.communicate()
+            check_subprocess_status(proc.wait())
+            self.assertEquals(stdout, "script output\n")
 
     def test_script_arg(self):
         write_file("script", """\
 #!/bin/echo argument-to-interpreter
 echo "this does not get used"
 """)
-        proc = subprocess.Popen(
-            [self._pola_run, "-B", "-f", ".", "-e", "./script"],
-            stdout=subprocess.PIPE)
-        stdout, stderr = proc.communicate()
-        check_subprocess_status(proc.wait())
-        self.assertEquals(stdout, "argument-to-interpreter ./script\n")
+        for command in (["./script"], ["sh", "-c", "./script"]):
+            proc = subprocess.Popen(
+                [self._pola_run, "-B", "-f", ".", "-e"] + command,
+                stdout=subprocess.PIPE)
+            stdout, stderr = proc.communicate()
+            check_subprocess_status(proc.wait())
+            self.assertEquals(stdout, "argument-to-interpreter ./script\n")
 
     def test_script_arg_space(self):
         write_file("script", """#!/bin/echo  args with spaces  \n""")
-        proc = subprocess.Popen(
-            [self._pola_run, "-B", "-f", ".", "-e", "./script"],
-            stdout=subprocess.PIPE)
-        stdout, stderr = proc.communicate()
-        check_subprocess_status(proc.wait())
-        self.assertEquals(stdout, "args with spaces   ./script\n")
+        for command in (["./script"], ["sh", "-c", "./script"]):
+            proc = subprocess.Popen(
+                [self._pola_run, "-B", "-f", ".", "-e"] + command,
+                stdout=subprocess.PIPE)
+            stdout, stderr = proc.communicate()
+            check_subprocess_status(proc.wait())
+            self.assertEquals(stdout, "args with spaces   ./script\n")
 
     def test_return_code_exited(self):
         proc = subprocess.Popen([self._pola_run, "--cwd", "/", "-B", "-e",

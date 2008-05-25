@@ -286,38 +286,25 @@ int new_openat(int dir_fd, const char *filename, int flags, ...)
 	   pl_pack(r, METHOD_FSOP_OPEN, "diiS", dir_obj, flags, mode,
 		   seqf_string(filename)),
 	   &result);
-  {
-    seqf_t msg = flatten_reuse(r, result.data);
-    int ok = 1;
-    m_int_const(&ok, &msg, METHOD_R_FSOP_OPEN);
-    m_end(&ok, &msg);
-    if(ok && result.fds.count == 1 && result.caps.size == 0) {
-      int fd = result.fds.fds[0];
-      fds_slot_clear_warn_if_used(fd);
-      result_fd = fd;
-      goto exit;
-    }
+  int returned_fd;
+  if(pl_unpack(r, result, METHOD_R_FSOP_OPEN, "f", &returned_fd)) {
+    result_fd = returned_fd;
+    fds_slot_clear_warn_if_used(result_fd);
+    goto exit;
   }
-  {
+  cap_t returned_dir_obj;
+  if(pl_unpack(r, result, METHOD_R_FSOP_OPEN_DIR, "fc",
+	       &returned_fd, &returned_dir_obj)) {
+    result_fd = returned_fd;
     /* This handles the case in which a directory is opened.  The server
        passes us a dummy FD for /dev/null, which we return. */
-    seqf_t msg = flatten_reuse(r, result.data);
-    int ok = 1;
-    m_int_const(&ok, &msg, METHOD_R_FSOP_OPEN_DIR);
-    m_end(&ok, &msg);
-    if(ok && result.fds.count == 1 && result.caps.size == 1) {
-      int fd = result.fds.fds[0];
-
-      /* Resize the file descriptor array. */
-      assert(fd >= 0);
-      fds_resize(fd);
-      fds_slot_clear_warn_if_used(fd);
-      log_fd(fd, "fill out fd_dir_obj");
-      g_fds[fd].fd_dir_obj = result.caps.caps[0];
-
-      result_fd = fd;
-      goto exit;
-    }
+    /* Resize the file descriptor array. */
+    assert(result_fd >= 0);
+    fds_resize(result_fd);
+    fds_slot_clear_warn_if_used(result_fd);
+    log_fd(result_fd, "fill out fd_dir_obj");
+    g_fds[result_fd].fd_dir_obj = returned_dir_obj;
+    goto exit;
   }
   caps_free(result.caps);
   close_fds(result.fds);

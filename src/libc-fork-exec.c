@@ -280,18 +280,11 @@ static int exec_object(cap_t obj, int argc, const char **argv,
 			 argbuf_caps(argbuf),
 			 argbuf_fds(argbuf)),
 	   &result);
-  {
-    seqf_t msg = flatten_reuse(r, result.data);
-    int rc;
-    int ok = 1;
-    m_int_const(&ok, &msg, METHOD_R_EO_EXEC);
-    m_int(&ok, &msg, &rc);
-    m_end(&ok, &msg);
-    if(ok && result.caps.size == 0 && result.fds.count == 0) {
-      /* FIXME: should notify when process is running.
-	 Then we can close all FDs here. */
-      exit(rc);
-    }
+  int return_code;
+  if(pl_unpack(r, result, METHOD_R_EO_EXEC, "i", &return_code)) {
+    /* FIXME: should notify when process is running.
+       Then we can close all FDs here. */
+    exit(return_code);
   }
   caps_free(result.caps);
   close_fds(result.fds);

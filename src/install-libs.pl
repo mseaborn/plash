@@ -49,18 +49,9 @@ sub unmod {
   die "Can't locate '$dir/$name', tried: ".join(', ', @fs);
 }
 
-my $libs = [];
-if(get_from_config('GLIBC_BUILD_TYPE') eq 'separate') {
-  push(@$libs,
-       ['shobj/libc.so', 'libc.so.6'],
-       ['shobj/libpthread.so', 'libpthread.so.0']);
-}
-else {
-  push(@$libs,
-       unmod('', 'libc.so', 'libc.so.6'),
-       unmod('nptl', 'libpthread.so', 'libpthread.so.0'));
-}
-push(@$libs,
+my $libs = [
+  unmod('', 'libc.so', 'libc.so.6'),
+  unmod('nptl', 'libpthread.so', 'libpthread.so.0'),
   unmod('math', 'libm.so', 'libm.so.6'),
   unmod('crypt', 'libcrypt.so', 'libcrypt.so.1'),
   unmod('dlfcn', 'libdl.so', 'libdl.so.2'),
@@ -81,7 +72,7 @@ push(@$libs,
   unmod('malloc', 'libmemusage.so', 'libmemusage.so'),
   unmod('debug', 'libSegFault.so', 'libSegFault.so'),
   unmod('debug', 'libpcprofile.so', 'libpcprofile.so'),
-);
+];
 
 if(scalar(@ARGV) == 2 && $ARGV[0] eq '--dest-dir') {
   my $dest_dir = $ARGV[1];

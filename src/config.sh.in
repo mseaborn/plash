@@ -20,32 +20,8 @@
 
 PLASH_VERSION=@PACKAGE_VERSION@
 
-# Where to find partially-built glibc.
-# Used when building.
-# GLIBC_PIC_DIR is used to find libc_pic.a
-# GLIBC_NONSHARED_DIR is used to find libc_nonshared.a
-# GLIBC_SO_DIR is used to find various lib*.so files that are installed unmodified
-
 GLIBC=@GLIBC_DIR@
-GLIBC_PIC_DIR=$GLIBC
-GLIBC_NONSHARED_DIR=$GLIBC
 GLIBC_SO_DIR=$GLIBC
-# glibc version as an integer, e.g. 236 for 2.3.6 and 240 for 2.4
-GLIBC_VERSION=@GLIBC_VERSION@
-GLIBC_BUILD_TYPE=@GLIBC_BUILD_TYPE@
-
-# For Debian, require libc6-pic, libc6, and libc6-dev
-#GLIBC=/usr/lib/libc_pic
-#GLIBC_PIC_DIR=/usr/lib
-#GLIBC_NONSHARED_DIR=/usr/lib
-#GLIBC_SO_DIR=/lib
-
-# Can build from the Debian glibc package's build tree:
-# DEB_GLIBC=~mrs/sw/libc/new/glibc-2.3.5.orig/debian
-# GLIBC=$DEB_GLIBC/libc6-pic/usr/lib/libc_pic
-# GLIBC_PIC_DIR=$DEB_GLIBC/libc6-pic/usr/lib
-# GLIBC_NONSHARED_DIR=$DEB_GLIBC/libc6-dev/usr/lib
-# GLIBC_SO_DIR=$DEB_GLIBC/libc6/lib
 
 
 CC="@CC@"

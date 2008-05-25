@@ -114,12 +114,10 @@ int plash_init()
     r = region_make();
     caps = cap_make_connection(r, comm_sock, caps_empty, count, "to-server");
 
-    {
-      cap_t *a = amalloc(count * sizeof(cap_t));
-      memcpy(a, caps, count * sizeof(cap_t));
-      process_caps.caps = a;
-      process_caps.size = count;
-    }
+    cap_t *a = amalloc(count * sizeof(cap_t));
+    memcpy(a, caps, count * sizeof(cap_t));
+    process_caps.caps = a;
+    process_caps.size = count;
 
     /* Unpack the capabilities */
     list = cap_list;

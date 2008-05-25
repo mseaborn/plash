@@ -42,28 +42,26 @@ cap_t make_return_cont(struct return_state *state)
    operation.  Creates a return continuation to pass to the object
    being invoked.  Waits for the return continuation to be invoked
    before returning. */
-void generic_obj_call(struct filesys_obj *obj, region_t r,
+void generic_obj_call(struct filesys_obj *obj, region_t r1,
 		      struct cap_args args, struct cap_args *result)
 {
   struct return_state *state = amalloc(sizeof(struct return_state));
-  state->r = r;
+  state->r = r1;
   state->returned = 0;
   state->result = result;
 
   assert(result);
 
-  {
-    region_t r = region_make();
-    cap_t *a = region_alloc(r, (args.caps.size + 1) * sizeof(cap_t));
-    a[0] = make_return_cont(state);
-    memcpy(a + 1, args.caps.caps, args.caps.size * sizeof(cap_t));
-    obj->vtable->cap_invoke(obj,
-			    cap_args_make(cat2(r, mk_int(r, METHOD_CALL),
-					       args.data),
-					  cap_seq_make(a, args.caps.size + 1),
-					  args.fds));
-    region_free(r);
-  }
+  region_t r2 = region_make();
+  cap_t *a = region_alloc(r2, (args.caps.size + 1) * sizeof(cap_t));
+  a[0] = make_return_cont(state);
+  memcpy(a + 1, args.caps.caps, args.caps.size * sizeof(cap_t));
+  obj->vtable->cap_invoke(obj,
+			  cap_args_make(cat2(r2, mk_int(r2, METHOD_CALL),
+					     args.data),
+					cap_seq_make(a, args.caps.size + 1),
+					args.fds));
+  region_free(r2);
 
   while(!state->returned) {
     if(!cap_run_server_step()) { assert(0); }

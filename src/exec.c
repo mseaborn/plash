@@ -37,19 +37,17 @@ int open_executable_file(struct filesys_obj *obj, seqf_t cmd_filename, int *err)
   /* If this is a setuid executable, warn that setuid is not supported. */
   /* This check is not security critical, so it doesn't matter that
      it's subject to a race condition. */
-  {
-    struct stat st;
-    if(obj->vtable->fsobj_stat(obj, &st, err) >= 0) {
-      if((st.st_mode & S_IROTH) == 0) {
-	read_perm_missing = TRUE;
-      }
-      if(st.st_mode & (S_ISUID | S_ISGID)) {
-	region_t r = region_make();
-	fprintf(stderr,
-		_("plash: warning: setuid/gid bit not honoured on `%s'\n"),
-		region_strdup_seqf(r, cmd_filename));
-	region_free(r);
-      }
+  struct stat st;
+  if(obj->vtable->fsobj_stat(obj, &st, err) >= 0) {
+    if((st.st_mode & S_IROTH) == 0) {
+      read_perm_missing = TRUE;
+    }
+    if(st.st_mode & (S_ISUID | S_ISGID)) {
+      region_t r = region_make();
+      fprintf(stderr,
+	      _("plash: warning: setuid/gid bit not honoured on `%s'\n"),
+	      region_strdup_seqf(r, cmd_filename));
+      region_free(r);
     }
   }
   fd = obj->vtable->open(obj, O_RDONLY, err);

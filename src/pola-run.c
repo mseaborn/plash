@@ -175,12 +175,10 @@ int handle_flag(seqf_t flag, struct flags *f)
     f->build_fs |= FS_OBJECT_RW;
     return 0;
   }
-  {
-    region_t r = region_make();
-    fprintf(stderr, NAME_MSG _("error: unrecognised flag, \"%s\"\n"),
-	    region_strdup_seqf(r, flag));
-    region_free(r);
-  }
+  region_t r = region_make();
+  fprintf(stderr, NAME_MSG _("error: unrecognised flag, \"%s\"\n"),
+	  region_strdup_seqf(r, flag));
+  region_free(r);
   return 1;
 }
 
@@ -555,13 +553,11 @@ static int args_to_exec_elf_program
     }
     /* Make sure LD_PRELOAD is copied through.  It might have been set in
        our current environment using the --env option. */
-    {
-      char *str = getenv("LD_PRELOAD");
-      if(str) {
-	argv2[i++] = "-s";
-	argv2[i++] = flatten_str(r, cat2(r, mk_string(r, "LD_PRELOAD="),
-					 mk_string(r, str)));
-      }
+    char *ld_preload = getenv("LD_PRELOAD");
+    if(ld_preload) {
+      argv2[i++] = "-s";
+      argv2[i++] = flatten_str(r, cat2(r, mk_string(r, "LD_PRELOAD="),
+				       mk_string(r, ld_preload)));
     }
     int ldso_fd = open(PLASH_LDSO, O_RDONLY);
     if(ldso_fd < 0) {
@@ -682,178 +678,172 @@ int main(int argc, char **argv)
     fprintf(stderr, NAME_MSG _("--prog argument missing, no executable specified\n"));
     return 1;
   }
+  int executable_fd;
+  const char *executable_filename2; /* of interpreter for #! scripts */
+  const char **args_array, **args_array2;
+  int args_count2;
+  int socks[2];
+  int pid;
+  struct filesys_obj *obj;
+
   {
-    int executable_fd;
-    const char *executable_filename2; /* of interpreter for #! scripts */
-    const char **args_array, **args_array2;
-    int args_count2;
-    int socks[2];
-    int pid;
-    struct filesys_obj *obj;
-    
-    {
-      struct arg_list *l;
-      int i;
-      args_array = region_alloc(r, sizeof(char *) * (state.args_count + 2));
-      for(i = state.args_count - 1, l = state.args;
-	  l;
-	  i--, l = l->prev) {
-	assert(i >= 0);
-	args_array[i+1] = l->str;
-      }
-      args_array[0] = state.executable_filename;
-      args_array[state.args_count+1] = NULL;
+    struct arg_list *l;
+    int i;
+    args_array = region_alloc(r, sizeof(char *) * (state.args_count + 2));
+    for(i = state.args_count - 1, l = state.args;
+	l;
+	i--, l = l->prev) {
+      assert(i >= 0);
+      args_array[i+1] = l->str;
     }
-    
-    if(socketpair(AF_LOCAL, SOCK_STREAM, 0, socks) < 0) {
-      perror(NAME_MSG "socketpair");
-      return 1; /* Error */
-    }
+    args_array[0] = state.executable_filename;
+    args_array[state.args_count+1] = NULL;
+  }
 
-    {
-      cap_t child_root;
-      struct dir_stack *child_cwd = NULL;
-      int cap_count;
-      cap_t *caps;
-      const char *cap_names;
+  if(socketpair(AF_LOCAL, SOCK_STREAM, 0, socks) < 0) {
+    perror(NAME_MSG "socketpair");
+    return 1; /* Error */
+  }
 
-      child_root = fs_make_root(state.root_node);
-      assert(child_root);
+  cap_t child_root;
+  struct dir_stack *child_cwd = NULL;
+  int cap_count;
+  cap_t *caps;
+  const char *cap_names;
 
-      if(0) { fs_print_tree(0, state.root_node); }
+  child_root = fs_make_root(state.root_node);
+  assert(child_root);
 
-      /* Set up cwd.  If this fails, the cwd is left undefined. */
-      if(state.cwd) {
-	seqf_t cwd_path = flatten(r, string_of_cwd(r, state.cwd));
-	int err;
-	child_cwd = resolve_dir(r, child_root, NULL /* cwd */, cwd_path,
-				SYMLINK_LIMIT, &err);
-      }
+  if(0) { fs_print_tree(0, state.root_node); }
 
-      if(state.search_path) {
-	/* Look up executable name in PATH. */
-	if(resolve_executable_name(r, child_root, child_cwd,
-				   state.executable_filename,
-				   &state.executable_filename) < 0) {
-	  fprintf(stderr, NAME_MSG _("executable not found: %s\n"),
-		  state.executable_filename);
-	  return 1;
-	}
-      }
-      
-      obj = resolve_file(r, child_root, child_cwd,
-			 seqf_string(state.executable_filename),
-			 SYMLINK_LIMIT, 0 /* nofollow */, &err);
-      if(!obj) {
-	fprintf(stderr, NAME_MSG "open/exec: %s: %s\n",
-		state.executable_filename, strerror(err));
-	return 1;
-      }
-      /* This function gives warnings about setuid/gid executables. */
-      executable_fd = open_executable_file(obj, seqf_string(state.executable_filename), &err);
-      filesys_obj_free(obj);
-      if(executable_fd < 0) {
-	fprintf(stderr, NAME_MSG "open/exec: %s: %s\n",
-		state.executable_filename, strerror(err));
-	return 1;
-      }
-    
-      /* Handle scripts using the `#!' syntax. */
-      /* This resolves the interpreter name in the callee's namespace. */
-      if(exec_for_scripts(r, child_root, child_cwd,
-			  state.executable_filename, executable_fd,
-			  state.args_count + 1, args_array,
-			  NULL,
-			  &executable_filename2,
-			  &args_count2, &args_array2, &err) < 0) {
-	fprintf(stderr, NAME_MSG _("bad interpreter: %s: %s\n"),
-		state.executable_filename, strerror(err));
-	return 1;
-      }
+  /* Set up cwd.  If this fails, the cwd is left undefined. */
+  if(state.cwd) {
+    seqf_t cwd_path = flatten(r, string_of_cwd(r, state.cwd));
+    int err;
+    child_cwd = resolve_dir(r, child_root, NULL /* cwd */, cwd_path,
+			    SYMLINK_LIMIT, &err);
+  }
 
-      // "fs_op;conn_maker;fs_op_maker;union_dir_maker"
-      if(state.powerbox) {
-	cap_names = "fs_op;fs_op_maker;conn_maker;powerbox_req_filename";
-	cap_count = 4;
-      }
-      else {
-	cap_names = "fs_op;fs_op_maker;conn_maker";
-	cap_count = 3;
-      }
-      caps = region_alloc(r, cap_count * sizeof(cap_t));
-      if(state.log) inc_ref(state.log);
-      caps[0] = make_fs_op_server(state.log, child_root, child_cwd);
-      caps[1] = fs_op_maker_make(state.log);
-      caps[2] = conn_maker_make();
-      state.log = NULL;
-      if(state.powerbox) {
-#ifdef USE_GTK
-	caps[3] = powerbox_make(state.pet_name,
-				inc_ref(state.root_dir),
-				(struct node *) inc_ref((cap_t) state.root_node));
-#else
-	assert(0);
-#endif
-      }
-
-      filesys_obj_free(state.root_dir);
-      if(state.cwd) { dir_stack_free(state.cwd); }
-      
-      free_node(state.root_node);
-
-      /* Do I want to do a double fork so that the server process is no
-	 longer a child of the client process?  The client process might
-	 not be expecting to handle SIGCHILD signals.  Or perhaps these
-	 aren't delivered after an exec() call. */
-      pid = fork();
-      if(pid < 0) {
-	perror(NAME_MSG "fork");
-	return 1; /* Error */
-      }
-      if(state.server_as_parent ? pid > 0 : pid == 0) {
-	close(socks[0]);
-
-	cap_make_connection(r, socks[1], cap_seq_make(caps, cap_count),
-			    0, "to-client");
-	caps_free(cap_seq_make(caps, cap_count));
-	region_free(r);
-
-	server_process(argc, argv, state.powerbox /* use_gtk */);
-	exit(0);
-      }
-      cap_close_all_connections();
-
-      close(socks[1]);
-
-      {
-	char buf[20];
-	snprintf(buf, sizeof(buf), "%i", socks[0]);
-	if(setenv("PLASH_COMM_FD", buf, 1) < 0 ||
-	   setenv("PLASH_CAPS", cap_names, 1) < 0) {
-	  fprintf(stderr, NAME_MSG _("setenv failed\n"));
-	  return 1;
-	}
-      }
-
-      {
-	const char *cmd;
-	if(args_to_exec_elf_program(r, &state, executable_filename2,
-				    args_count2, args_array2,
-				    &cmd, &args_count2, &args_array2,
-				    state.debug) < 0)
-	  return 1;
-	if(under_plash) {
-	  __typeof__(plash_libc_kernel_execve) *kernel_execve =
-	    dlsym(RTLD_NEXT, "plash_libc_kernel_execve");
-	  assert(kernel_execve != NULL);
-	  kernel_execve(cmd, (char **) args_array2, environ);
-	}
-	else {
-	  execve(cmd, (char **) args_array2, environ);
-	}
-	fprintf(stderr, NAME_MSG "execve: %s: %s\n", cmd, strerror(errno));
-	return 1;
-      }
+  if(state.search_path) {
+    /* Look up executable name in PATH. */
+    if(resolve_executable_name(r, child_root, child_cwd,
+			       state.executable_filename,
+			       &state.executable_filename) < 0) {
+      fprintf(stderr, NAME_MSG _("executable not found: %s\n"),
+	      state.executable_filename);
+      return 1;
     }
   }
+
+  obj = resolve_file(r, child_root, child_cwd,
+		     seqf_string(state.executable_filename),
+		     SYMLINK_LIMIT, 0 /* nofollow */, &err);
+  if(!obj) {
+    fprintf(stderr, NAME_MSG "open/exec: %s: %s\n",
+	    state.executable_filename, strerror(err));
+    return 1;
+  }
+  /* This function gives warnings about setuid/gid executables. */
+  executable_fd = open_executable_file(obj, seqf_string(state.executable_filename), &err);
+  filesys_obj_free(obj);
+  if(executable_fd < 0) {
+    fprintf(stderr, NAME_MSG "open/exec: %s: %s\n",
+	    state.executable_filename, strerror(err));
+    return 1;
+  }
+
+  /* Handle scripts using the `#!' syntax. */
+  /* This resolves the interpreter name in the callee's namespace. */
+  if(exec_for_scripts(r, child_root, child_cwd,
+		      state.executable_filename, executable_fd,
+		      state.args_count + 1, args_array,
+		      NULL,
+		      &executable_filename2,
+		      &args_count2, &args_array2, &err) < 0) {
+    fprintf(stderr, NAME_MSG _("bad interpreter: %s: %s\n"),
+	    state.executable_filename, strerror(err));
+    return 1;
+  }
+
+  // "fs_op;conn_maker;fs_op_maker;union_dir_maker"
+  if(state.powerbox) {
+    cap_names = "fs_op;fs_op_maker;conn_maker;powerbox_req_filename";
+    cap_count = 4;
+  }
+  else {
+    cap_names = "fs_op;fs_op_maker;conn_maker";
+    cap_count = 3;
+  }
+  caps = region_alloc(r, cap_count * sizeof(cap_t));
+  if(state.log) inc_ref(state.log);
+  caps[0] = make_fs_op_server(state.log, child_root, child_cwd);
+  caps[1] = fs_op_maker_make(state.log);
+  caps[2] = conn_maker_make();
+  state.log = NULL;
+  if(state.powerbox) {
+#ifdef USE_GTK
+    caps[3] = powerbox_make(state.pet_name,
+			    inc_ref(state.root_dir),
+			    (struct node *) inc_ref((cap_t) state.root_node));
+#else
+    assert(0);
+#endif
+  }
+
+  filesys_obj_free(state.root_dir);
+  if(state.cwd) { dir_stack_free(state.cwd); }
+
+  free_node(state.root_node);
+
+  /* Do I want to do a double fork so that the server process is no
+     longer a child of the client process?  The client process might
+     not be expecting to handle SIGCHILD signals.  Or perhaps these
+     aren't delivered after an exec() call. */
+  pid = fork();
+  if(pid < 0) {
+    perror(NAME_MSG "fork");
+    return 1; /* Error */
+  }
+  if(state.server_as_parent ? pid > 0 : pid == 0) {
+    close(socks[0]);
+
+    cap_make_connection(r, socks[1], cap_seq_make(caps, cap_count),
+			0, "to-client");
+    caps_free(cap_seq_make(caps, cap_count));
+    region_free(r);
+
+    server_process(argc, argv, state.powerbox /* use_gtk */);
+    exit(0);
+  }
+  cap_close_all_connections();
+
+  close(socks[1]);
+
+  {
+    char buf[20];
+    snprintf(buf, sizeof(buf), "%i", socks[0]);
+    if(setenv("PLASH_COMM_FD", buf, 1) < 0 ||
+       setenv("PLASH_CAPS", cap_names, 1) < 0) {
+      fprintf(stderr, NAME_MSG _("setenv failed\n"));
+      return 1;
+    }
+  }
+
+  const char *cmd;
+  if(args_to_exec_elf_program(r, &state, executable_filename2,
+			      args_count2, args_array2,
+			      &cmd, &args_count2, &args_array2,
+			      state.debug) < 0)
+    return 1;
+  if(under_plash) {
+    __typeof__(plash_libc_kernel_execve) *kernel_execve =
+      dlsym(RTLD_NEXT, "plash_libc_kernel_execve");
+    assert(kernel_execve != NULL);
+    kernel_execve(cmd, (char **) args_array2, environ);
+  }
+  else {
+    execve(cmd, (char **) args_array2, environ);
+  }
+  fprintf(stderr, NAME_MSG "execve: %s: %s\n", cmd, strerror(errno));
+  return 1;
 }

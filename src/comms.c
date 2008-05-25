@@ -264,7 +264,6 @@ int comm_read(struct comm *comm, int *err)
   /* There is basically a fixed number of FDs we can receive per message,
      because if we don't allocate enough space, recvmsg drops them. */
   comm_fds_resize(comm, 20);
-  {
   int offset = comm->pos + comm->got;
   int fds_offset = comm->fds_pos + comm->fds_got;
   int rc =
@@ -279,7 +278,6 @@ int comm_read(struct comm *comm, int *err)
   if(rc < 0) { return -1; }
   if(bytes_got == 0 && fds_got == 0) { return 0; }
   return 1;
-  }
 }
 
 /* Returns <0 if an error occurred;

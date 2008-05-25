@@ -514,19 +514,19 @@ int fs_resolve_populate
     default: *err = ENOENT; return -1; /* Error: bad filename */
   }
 
-  {
-    region_t r = region_make();
-    struct dirnode_stack *result_junk; /* Result not used or filled out */
-    int rc = fs_resolve_populate_aux(r, root, cwd, filename, SYMLINK_LIMIT,
-				     1 /* attach */, flags, 0 /* dir_only */,
-				     &result_junk, err);
-    region_free(r);
-    dirnode_stack_free(root);
-    dirnode_stack_free(cwd);
-    if(rc == 0) return -1;
-    if(rc == ATTACHED_OBJ) return 0;
-    assert(0); *err = EIO; return -1;
-  }
+  region_t r = region_make();
+  struct dirnode_stack *result_junk; /* Result not used or filled out */
+  int rc = fs_resolve_populate_aux(r, root, cwd, filename, SYMLINK_LIMIT,
+				   1 /* attach */, flags, 0 /* dir_only */,
+				   &result_junk, err);
+  region_free(r);
+  dirnode_stack_free(root);
+  dirnode_stack_free(cwd);
+  if(rc == 0) return -1;
+  if(rc == ATTACHED_OBJ) return 0;
+  assert(0);
+  *err = EIO;
+  return -1;
 }
 
 #include "out-vtable-build-fs.h"

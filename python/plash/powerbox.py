@@ -17,10 +17,12 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 # USA.
 
+import traceback
+
 import gtk
+
 import plash.marshal
 import plash.namespace
-import traceback
 
 
 class Powerbox(plash.marshal.Pyobj_demarshal):

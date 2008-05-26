@@ -17,14 +17,19 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 # USA.
 
-import plash.marshal
 import traceback
+
+import plash.marshal
+
 
 indent = ['>']
 
 # Logging proxy object
 class logger(plash.marshal.Pyobj_marshal):
-    def __init__(self, x1): self.x = x1
+
+    def __init__(self, x1):
+        self.x = x1
+
     def cap_call(self, args):
         print indent[0], "call",
         try:

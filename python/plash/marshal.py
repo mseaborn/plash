@@ -25,12 +25,15 @@ import plash_core
 
 
 class FormatStringError(Exception):
+
     pass
 
 class UnpackError(Exception):
+
     pass
 
 class UnmarshalError(Exception):
+
     pass
 
 
@@ -48,70 +51,105 @@ import plash.methods
 
 
 class Format_str:
+
     def __init__(self, code, fmt):
         self.code = code
         self.fmt = fmt
-    def pack_a(self, *x): return format_pack(self.code, self.fmt, *x)
-    def pack_r(self, x): return format_pack(self.code, self.fmt, *x)
-    def unpack_a(self, args): return format_unpack(self.fmt, args)
-    def unpack_r(self, args): return format_unpack(self.fmt, args)
+
+    def pack_a(self, *x):
+        return format_pack(self.code, self.fmt, *x)
+
+    def pack_r(self, x):
+        return format_pack(self.code, self.fmt, *x)
+
+    def unpack_a(self, args):
+        return format_unpack(self.fmt, args)
+
+    def unpack_r(self, args):
+        return format_unpack(self.fmt, args)
+
 
 class Format_str1:
+
     def __init__(self, code, fmt):
         assert len(fmt) == 1, fmt
         self.code = code
         self.fmt = fmt
-    def pack_a(self, x): return format_pack(self.code, self.fmt, x)
-    def pack_r(self, x): return format_pack(self.code, self.fmt, x)
-    def unpack_a(self, args): return format_unpack(self.fmt, args)
-    def unpack_r(self, args): return format_unpack(self.fmt, args)[0]
+
+    def pack_a(self, x):
+        return format_pack(self.code, self.fmt, x)
+
+    def pack_r(self, x):
+        return format_pack(self.code, self.fmt, x)
+
+    def unpack_a(self, args):
+        return format_unpack(self.fmt, args)
+
+    def unpack_r(self, args):
+        return format_unpack(self.fmt, args)[0]
+
 
 class Args_write:
+
     def __init__(self):
         self.data = []
         self.caps = []
         self.fds = []
+
     def put_data(self, x):
         self.data.append(x)
+
     def put_int(self, x):
         self.data.append(struct.pack('i', x))
+
     def put_strsize(self, x):
         self.put_int(len(x))
         self.data.append(x)
+
     def pack(self):
         return (string.join(self.data, ''),
                 tuple(self.caps),
                 tuple(self.fds))
 
+
 class Args_read:
+
     def __init__(self, args):
         (self.data, self.caps, self.fds) = args
         self.data_pos = int_size
         self.caps_pos = 0
         self.fds_pos = 0
+
     def get_int(self):
-        (v,) = struct.unpack('i', self.data[self.data_pos : self.data_pos + int_size])
+        (v,) = struct.unpack('i', self.data[self.data_pos :
+                                            self.data_pos + int_size])
         self.data_pos += int_size
         return v
+
     def get_data(self, len):
         v = self.data[self.data_pos : self.data_pos + len]
         self.data_pos += len
         return v
+
     def get_strsize(self):
         len = self.get_int()
         return self.get_data(len)
+
     def data_endp(self):
         return self.data_pos == len(self.data)
+
     def check_end(self):
         assert self.data_pos == len(self.data)
         assert self.caps_pos == len(self.caps)
         assert self.fds_pos == len(self.fds)
+
 
 def pack_dirlist(s, entries):
     for entry in entries:
         s.put_int(entry['inode'])
         s.put_int(entry['type'])
         s.put_strsize(entry['name'])
+
 def unpack_dirlist(s):
     entries = []
     while not s.data_endp():
@@ -124,12 +162,14 @@ def unpack_dirlist(s):
 # These methods are slightly different.  One includes the number of
 # entries.  This should ideally be changed elsewhere.
 class M_r_dir_list:
+
     def pack_r(self, entries):
         s = Args_write()
         s.put_data(methods_by_name['r_dir_list']['code'])
         s.put_int(len(entries))
         pack_dirlist(s, entries)
         return s.pack()
+
     def unpack_r(self, arg):
         s = Args_read(arg)
         # msg = s.get_int() # Ignored
@@ -138,14 +178,21 @@ class M_r_dir_list:
         assert size == len(entries)
         s.check_end()
         return entries
-    def pack_a(self, a): return self.pack_r(a)
-    def unpack_a(self, a): return (self.unpack_r(a),)
+
+    def pack_a(self, a):
+        return self.pack_r(a)
+
+    def unpack_a(self, a):
+        return (self.unpack_r(a),)
+
 class M_r_fsop_dirlist:
+
     def pack_r(self, entries):
         s = Args_write()
         s.put_int(methods_by_name['r_fsop_dirlist']['code'])
         pack_dirlist(s, entries)
         return s.pack()
+
     def unpack_r(self, arg):
         s = Args_read(arg)
         # msg = s.get_int() # Ignored
@@ -153,11 +200,18 @@ class M_r_fsop_dirlist:
         entries = unpack_dirlist(s)
         s.check_end()
         return entries
-    def pack_a(self, a): return self.pack_r(a)
-    def unpack_a(self, a): return (self.unpack_r(a),)
+
+    def pack_a(self, a):
+        return self.pack_r(a)
+
+    def unpack_a(self, a):
+        return (self.unpack_r(a),)
 
 class M_r_stat:
-    def __init__(self, code): self.code = code
+
+    def __init__(self, code):
+        self.code = code
+
     def pack_r(self, st):
         return format_pack(self.code,
                            'iiiiiiiiiiiii',
@@ -174,6 +228,7 @@ class M_r_stat:
                            st['st_atime'],
                            st['st_mtime'],
                            st['st_ctime'])
+
     def unpack_r(self, args):
         x = format_unpack('iiiiiiiiiiiii', args)
         return { 'st_dev': x[0],
@@ -189,8 +244,12 @@ class M_r_stat:
                  'st_atime': x[10],
                  'st_mtime': x[11],
                  'st_ctime': x[12] }
-    def pack_a(self, a): return self.pack_r(a)
-    def unpack_a(self, a): return (self.unpack_r(a),)
+
+    def pack_a(self, a):
+        return self.pack_r(a)
+
+    def unpack_a(self, a):
+        return (self.unpack_r(a),)
 
 class M_fsop_exec:
 
@@ -217,10 +276,13 @@ class M_r_fsop_exec:
         return self.unpack_a(args)
 
 class M_misc:
+
     def unpack_r(self, args):
         (ref, args2) = format_unpack('i*', args)
         return tree_unpack(ref, args2)
-    def unpack_a(self, a): return (self.unpack_r(a),)
+
+    def unpack_a(self, a):
+        return (self.unpack_r(a),)
 
 
 def add_format(name, format):
@@ -541,15 +603,19 @@ def local_cap_invoke(self, args):
         # There is nothing we can do, besides warning
         pass
 
+
 # This is a base class for Python objects that implement cap_call()
 # but not other methods.  The other methods are defined in the base
 # class as marshallers which call cap_call().
 class Pyobj_marshal(plash_core.Pyobj):
+
     cap_invoke = local_cap_invoke
+
 
 # This is a base class for Python objects that implement specific
 # call-return methods but not cap_call() or cap_invoke().
 class Pyobj_demarshal(plash_core.Pyobj):
+
     methods = {}
 
     cap_invoke = local_cap_invoke
@@ -569,6 +635,7 @@ class Pyobj_demarshal(plash_core.Pyobj):
             # Need to convert (selected?) exceptions to error return values.
             print "cap_call received message with no handler; code:", method
             raise UnmarshalError("No match")
+
 
 def add_marshaller(name, f):
     setattr(plash_core.Wrapper, name, f)

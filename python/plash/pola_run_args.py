@@ -17,11 +17,12 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
 # USA.
 
-import gobject
+import os
 import string
 import sys
 import tempfile
-import os
+
+import gobject
 
 import plash_core
 import plash.filedesc

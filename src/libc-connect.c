@@ -92,20 +92,7 @@ int new_connect(int sock_fd, const struct sockaddr *addr, socklen_t addr_len)
 	return 0;
       }
     }
-    {
-      seqf_t msg = reply;
-      int err;
-      int ok = 1;
-      m_int_const(&ok, &msg, METHOD_FAIL);
-      m_int(&ok, &msg, &err);
-      m_end(&ok, &msg);
-      if(ok) {
-	__set_errno(err);
-	goto error;
-      }
-    }
-    
-    __set_errno(ENOSYS);
+    set_errno_from_reply(reply);
   error:
     region_free(r);
     return -1;
@@ -169,20 +156,7 @@ int new_bind(int sock_fd, const struct sockaddr *addr, socklen_t addr_len)
 	return 0;
       }
     }
-    {
-      seqf_t msg = reply;
-      int err;
-      int ok = 1;
-      m_int_const(&ok, &msg, METHOD_FAIL);
-      m_int(&ok, &msg, &err);
-      m_end(&ok, &msg);
-      if(ok) {
-	__set_errno(err);
-	goto error;
-      }
-    }
-    
-    __set_errno(ENOSYS);
+    set_errno_from_reply(reply);
   error:
     region_free(r);
     return -1;

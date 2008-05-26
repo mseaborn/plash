@@ -302,13 +302,19 @@ class TestDirMixin(object):
     def test_dir(self):
         self.check_empty_writable_dir(self.get_temp_dir())
 
+    def assert_stat_equal(self, stat1, stat2):
+        # Don't compare ctime, because it gets updated on a rename.
+        del stat1["st_ctime"]
+        del stat2["st_ctime"]
+        self.assertEquals(stat1, stat2)
+
     def test_same_dir_rename(self):
         dir = self.get_temp_dir()
         fd = dir.dir_create_file(os.O_WRONLY, 0666, "file")
         stat1 = dir.dir_traverse("file").fsobj_stat()
         dir.dir_rename("file", dir, "dest")
         stat2 = dir.dir_traverse("dest").fsobj_stat()
-        self.assertEquals(stat1, stat2)
+        self.assert_stat_equal(stat1, stat2)
 
 
 class TestRealDir(TestDirMixin, unittest.TestCase):
@@ -332,10 +338,7 @@ class TestRealDir(TestDirMixin, unittest.TestCase):
         stat1 = dir1.dir_traverse("file").fsobj_stat()
         dir1.dir_rename("file", dir2, "dest")
         stat2 = dir2.dir_traverse("dest").fsobj_stat()
-        # Don't compare ctime, because it gets updated on a rename.
-        del stat1["st_ctime"]
-        del stat2["st_ctime"]
-        self.assertEquals(stat1, stat2)
+        self.assert_stat_equal(stat1, stat2)
 
 
 class TestCowDir(TestDirMixin, unittest.TestCase):

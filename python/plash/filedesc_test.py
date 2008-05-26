@@ -86,12 +86,13 @@ class ProcSet(object):
     def wait(self):
         while self._count > 0:
             pid, status = os.wait()
-            assert pid in self._pids, (pid, self._pids)
-            assert self._pids[pid] is None
-            self._count -= 1
-            self._pids[pid] = status
-            assert os.WIFEXITED(status)
-            assert os.WEXITSTATUS(status) == 0
+            # Ignore unexpected pids.
+            if pid in self._pids:
+                assert self._pids[pid] is None
+                self._count -= 1
+                self._pids[pid] = status
+                assert os.WIFEXITED(status)
+                assert os.WEXITSTATUS(status) == 0
 
 
 # Returns readable FD

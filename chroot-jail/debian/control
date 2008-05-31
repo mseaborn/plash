@@ -3,7 +3,7 @@ Section: misc
 Priority: optional
 Maintainer: Mark Seaborn <mrs@mythic-beasts.com>
 Standards-Version: 3.7.2
-Build-Depends: dietlibc-dev
+Build-Depends: debhelper, dietlibc-dev
 
 Package: plash-chroot-jail
 Architecture: any

@@ -56,32 +56,6 @@ function install_pola_shell
   fi
 }
 
-function create_chroot_jail
-{
-  # Create chroot jail:  including "special" and "plash-uid-locks" dirs
-  install -d $DEST/$JAIL_DIR
-  install -d $DEST/$UID_LOCK_DIR
-  # Create empty lock file
-  > $DEST/$UID_LOCK_DIR/flock-file
-
-  # Set permissions
-  chmod go-rwx $DEST/$UID_LOCK_DIR
-
-  # Install executables into /usr/lib/plash
-  install -d $DEST/$PLASH_SETUID_BIN_INSTALL
-  strip_install setuid/run-as-anonymous \
-        $DEST/$PLASH_SETUID_BIN_INSTALL/run-as-anonymous
-  strip_install setuid/gc-uid-locks \
-        $DEST/$PLASH_SETUID_BIN_INSTALL/gc-uid-locks
-  strip_install setuid/run-as-anonymous_static \
-        $DEST/$JAIL_DIR/run-as-anonymous
-  chmod +s $DEST/$PLASH_SETUID_BIN_INSTALL/run-as-anonymous
-  chmod +s $DEST/$PLASH_SETUID_BIN_INSTALL/gc-uid-locks
-  chmod +s $DEST/$JAIL_DIR/run-as-anonymous
-
-  strip_install elf-chainloader/chainloader $DEST/$JAIL_DIR/chainloader
-}
-
 function install_libc
 {
   # Install glibc's lib*.so files into /usr/lib/plash/lib
@@ -113,15 +87,8 @@ function usage
 {
   echo "Usage: $0 [--nocheckroot] <dest-dir>"
   echo "To install normally, do: $0 /"
-  echo "$0 must be run as root in order to install setuid root programs"
   exit 1
 }
-
-if [ "$1" = "--nocheckroot" ]; then
-  shift
-elif [ "`id -u`" != 0 ]; then
-  usage
-fi
 
 if [ "$#" -ne 1 -o "$1" = "" ]; then
   usage
@@ -135,7 +102,6 @@ DEST=$1
 # install_pola_shell
 
 install_executable powerbox-req
-create_chroot_jail
 install_libc
 install_powerbox_hook_gtk
 install_powerbox_hook_emacs

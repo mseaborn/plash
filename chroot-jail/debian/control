@@ -1,0 +1,12 @@
+Source: plash-chroot-jail
+Section: misc
+Priority: optional
+Maintainer: Mark Seaborn <mrs@mythic-beasts.com>
+Standards-Version: 3.7.2
+Build-Depends: dietlibc-dev
+
+Package: plash-chroot-jail
+Architecture: any
+Depends: ${shlibs:Depends}
+Description: Minimal, fixed chroot jail, used by Plash
+ This provides a minimal chroot jail which is used by Plash.

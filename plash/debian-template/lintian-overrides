@@ -1,14 +1,5 @@
 
-# W:
-# These need to be setuid
-plash: setuid-gid-binary usr/lib/plash/run-as-anonymous 6755 root/root
-plash: setuid-gid-binary usr/lib/plash/gc-uid-locks 6755 root/root
-plash: setuid-gid-binary var/lib/plash-chroot-jail/run-as-anonymous 6755 root/root
-plash: non-standard-dir-perm var/lib/plash-chroot-jail/plash-uid-locks/ 0700 != 0755
+# It is normal that the ELF dynamic linker does not need any other
+# library and is directly executable
 plash: shared-lib-without-dependency-information ./usr/lib/plash/lib/ld-linux.so.2
-
-# E:
 plash: shlib-with-executable-bit usr/lib/plash/lib/ld-linux.so.2 0755
-# This runs setuid inside the jail so needs to be statically linked.
-plash: statically-linked-binary ./var/lib/plash-chroot-jail/run-as-anonymous
-plash: statically-linked-binary ./var/lib/plash-chroot-jail/chainloader

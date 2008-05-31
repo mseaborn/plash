@@ -3,11 +3,11 @@ Section: misc
 Priority: optional
 Maintainer: Mark Seaborn <mrs@mythic-beasts.com>
 Standards-Version: 3.7.2
-Build-Depends: glibc-source-2.7, make (>= 3.80-1), tar (>= 1.13.11), linux-libc-dev (>= 2.5.999-test7-bk-9), binutils (>= 2.14.90.0.7-5), gcc-4.1, sed (>= 4.0.5-4), gawk, debhelper, perl, libgtk2.0-dev (>= 2.8.0), libreadline5-dev, python-all-dev, python-support (>= 0.3), bzip2, docbook2x, docbook-xml, python-gtk2, autoconf, dietlibc-dev
+Build-Depends: glibc-source-2.7, make (>= 3.80-1), tar (>= 1.13.11), linux-libc-dev (>= 2.5.999-test7-bk-9), binutils (>= 2.14.90.0.7-5), gcc-4.1, sed (>= 4.0.5-4), gawk, debhelper, perl, libgtk2.0-dev (>= 2.8.0), libreadline5-dev, python-all-dev, python-support (>= 0.3), bzip2, docbook2x, docbook-xml, python-gtk2, autoconf
 
 Package: plash
 Architecture: any
-Depends: ${shlibs:Depends}, ${python:Depends}, python-gtk2
+Depends: ${shlibs:Depends}, ${python:Depends}, python-gtk2, plash-chroot-jail
 Provides: ${python:Provides}
 Description: Sandbox programs to run them with minimum authority
  Plash is a sandbox for running GNU/Linux programs with the minimum

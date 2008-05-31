@@ -22,7 +22,6 @@
 
 PACKAGE=plash
 LIBDIR=debian/plash/usr/lib/plash/lib
-CHROOT_JAIL=debian/plash/var/lib/plash-chroot-jail
 
 DEST=debian/plash
 
@@ -124,10 +123,6 @@ dh_gencontrol
 
 chown -R root.root debian/plash
 chmod -R g-ws debian/plash
-chmod go-rwx $CHROOT_JAIL/plash-uid-locks
-chmod +s debian/plash/usr/lib/plash/run-as-anonymous
-chmod +s debian/plash/usr/lib/plash/gc-uid-locks
-chmod +s $CHROOT_JAIL/run-as-anonymous
 
 dh_installdeb
 dh_md5sums

@@ -46,15 +46,3 @@ PLASH_EMACS_INSTALL=/usr/share/emacs/site-lisp/plash/
 # /etc/ld.so.conf, which is usually used to build /etc/ld.so.cache,
 # because the new dynamic linker isn't going to look at the cache.
 PLASH_LD_LIBRARY_PATH=$LIB_INSTALL:/lib:/usr/lib:/usr/X11R6/lib:/usr/kerberos/lib:/usr/lib/qt-3.0.3/lib:/usr/lib/sane:/usr/lib/wine
-
-# These are used by run-as-anonymous and gc-uid-locks.
-UID_RANGE_START=0x100000
-UID_RANGE_END=0x200000
-UID_LOCK_DIR=$JAIL_DIR/plash-uid-locks
-# Pathname to use from within the chroot jail
-UID_LOCK_DIR2=/plash-uid-locks
-
-
-# JAIL_DIR=/usr/local/chroot-jail
-# BIN_INSTALL=/usr/local/plash
-# LIB_INSTALL=/usr/local/plash/lib

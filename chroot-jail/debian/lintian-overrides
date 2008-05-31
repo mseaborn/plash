@@ -1,0 +1,15 @@
+
+# Override warnings
+# These need to be setuid
+plash-chroot-jail: setuid-gid-binary usr/lib/plash/run-as-anonymous 6755 root/root
+plash-chroot-jail: setuid-gid-binary usr/lib/plash/gc-uid-locks 6755 root/root
+plash-chroot-jail: setuid-gid-binary var/lib/plash-chroot-jail/run-as-anonymous 6755 root/root
+
+# The contents of this directory are supposed to be hidden from any
+# non-setuid process running inside the jail.
+plash-chroot-jail: non-standard-dir-perm var/lib/plash-chroot-jail/plash-uid-locks/ 0700 != 0755
+
+# Override errors
+# Executables inside the chroot jail need to be statically linked
+plash-chroot-jail: statically-linked-binary ./var/lib/plash-chroot-jail/run-as-anonymous
+plash-chroot-jail: statically-linked-binary ./var/lib/plash-chroot-jail/chainloader

@@ -45,6 +45,9 @@ function make_glibc
 function clean_tests
 {
   make -C glibc-build tests-clean
+  # tests-clean does not catch everything.
+  rm -v $(find glibc-build -name "*.out" | sort)
+  rm -vf glibc-build/intl/mtrace-tst-gettext
 }
 
 function test

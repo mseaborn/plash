@@ -64,7 +64,10 @@ def main(args):
     pid = proc.spawn()
     plash.mainloop.run_server()
     pid2, status = os.wait()
-    return status
+    if os.WIFEXITED(status):
+        return os.WEXITSTATUS(status)
+    else:
+        return 127
 
 
 if __name__ == "__main__":

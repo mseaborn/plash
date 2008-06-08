@@ -25,7 +25,12 @@ import re
 import sys
 
 
-known_failures = (
+def parse_known_failures(text):
+    return dict(line.split(": ", 1)
+                for line in text.strip().split("\n"))
+
+
+known_failures_dict = parse_known_failures(
 # Cause known.  Fixable.
 """\
 dirent/bug-readdir1.out: possibly close(-1) not working as expected
@@ -50,18 +55,6 @@ nptl/tst-cancel4.out: probably a problem cancelling close()
 nptl/tst-cancel5.out: probably a problem cancelling close()
 nptl/tst-cancelx4.out: probably a problem cancelling close()
 nptl/tst-cancelx5.out: probably a problem cancelling close()
-"""
-
-# Needs C++
-"""\
-debug/tst-chk4: /usr/bin/ld: cannot find -lstdc++
-debug/tst-chk5: /usr/bin/ld: cannot find -lstdc++
-debug/tst-chk6: /usr/bin/ld: cannot find -lstdc++
-debug/tst-lfschk4: /usr/bin/ld: cannot find -lstdc++
-debug/tst-lfschk5: /usr/bin/ld: cannot find -lstdc++
-debug/tst-lfschk6: /usr/bin/ld: cannot find -lstdc++
-dlfcn/bug-atexit3-lib.so: /usr/bin/ld: cannot find -lstdc++
-nptl/tst-cancel24: /usr/bin/ld: cannot find -lstdc++
 """
 
 # Cause known.  Harder to fix.
@@ -120,11 +113,26 @@ login/tst-utmp.out: ??
 login/tst-utmpx.out: ??
 nptl/tst-attr3.out: pthread_getattr_np fails (does it need /proc?)
 nptl/tst-stackguard1.out: "stack guard canaries are not randomized enough"
+""")
+
+
+# Keep the reasons for past failures around to aid debugging in case
+# the failures re-occur.
+past_failures_dict = parse_known_failures("""\
+debug/tst-chk4: /usr/bin/ld: cannot find -lstdc++
+debug/tst-chk5: /usr/bin/ld: cannot find -lstdc++
+debug/tst-chk6: /usr/bin/ld: cannot find -lstdc++
+debug/tst-lfschk4: /usr/bin/ld: cannot find -lstdc++
+debug/tst-lfschk5: /usr/bin/ld: cannot find -lstdc++
+debug/tst-lfschk6: /usr/bin/ld: cannot find -lstdc++
+dlfcn/bug-atexit3-lib.so: /usr/bin/ld: cannot find -lstdc++
+nptl/tst-cancel24: /usr/bin/ld: cannot find -lstdc++
 rt/tst-cpuclock2.out: ??
 """)
 
-known_failures_dict = dict(line.split(": ", 1)
-                           for line in known_failures.strip().split("\n"))
+
+failure_reasons = past_failures_dict.copy()
+failure_reasons.update(known_failures_dict)
 
 
 # It would be nice if make produced more structured output.
@@ -170,8 +178,8 @@ def main(argv):
     def format_list(name, target_list):
         print "* %i %s" % (len(target_list), name)
         for target in sorted(target_list):
-            if target in known_failures_dict:
-                print "%s: %s" % (target, known_failures_dict[target])
+            if target in failure_reasons:
+                print "%s: %s" % (target, failure_reasons[target])
             else:
                 print target
             if options.verbose:

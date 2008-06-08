@@ -42,6 +42,19 @@ function make_glibc
   ./make.sh install_libs_for_testing
 }
 
+function clean_tests
+{
+  make -C glibc-build tests-clean
+}
+
+function test
+{
+  PYTHONPATH=$(pwd)/python/lib \
+  BUILT_WRAPPER=$(pwd)/python/scripts/simple_wrapper.py \
+  PLASH_LDSO_PATH=/usr/bin/env \
+  make -C glibc-build -k tests
+}
+
 function copy_ldso
 {
   cp -av glibc-build/elf/ld.so shobj/ld.so
@@ -50,7 +63,7 @@ function copy_ldso
 
 for action in "$@"; do
   case $action in
-    link_source|configure_glibc|make_glibc|copy_ldso)
+    link_source|configure_glibc|make_glibc|copy_ldso|clean_tests|test)
       $action
       ;;
     *)

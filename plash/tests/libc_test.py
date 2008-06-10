@@ -206,7 +206,7 @@ int main()
             state.handle_args(["-f", os.environ["PLASH_LIBRARY_DIR"]])
         pid = proc.spawn()
         plash.mainloop.run_server()
-        pid2, status = os.wait()
+        pid2, status = os.waitpid(pid, 0)
         self.assertEquals(pid, pid2)
         plash.process_test.check_exit_status(status)
 
@@ -708,6 +708,68 @@ void test_fork()
         self.assertCalled("fsop_open", None,
                           os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0666,
                           "test_file2")
+
+
+class TestVfork(LibcTest):
+    entry = "test_vfork"
+    code = r"""
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/wait.h>
+void test_vfork()
+{
+  int pid, pid2, fd, status;
+  pid = vfork();
+  t_check(pid >= 0);
+  if(pid == 0) {
+    /* Check that communications still work in the forked process. */
+    fd = creat("test_file1", 0666);
+    t_check(fd >= 0);
+    t_check_zero(close(fd));
+    _exit(42);
+  }
+  /* Check that communications still work in the parent process. */
+  fd = creat("test_file2", 0666);
+  t_check(fd >= 0);
+  t_check_zero(close(fd));
+
+  pid2 = wait(&status);
+  t_check(pid2 >= 0);
+  assert(pid == pid2);
+  assert(WIFEXITED(status) && WEXITSTATUS(status) == 42);
+}
+"""
+    def check(self):
+        self.assertCalled("fsop_copy")
+        self.assertCalled("fsop_open", None,
+                          os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0666,
+                          "test_file1")
+        self.assertCalled("fsop_open", None,
+                          os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0666,
+                          "test_file2")
+
+
+# system() sometimes tries to inline fork().  Make sure that does not
+# happen.
+class TestSystem(LibcTest):
+    entry = "test_system"
+    code = r"""
+#include <stdlib.h>
+void test_system()
+{
+  int rc = system("exit 123");
+  assert(WIFEXITED(rc));
+  assert(WEXITSTATUS(rc) == 123);
+}
+"""
+    def check(self):
+        self.assertCalled("fsop_copy")
+        self.assertCalled("fsop_exec", "/bin/sh", ["sh", "-c", "exit 123"])
+
+    # Don't expect system() to be replaced properly in the preload library,
+    # so disable this test.
+    def test_preload_library(self):
+        pass
 
 
 class TestExec(LibcTest):

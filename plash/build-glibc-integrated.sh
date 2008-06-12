@@ -46,16 +46,13 @@ function clean_tests
 {
   make -C glibc-build tests-clean
   # tests-clean does not catch everything.
-  rm -v $(find glibc-build -name "*.out" | sort)
+  find glibc-build -name "*.out" -exec rm -v "{}" ";"
   rm -vf glibc-build/intl/mtrace-tst-gettext
 }
 
 function test
 {
-  PYTHONPATH=$(pwd)/python/lib \
-  BUILT_WRAPPER=$(pwd)/python/scripts/simple_wrapper.py \
-  PLASH_LDSO_PATH=/usr/bin/env \
-  make -C glibc-build -k tests
+  ./run-uninstalled.sh test_wrapper.py $(which make) -C glibc-build -k tests
 }
 
 function copy_ldso

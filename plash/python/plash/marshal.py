@@ -267,6 +267,11 @@ class M_fsop_exec:
 
 class M_r_fsop_exec:
 
+    def pack_a(self, filename, argv, fds):
+        ref, args = tree_pack((argv, fds))
+        return format_pack(methods_by_name["r_fsop_exec"]["code"],
+                           "si*", filename, ref, args)
+
     def unpack_a(self, args):
         filename, ref, args2 = format_unpack("si*", args)
         argv, fds = tree_unpack(ref, args2)

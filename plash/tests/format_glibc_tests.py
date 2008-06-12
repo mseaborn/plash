@@ -37,7 +37,6 @@ dirent/bug-readdir1.out: possibly close(-1) not working as expected
 dirent/tst-fdopendir.out: needs fdopendir (not implemented)
 dirent/tst-fdopendir2.out: needs fdopendir (not implemented)
 elf/check-localplt.out: symbols not marked as internal to libc.so
-intl/tst-gettext.out: tst-gettext.sh does not invoke executable via wrapper
 io/test-lfs.out: stat64() needs fixing
 io/tst-faccessat.out: needs fdopendir (not implemented)
 io/tst-fchmodat.out: needs fdopendir (not implemented)
@@ -57,6 +56,7 @@ nptl/tst-cancel4.out: probably a problem cancelling close()
 nptl/tst-cancel5.out: probably a problem cancelling close()
 nptl/tst-cancelx4.out: probably a problem cancelling close()
 nptl/tst-cancelx5.out: probably a problem cancelling close()
+nptl/tst-exec1.out: unsets all environment variables
 """
 
 # Cause known.  Harder to fix.
@@ -69,36 +69,12 @@ posix/tst-dir.out: use of dirfd()
 # Probably problems caused by exec'ing subprocesses or using static
 # linking.
 """\
-dlfcn/tststatic.out: ??
-dlfcn/tststatic2.out: ??
-elf/order.out: ??
-elf/order2.out: ??
-elf/tst-pathopt.out: ??
-elf/tst-pie1.out: see elf/Makefile
-elf/tst-stackguard1-static.out: ??
-elf/tst-tls1-static.out: ??
-elf/tst-tls2-static.out: ??
-elf/tst-tls9-static.out: ??
-iconvdata/iconv-test.out: see run-iconv-test.sh
-iconvdata/tst-tables.out: see tst-tables.sh
 intl/mtrace-tst-gettext: see malloc/mtrace.pl (malloc/mtrace in build tree)
-intl/tst-codeset.out: see tst-codeset.sh; also depends on tst-gettext.out
-intl/tst-gettext2.out: see shell script; also depends on tst-gettext.out
-intl/tst-gettext3.out: see shell script; also depends on tst-gettext.out
-intl/tst-translit.out: see shell script; also depends on tst-gettext.out
 io/bug-ftw2.out: see io/ftwtest-sh
 io/bug-ftw4.out: see io/ftwtest-sh
 io/ftwtest.out: see io/ftwtest-sh
-malloc/tst-mtrace.out: see malloc/tst-mtrace.sh
-nptl/tst-cancel7.out: nested wrapper invocation
-nptl/tst-cancelx7.out: nested wrapper invocation
-nptl/tst-exec4.out: nested wrapper invocation
-nptl/tst-locale1.out: Cannot fork test program: Function not implemented
-nptl/tst-locale2.out: Cannot fork test program: Function not implemented
 nptl/tst-stackguard1-static: duplicate symbol, can't statically link
-nptl/tst-tls6.out: see tst-tls6.sh
 posix/globtest.out: see globtest.sh
-posix/tst-exec.out: ??
 posix/tst-execl2.out: ??
 posix/tst-execle2.out: ??
 posix/tst-execlp2.out: ??
@@ -106,25 +82,18 @@ posix/tst-execv2.out: ??
 posix/tst-execve2.out: ??
 posix/tst-execvp2.out: ??
 posix/tst-getconf.out: see tst-getconf.sh
-posix/tst-spawn.out: ??
 posix/tst-vfork3-mem: ??
-posix/wordexp-tst.out: see posix/wordexp-tst.sh
-rt/tst-mqueue7.out: nested wrapper invocation
 """
 
 # Cause unknown.
 """\
-elf/tst-audit1.out: segfault
-elf/tst-audit2.out: segfault
-elf/tst-stackguard1.out: "stack guard canaries are not randomized enough"
 grp/testgrp.out: ??
-grp/tst_fgetgrent.out: ??
 libio/tst-fopenloc.check: ??
 localedata/mtrace-tst-leaks: ??
 login/tst-utmp.out: ??
 login/tst-utmpx.out: ??
 nptl/tst-attr3.out: pthread_getattr_np fails (does it need /proc?)
-nptl/tst-stackguard1.out: "stack guard canaries are not randomized enough"
+rt/tst-cpuclock2.out: intermittent failure??
 """)
 
 
@@ -138,8 +107,40 @@ debug/tst-lfschk4: /usr/bin/ld: cannot find -lstdc++
 debug/tst-lfschk5: /usr/bin/ld: cannot find -lstdc++
 debug/tst-lfschk6: /usr/bin/ld: cannot find -lstdc++
 dlfcn/bug-atexit3-lib.so: /usr/bin/ld: cannot find -lstdc++
+dlfcn/tststatic.out: use of static executable??
+dlfcn/tststatic2.out: use of static executable??
+elf/order.out: use of static executable??
+elf/order2.out: use of static executable??
+elf/tst-audit1.out: segfault; use of static executable?
+elf/tst-audit2.out: segfault; use of static executable?
+elf/tst-pathopt.out: use of static executable??
+elf/tst-pie1.out: ld.so invocation in elf/Makefile
+elf/tst-stackguard1-static.out: use of static executable??
+elf/tst-stackguard1.out: "stack guard canaries are not randomized enough"
+elf/tst-tls1-static.out: use of static executable??
+elf/tst-tls2-static.out: use of static executable??
+elf/tst-tls9-static.out: use of static executable??
+grp/tst_fgetgrent.out: use of static executable??
+iconvdata/iconv-test.out: see run-iconv-test.sh
+iconvdata/tst-tables.out: see tst-tables.sh
+intl/tst-codeset.out: see tst-codeset.sh; also depends on tst-gettext.out
+intl/tst-gettext.out: tst-gettext.sh does not invoke executable via wrapper
+intl/tst-gettext2.out: see shell script; also depends on tst-gettext.out
+intl/tst-gettext3.out: see shell script; also depends on tst-gettext.out
+intl/tst-translit.out: see shell script; also depends on tst-gettext.out
+malloc/tst-mtrace.out: see malloc/tst-mtrace.sh
 nptl/tst-cancel24: /usr/bin/ld: cannot find -lstdc++
-rt/tst-cpuclock2.out: ??
+nptl/tst-cancel7.out: nested wrapper invocation
+nptl/tst-cancelx7.out: nested wrapper invocation
+nptl/tst-exec4.out: nested wrapper invocation
+nptl/tst-locale1.out: Cannot fork test program: Function not implemented
+nptl/tst-locale2.out: Cannot fork test program: Function not implemented
+nptl/tst-stackguard1.out: "stack guard canaries are not randomized enough"
+nptl/tst-tls6.out: see tst-tls6.sh
+posix/tst-exec.out: use of static executable??
+posix/tst-spawn.out: use of static executable??
+posix/wordexp-tst.out: see posix/wordexp-tst.sh
+rt/tst-mqueue7.out: nested wrapper invocation
 """)
 
 

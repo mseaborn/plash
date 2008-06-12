@@ -23,6 +23,7 @@ import os
 import string
 
 import plash_core
+import plash.filedesc
 import plash.namespace
 import plash.namespace as ns
 import plash.env

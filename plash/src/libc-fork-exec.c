@@ -52,7 +52,6 @@ static int clone_connection(void)
   int fd = -1;
   region_t r = region_make();
 
-  plash_libc_lock();
   if(plash_init() < 0)
     goto exit;
   if(!fs_server || !conn_maker) {
@@ -95,9 +94,14 @@ static int clone_connection(void)
     __set_errno(ENOSYS);
   }
  exit:
-  plash_libc_unlock();
   region_free(r);
   return fd;
+}
+
+
+static void plash_libc_lock_reinitialize(void)
+{
+  libc_lock = (pthread_mutex_t) PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
 }
 
 
@@ -116,9 +120,12 @@ export(new_fork, __GI___vfork);
    chosen the latter. */
 pid_t new_fork(void)
 {
+  plash_libc_lock();
   int fd = clone_connection();
-  if(fd < 0)
+  if(fd < 0) {
+    plash_libc_unlock();
     return -1;
+  }
 
   pid_t pid = kernel_fork();
   if(pid == 0) {
@@ -134,8 +141,12 @@ pid_t new_fork(void)
       /* Fail quietly at this point. */
       unsetenv("PLASH_COMM_FD");
     }
+    kernel_close(fd);
+    plash_libc_lock_reinitialize();
+    return 0;
   }
   kernel_close(fd);
+  plash_libc_unlock();
   return pid;
 }
 

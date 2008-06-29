@@ -22,7 +22,6 @@ import traceback
 import gtk
 
 import plash.marshal
-import plash.namespace
 
 
 class Powerbox(plash.marshal.Pyobj_demarshal):

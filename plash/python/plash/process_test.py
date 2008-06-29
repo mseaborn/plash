@@ -22,6 +22,7 @@ import unittest
 
 from plash.process import add_to_path
 import plash.comms.stream
+import plash.env
 import plash.filedesc
 import plash.mainloop
 import plash.process

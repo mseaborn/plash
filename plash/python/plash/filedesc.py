@@ -19,9 +19,6 @@
 
 import os
 
-import gobject
-
-import plash.comms.event_loop
 import plash.comms.stream
 import plash.mainloop
 import plash_core

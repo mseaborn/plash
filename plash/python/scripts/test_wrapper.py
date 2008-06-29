@@ -34,6 +34,7 @@ import sys
 import plash_core
 import plash.env
 import plash.mainloop
+import plash.marshal
 import plash.namespace
 import plash.process
 

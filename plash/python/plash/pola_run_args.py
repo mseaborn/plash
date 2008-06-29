@@ -19,13 +19,15 @@
 
 import os
 import string
-import sys
 import tempfile
 
 import gobject
 
 import plash_core
+import plash.env
 import plash.filedesc
+import plash.mainloop
+import plash.namespace
 import plash.namespace as ns
 
 

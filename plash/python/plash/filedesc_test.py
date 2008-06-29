@@ -19,7 +19,6 @@
 
 import errno
 import os
-import sys
 import traceback
 import unittest
 

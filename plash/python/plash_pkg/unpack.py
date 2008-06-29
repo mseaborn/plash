@@ -29,9 +29,9 @@ import os
 import sha
 import shutil
 import subprocess
-import sys
 
 import plash.env
+import plash.marshal
 import plash_pkg.config
 import plash_pkg.control
 import plash_pkg.fetch

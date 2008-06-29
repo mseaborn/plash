@@ -24,7 +24,6 @@ import unittest
 
 from plash.comms.event_loop import poll_fd
 import plash.comms.cap as cap
-import plash.comms.event_loop
 import plash.comms.event_loop_test
 import plash.comms.simple
 import plash.comms.stream

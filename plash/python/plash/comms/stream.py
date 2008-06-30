@@ -98,6 +98,18 @@ def fd_is_readable(fd):
     return access_mode != os.O_WRONLY
 
 
+def coerce_buffer(val):
+    # Unfortunately, trying to concatenate a string + a buffer raises
+    # an exception.  But we don't want to do str() on the second
+    # argument in case it isn't a buffer.
+    if isinstance(val, str):
+        return val
+    elif isinstance(val, buffer):
+        return str(val)
+    else:
+        raise TypeError("Not a buffer or str: %r" % type(val))
+
+
 class FDBufferedWriter(object):
 
     def __init__(self, event_loop, fd, on_buffered_size_changed=lambda: None,
@@ -154,7 +166,7 @@ class FDBufferedWriter(object):
             # This could attempt to write the data to the FD in
             # non-blocking mode, instead of waiting until the next
             # event loop iteration.
-            self._buf += data
+            self._buf += coerce_buffer(data)
             self._watch.update_flags()
             self._on_buffered_size_changed()
 

@@ -57,6 +57,7 @@ nptl/tst-cancel5.out: probably a problem cancelling close()
 nptl/tst-cancelx4.out: probably a problem cancelling close()
 nptl/tst-cancelx5.out: probably a problem cancelling close()
 nptl/tst-exec1.out: unsets all environment variables
+rt/tst-cpuclock2.out: race condition between ld.so/libc.so doing dlopen()
 """
 
 # Cause known.  Harder to fix.
@@ -92,7 +93,6 @@ localedata/mtrace-tst-leaks: ??
 login/tst-utmp.out: ??
 login/tst-utmpx.out: ??
 nptl/tst-attr3.out: pthread_getattr_np fails (does it need /proc?)
-rt/tst-cpuclock2.out: intermittent failure??
 """)
 
 
@@ -198,7 +198,7 @@ def main(argv):
             else:
                 print target
             if options.verbose:
-                output_file = os.path.join(build_dir, "%s.temp" % target)
+                output_file = os.path.join(build_dir, target)
                 if os.path.exists(output_file):
                     print_test_output(output_file)
                 print
@@ -208,7 +208,7 @@ def main(argv):
     format_list("known failures that did not occur", missing_failure_list)
     format_list("known failures", known_failure_list)
 
-    if len(real_failure_list) != 0 or len(missing_failure_list) != 0:
+    if len(real_failure_list) != 0:
         return 1
     else:
         return 0

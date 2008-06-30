@@ -73,7 +73,6 @@ intl/mtrace-tst-gettext: see malloc/mtrace.pl (malloc/mtrace in build tree)
 io/bug-ftw2.out: see io/ftwtest-sh
 io/bug-ftw4.out: see io/ftwtest-sh
 io/ftwtest.out: see io/ftwtest-sh
-nptl/tst-stackguard1-static: duplicate symbol, can't statically link
 posix/globtest.out: see globtest.sh
 posix/tst-execl2.out: ??
 posix/tst-execle2.out: ??
@@ -100,9 +99,11 @@ rt/tst-cpuclock2.out: intermittent failure??
 # Keep the reasons for past failures around to aid debugging in case
 # the failures re-occur.
 past_failures_dict = parse_known_failures("""\
+debug/tst-chk3.out: tries to read /proc/self/maps
 debug/tst-chk4: /usr/bin/ld: cannot find -lstdc++
 debug/tst-chk5: /usr/bin/ld: cannot find -lstdc++
 debug/tst-chk6: /usr/bin/ld: cannot find -lstdc++
+debug/tst-lfschk3.out: tries to read /proc/self/maps
 debug/tst-lfschk4: /usr/bin/ld: cannot find -lstdc++
 debug/tst-lfschk5: /usr/bin/ld: cannot find -lstdc++
 debug/tst-lfschk6: /usr/bin/ld: cannot find -lstdc++
@@ -135,6 +136,7 @@ nptl/tst-cancelx7.out: nested wrapper invocation
 nptl/tst-exec4.out: nested wrapper invocation
 nptl/tst-locale1.out: Cannot fork test program: Function not implemented
 nptl/tst-locale2.out: Cannot fork test program: Function not implemented
+nptl/tst-stackguard1-static: duplicate symbol, can't statically link
 nptl/tst-stackguard1.out: "stack guard canaries are not randomized enough"
 nptl/tst-tls6.out: see tst-tls6.sh
 posix/tst-exec.out: use of static executable??

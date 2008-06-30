@@ -110,6 +110,46 @@ def coerce_buffer(val):
         raise TypeError("Not a buffer or str: %r" % type(val))
 
 
+class OutputBuffer(object):
+
+    def __init__(self):
+        self._strings = []
+        self._size = 0
+
+    def is_empty(self):
+        return self._size == 0
+
+    def get_size(self):
+        return self._size
+
+    def append_bytes(self, string):
+        self._size += len(string)
+        self._strings.append(coerce_buffer(string))
+
+    def get_buffer(self):
+        if len(self._strings) == 1:
+            return self._strings[0]
+        else:
+            # Strings must be coalesced in order to pass to write(),
+            # but maybe we could use writev() instead?
+            buf = "".join(self._strings)
+            self._strings = [buf]
+            return buf
+
+    def remove_bytes(self, bytes):
+        if bytes == self._size:
+            self._size = 0
+            self._strings = []
+        else:
+            assert bytes <= self._size
+            self._size -= bytes
+            self._strings = [self.get_buffer()[bytes:]]
+
+    def clear(self):
+        self._size = 0
+        self._strings = []
+
+
 class FDBufferedWriter(object):
 
     def __init__(self, event_loop, fd, on_buffered_size_changed=lambda: None,
@@ -118,7 +158,7 @@ class FDBufferedWriter(object):
         self._on_buffered_size_changed = on_buffered_size_changed
         self._on_unwritable = on_unwritable
         self._on_write = on_write
-        self._buf = ""
+        self._buf = OutputBuffer()
         self._eof_requested = False
         self._watch = event_loop.make_watch_with_error_handler(
             fd, self._get_flags, self._handler, self._error_handler)
@@ -126,7 +166,7 @@ class FDBufferedWriter(object):
             event_loop.call_later(lambda: self._error_handler(0))
 
     def _get_flags(self):
-        if len(self._buf) == 0:
+        if self._buf.is_empty():
             return 0
         else:
             return select.POLLOUT
@@ -136,11 +176,12 @@ class FDBufferedWriter(object):
         # SIGPIPE so that this can return EPIPE instead of killing the
         # process when writing to a pipe with no reader.
         try:
-            written = write_nonblocking(self._fd.fileno(), self._buf)
+            written = write_nonblocking(self._fd.fileno(),
+                                        self._buf.get_buffer())
         except OSError:
             self._error_handler(0)
         else:
-            self._buf = self._buf[written:]
+            self._buf.remove_bytes(written)
             self._watch.update_flags()
             self._check_for_disconnect()
             self._on_buffered_size_changed()
@@ -149,13 +190,13 @@ class FDBufferedWriter(object):
     def _error_handler(self, flags):
         # An error occurred, so no more data can be written.
         self._fd = None
-        self._buf = ""
+        self._buf.clear()
         self._watch.remove_watch()
         self._on_unwritable()
         self._on_buffered_size_changed()
 
     def _check_for_disconnect(self):
-        if self._eof_requested and len(self._buf) == 0:
+        if self._eof_requested and self._buf.is_empty():
             self._fd = None
             self._watch.remove_watch()
             self._on_unwritable()
@@ -166,7 +207,7 @@ class FDBufferedWriter(object):
             # This could attempt to write the data to the FD in
             # non-blocking mode, instead of waiting until the next
             # event loop iteration.
-            self._buf += coerce_buffer(data)
+            self._buf.append_bytes(data)
             self._watch.update_flags()
             self._on_buffered_size_changed()
 
@@ -177,7 +218,7 @@ class FDBufferedWriter(object):
         self._check_for_disconnect()
 
     def buffered_size(self):
-        return len(self._buf)
+        return self._buf.get_size()
 
     def is_finished_writing(self):
         # Writing is finished if end_of_stream() was called and all

@@ -31,6 +31,35 @@ import plash.comms.simple
 import plash.comms.stream as stream
 
 
+class OutputBufferTest(unittest.TestCase):
+
+    def test_output_buffer(self):
+        buf = stream.OutputBuffer()
+        self.assertEquals(buf.get_buffer(), "")
+        self.assertTrue(buf.is_empty())
+        self.assertEquals(buf.get_size(), 0)
+
+        buf.append_bytes("hello ")
+        self.assertEquals(buf.get_buffer(), "hello ")
+        self.assertFalse(buf.is_empty())
+        self.assertEquals(buf.get_size(), 6)
+
+        buf.append_bytes(buffer("world!"))
+        self.assertEquals(buf.get_buffer(), "hello world!")
+        self.assertFalse(buf.is_empty())
+        self.assertEquals(buf.get_size(), 12)
+
+        buf.remove_bytes(4)
+        self.assertEquals(buf.get_buffer(), "o world!")
+        self.assertFalse(buf.is_empty())
+        self.assertEquals(buf.get_size(), 8)
+
+        buf.clear()
+        self.assertEquals(buf.get_buffer(), "")
+        self.assertTrue(buf.is_empty())
+        self.assertEquals(buf.get_size(), 0)
+
+
 class FDWrapperTest(unittest.TestCase):
 
     def test_fds_are_freed(self):

@@ -53,6 +53,12 @@ class FsOpWrapper(plash.marshal.Pyobj_marshal):
         if not os.path.exists(filename):
             return False
         pathname = os.path.join(self._obj.fsop_getcwd(), filename)
+        fh = open(pathname)
+        try:
+            if fh.read(2) == "#!":
+                return False
+        finally:
+            fh.close()
         proc = subprocess.Popen(["readelf", "-l", pathname],
                                 stdout=subprocess.PIPE)
         stdout, stderr = proc.communicate()

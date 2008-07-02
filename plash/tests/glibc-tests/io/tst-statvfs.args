@@ -1,1 +1,0 @@
-GLIBC_BUILD_DIR/io/tst-statvfs tst-statvfs.c /tmp

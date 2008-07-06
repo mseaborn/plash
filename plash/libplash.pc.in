@@ -1,0 +1,10 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: libplash
+Version: @PACKAGE_VERSION@
+Description: libplash object-capability comms library
+Libs: -L${libdir} -lplash
+Cflags: -I${includedir}/plash

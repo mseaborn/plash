@@ -52,7 +52,7 @@ configure:	configure.in
 
 stamp-build-plash:	configure
 	$(checkdir)
-	./configure CC=gcc-4.1
+	./configure --prefix=/usr CC=gcc-4.1
 	./make.sh
 	(cd docs && ./make-man-pages.pl)
 	(cd web-site && ./make.pl)

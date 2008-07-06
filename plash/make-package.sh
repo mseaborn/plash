@@ -30,6 +30,7 @@ set -e
 . ./src/config.sh
 
 rm -rf debian/plash
+rm -rf debian/plash-dev
 rm -f debian/substvars
 # Need to delete these otherwise they accumulate auto-generated
 # code from python-support each time this is run.
@@ -91,10 +92,21 @@ function install_python_script
   cp -av python/scripts/$SCRIPT $DEST/usr/bin/$SCRIPT
 }
 
+function install_dev_files
+{
+  install -d debian/plash-dev/usr/lib/pkgconfig
+  install -d debian/plash-dev/usr/include/plash
+  cp libplash.pc debian/plash-dev/usr/lib/pkgconfig/
+  cp src/*.h debian/plash-dev/usr/include/plash/
+  cp gensrc/*.h debian/plash-dev/usr/include/plash/
+  cp obj/libplash_pic.a debian/plash-dev/usr/lib/libplash.a
+}
+
 
 install_html_docs
 install_man_pages
 install_examples
+install_dev_files
 
 ./install.sh debian/plash/
 

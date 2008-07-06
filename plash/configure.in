@@ -65,4 +65,4 @@ AC_SUBST(PACKAGE_VERSION)
 AC_SUBST(GLIBC_DIR)
 AC_SUBST(with_gtk)
 AC_SUBST(with_python)
-AC_OUTPUT
+AC_OUTPUT([libplash.pc])

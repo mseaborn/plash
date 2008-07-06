@@ -38,3 +38,10 @@ Description: Sandbox programs to run them with minimum authority
  Plash does not slow programs down because the most frequently used
  system calls (such as read() and write()) work on kernel-level file
  descriptors as before.
+
+Package: plash-dev
+Architecture: any
+Depends: plash (= ${Source-Version})
+Description: Development files for libplash
+ This package contains the header and library files needed to build software
+ using libplash, an object-capability communications protocol library.

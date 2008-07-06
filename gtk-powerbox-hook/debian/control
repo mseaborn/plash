@@ -1,0 +1,14 @@
+Source: gtk-powerbox-hook
+Section: x11
+Priority: optional
+Maintainer: Mark Seaborn <mrs@mythic-beasts.com>
+Standards-Version: 3.7.2
+Build-Depends: debhelper (>= 5), autoconf, automake, libtool, plash-dev, libgtk2.0-dev
+
+Package: gtk-powerbox-hook
+Architecture: any
+Depends: ${shlibs:Depends}
+Description: LD_PRELOAD hook for Gtk to replace file chooser
+ This is an LD_PRELOAD hook library that replaces Gtk's file chooser so that
+ it can be implemented in a separate process, to provide a file powerbox
+ interface, a trusted-path file chooser.

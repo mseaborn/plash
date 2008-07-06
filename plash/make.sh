@@ -172,17 +172,6 @@ build_shell_etc() {
   fi
 }
 
-build_gtk_powerbox () {
-  if [ "$USE_GTK" = yes ]; then
-    echo Linking shobj/gtk-powerbox.so
-    $CC -shared -Wl,-z,defs \
-	obj/gtk-powerbox.os \
-	obj/libplash_pic.a \
-	`pkg-config --libs gtk+-2.0` -ldl \
-	-o shobj/powerbox-for-gtk.so
-  fi
-}
-
 build_python_module () {
   if [ "$USE_PYTHON" = yes ]; then
     echo Building Python module
@@ -207,7 +196,6 @@ all_steps () {
   build_preload_library
   link_preload_library
   build_shell_etc
-  build_gtk_powerbox
   build_python_module
 }
 

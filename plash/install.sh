@@ -67,14 +67,6 @@ function install_libc
   chmod +x $DEST/$LIB_INSTALL/ld-linux.so.2
 }
 
-function install_powerbox_hook_gtk
-{
-  if [ "$USE_GTK" = yes ]; then
-    strip_install shobj/powerbox-for-gtk.so \
-        $DEST/$LIB_INSTALL/powerbox-for-gtk.so
-  fi
-}
-
 function install_powerbox_hook_emacs
 {
   # Install Emacs lisp file
@@ -103,5 +95,4 @@ DEST=$1
 
 install_executable powerbox-req
 install_libc
-install_powerbox_hook_gtk
 install_powerbox_hook_emacs

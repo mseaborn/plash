@@ -311,17 +311,6 @@ def get_libc_targets():
         gcc("src/%s.c" % name, "obj/%s_rtld.os" % name,
             opts_c + ["-DIN_RTLD"])
 
-    # Build powerbox for Gtk
-
-    if config["USE_GTK"] == "yes":
-        opts_gtk_pb = ["-Igensrc", "-Isrc",
-                       "-Wall",
-                       "-fPIC"] + get_pkg_config_args()
-        gcc("src/gtk-powerbox.c", "obj/gtk-powerbox.os", opts_gtk_pb)
-        # Not used, but keep building it so that it doesn't bitrot
-        gcc("src/gtk-powerbox-noninherit.c", "obj/gtk-powerbox-noninherit.os",
-            opts_gtk_pb)
-
     return targets
 
 

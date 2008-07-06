@@ -1,0 +1,34 @@
+#!/usr/bin/make -f
+
+
+build:
+	./autogen.sh --prefix=/usr
+	make
+
+binary: binary-arch
+
+binary-arch:
+	make install DESTDIR=`pwd`/debian/gtk-powerbox-hook
+	rm debian/gtk-powerbox-hook/usr/lib/libgtk-powerbox-hook.a
+	rm debian/gtk-powerbox-hook/usr/lib/libgtk-powerbox-hook.la
+	# Compatibility symlink providing the old .so name.
+	# TODO: remove this once no-one depends on it.
+	ln -s libgtk-powerbox-hook.so \
+		debian/gtk-powerbox-hook/usr/lib/powerbox-for-gtk.so
+
+	dh_makeshlibs
+	dh_shlibdeps
+	dh_fixperms
+	dh_installdocs
+	dh_installchangelogs
+	dh_compress
+	dh_strip
+	dh_gencontrol
+	dh_installdeb
+	dh_md5sums
+	dh_builddeb
+
+binary-indep:
+
+clean:
+	dh_clean

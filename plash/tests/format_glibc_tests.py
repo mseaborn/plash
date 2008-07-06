@@ -37,6 +37,8 @@ dirent/bug-readdir1.out: possibly close(-1) not working as expected
 dirent/tst-fdopendir.out: needs fdopendir (not implemented)
 dirent/tst-fdopendir2.out: needs fdopendir (not implemented)
 elf/check-localplt.out: symbols not marked as internal to libc.so
+iconvdata/bug-iconv6.out: upstream glibc problem
+iconvdata/tst-iconv7.out: upstream glibc problem
 io/test-lfs.out: stat64() needs fixing
 io/tst-faccessat.out: needs fdopendir (not implemented)
 io/tst-fchmodat.out: needs fdopendir (not implemented)

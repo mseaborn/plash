@@ -84,7 +84,8 @@ def main(args):
         proc.cwd_path = ns.dirstack_get_path(state.cwd)
 
     if state.powerbox:
-        powerbox = __import__("plash.powerbox")
+        # Do a conditional import because "import gtk" connects to X.
+        from plash import powerbox
         # The pet name defaults to the executable name
         if state.pet_name == None:
             state.pet_name = proc.cmd

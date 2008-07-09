@@ -32,11 +32,7 @@
 #include <gdk/gdkwindow.h>
 #include <gdk/gdkx.h>
 
-#include "region.h"
-#include "filesysobj.h"
-#include "cap-utils.h"
-#include "serialise.h"
-#include "marshal.h"
+#include "powerbox.h"
 
 
 #define MOD_MSG "gtk-powerbox: "
@@ -96,25 +92,6 @@ file_powerbox_get_property (GObject    *object,
 			    GValue     *value,
 			    GParamSpec *pspec);
 static void file_powerbox_map(GtkWidget *widget);
-
-
-static cap_t powerbox_req = NULL;
-
-
-static void init()
-{
-  static int initialised = 0;
-  if(!initialised) {
-    fprintf(stderr, MOD_MSG "get_process_caps\n");
-
-    if(get_process_caps("powerbox_req_filename", &powerbox_req,
-			NULL) < 0) {
-      exit(1);
-    }
-
-    initialised = 1;
-  }
-}
 
 
 static void
@@ -593,59 +570,25 @@ static GtkResponseType get_response_code(FilePowerbox *pb)
   return rc;
 }
 
-DECLARE_VTABLE(pb_return_cont_vtable);
-struct pb_return_cont {
-  struct filesys_obj hdr;
-  FilePowerbox *pb;
-};
-static void pb_return_cont_free(struct filesys_obj *obj)
+static void on_powerbox_reply(void *handle, struct pb_result *result)
 {
-  struct pb_return_cont *c = (void *) obj;
-  if(c->pb) {
-    fprintf(stderr, MOD_MSG "cont_free: got no reply\n");
-    gtk_dialog_response(GTK_DIALOG(c->pb), GTK_RESPONSE_CANCEL);
-    g_object_unref(c->pb);
-  }
-}
-static void pb_return_cont_invoke(struct filesys_obj *obj, struct cap_args args)
-{
-  struct pb_return_cont *c = (void *) obj;
-  region_t r = region_make();
-  if(c->pb) {
-    seqf_t data = flatten_reuse(r, args.data);
-    int ok = 1;
-    m_int_const(&ok, &data, METHOD_POWERBOX_RESULT_FILENAME);
-    if(ok) {
-      fprintf(stderr, MOD_MSG "got reply\n");
-      c->pb->filename = strdup_seqf(data);
-      gtk_dialog_response(GTK_DIALOG(c->pb), get_response_code(c->pb));
-    }
-    else {
-      fprintf(stderr, MOD_MSG "got unrecognised reply\n");
-      gtk_dialog_response(GTK_DIALOG(c->pb), GTK_RESPONSE_CANCEL);
-    }
-    g_object_unref(c->pb);
-    c->pb = NULL;
-  }
-  region_free(r);
-}
+  FilePowerbox *pb = handle;
 
-#include "out-vtable-powerbox-for-gtk.h"
+  if(pb_result_was_cancelled(result)) {
+    gtk_dialog_response(GTK_DIALOG(pb), GTK_RESPONSE_CANCEL);
+  }
+  else {
+    g_free(pb->filename);
+    pb->filename = pb_result_get_filename(result);
+    gtk_dialog_response(GTK_DIALOG(pb), get_response_code(pb));
+  }
+  g_object_unref(pb);
+}
 
 static void file_powerbox_send_request(FilePowerbox *pb)
 {
-  region_t r = region_make();
-  argmkbuf_t argbuf = argbuf_make(r);
-
-  int save, dir;
-  int args_size = 10;
-  bufref_t args[args_size];
-  int arg_count = 0;
-
-  struct pb_return_cont *cont =
-    filesys_obj_make(sizeof(struct pb_return_cont), &pb_return_cont_vtable);
-  g_object_ref(pb);
-  cont->pb = pb;
+  gboolean save, dir;
+  int parent_window_id = 0;
 
   switch(pb->action) {
     case GTK_FILE_CHOOSER_ACTION_OPEN:
@@ -666,49 +609,22 @@ static void file_powerbox_send_request(FilePowerbox *pb)
       dir = 1;
       break;
   }
-  if(save) {
-    bufref_t *a;
-    args[arg_count++] = argmk_array(argbuf, 1, &a);
-    a[0] = argmk_str(argbuf, mk_string(r, "Save"));
-  }
-  if(dir) {
-    bufref_t *a;
-    args[arg_count++] = argmk_array(argbuf, 1, &a);
-    a[0] = argmk_str(argbuf, mk_string(r, "Wantdir"));
-  }
 
   /* If the GtkDialog is a transient window, find its parent.  Tell
      the powerbox manager to mark its window with WM_TRANSIENT_FOR
      instead. */
-  {
-    GtkWindow *parent = GTK_WINDOW(pb)->transient_parent;
-    if(parent) {
-      int window_id = GDK_WINDOW_XID(GTK_WIDGET(parent)->window);
-      args[arg_count++] =
-	argmk_pair(argbuf, argmk_str(argbuf, mk_string(r, "Transientfor")),
-		   argmk_int(argbuf, window_id));
-    }
-    else {
-      fprintf(stderr, MOD_MSG "transient_parent is NULL\n");
-    }
+  GtkWindow *parent = GTK_WINDOW(pb)->transient_parent;
+  if(parent) {
+    parent_window_id = GDK_WINDOW_XID(GTK_WIDGET(parent)->window);
+  }
+  else {
+    fprintf(stderr, MOD_MSG "transient_parent is NULL\n");
   }
 
-  assert(arg_count < args_size);
-  init();
   get_response_code(pb); // call for debugging output only
-  {
-    int i;
-    bufref_t *a;
-    bufref_t arg_list = argmk_array(argbuf, arg_count, &a);
-    for(i = 0; i < arg_count; i++) { a[i] = args[i]; }
-    cap_invoke(powerbox_req,
-	       cap_args_dc(cat4(r, mk_int(r, METHOD_CALL),
-				mk_int(r, METHOD_POWERBOX_REQ_FILENAME),
-				mk_int(r, arg_list),
-				argbuf_data(argbuf)),
-			   mk_caps1(r, (struct filesys_obj *) cont)));
-  }
-  region_free(r);
+
+  g_object_ref(pb);
+  pb_request_send(save, dir, parent_window_id, on_powerbox_reply, pb);
 }
 
 static void

@@ -73,11 +73,10 @@ class PowerboxTest(unittest.TestCase):
         self.assertEquals(pb_requester.calls[0][0], ["Save"])
         self.assertEquals(pb_requester.calls[0][1][0], "Transientfor")
 
-    # TODO: make this test pass
-#     def test_multiple_requests(self):
-#         pb_requester = PowerboxRequester()
-#         self._test_powerbox("test_multiple_requests", pb_requester)
-#         self.assertEquals(pb_requester.calls, [[], []])
+    def test_multiple_requests(self):
+        pb_requester = PowerboxRequester()
+        self._test_powerbox("test_multiple_requests", pb_requester)
+        self.assertEquals(pb_requester.calls, [[["Wantdir"]], [["Wantdir"]]])
 
     def test_success_response_code(self):
         self._test_powerbox("test_success_response_code", PowerboxRequester())

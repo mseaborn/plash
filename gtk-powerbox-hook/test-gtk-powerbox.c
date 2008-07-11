@@ -112,6 +112,8 @@ void test_multiple_requests()
 				NULL);
   g_object_ref_sink(dialog);
   gtk_dialog_run(GTK_DIALOG(dialog));
+  /* Should this test work without the gtk_widget_hide() call as well? */
+  gtk_widget_hide(dialog);
   gtk_dialog_run(GTK_DIALOG(dialog));
   gtk_widget_unref(dialog);
 }

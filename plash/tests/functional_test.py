@@ -45,6 +45,13 @@ def check_subprocess_status(status):
         raise Exception("Subprocess exited with status %i" % status)
 
 
+def stdout_from_command(args):
+    proc = subprocess.Popen(args, stdout=subprocess.PIPE)
+    stdout, stderr = proc.communicate()
+    check_subprocess_status(proc.wait())
+    return stdout
+
+
 class TestCaseChdir(unittest.TestCase):
 
     def setUp(self):
@@ -239,6 +246,20 @@ echo "this does not get used"
             stdout, stderr = proc.communicate()
             check_subprocess_status(proc.wait())
             self.assertEquals(stdout, "args with spaces   ./script\n")
+
+    def test_getuid(self):
+        # TODO: use "-B" instead of "-fw /".  See PlashIssues/Lib64Directory.
+        expect = "%i\n" % os.getuid()
+        self.assertEquals(stdout_from_command(["id", "-u"]), expect)
+        self.assertEquals(stdout_from_command(
+                ["pola-run", "-fw", "/", "-e", "id", "-u"]), expect)
+
+    def test_getgid(self):
+        # TODO: use "-B" instead of "-fw /".  See PlashIssues/Lib64Directory.
+        expect = "%i\n" % os.getgid()
+        self.assertEquals(stdout_from_command(["id", "-g"]), expect)
+        self.assertEquals(stdout_from_command(
+                ["pola-run", "-fw", "/", "-e", "id", "-g"]), expect)
 
     def test_return_code_exited(self):
         proc = subprocess.Popen([self._pola_run, "--cwd", "/", "-B", "-e",

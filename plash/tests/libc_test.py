@@ -1284,6 +1284,96 @@ void test_truncate64()
                           0, "test_file")
 
 
+class TestGetuid(LibcTest):
+    entry = "test_getuid"
+    code = r"""
+#include <stdlib.h>
+#include <unistd.h>
+void test_getuid()
+{
+  t_check_zero(setenv("PLASH_FAKE_UID", "4001", 1));
+  t_check_zero(setenv("PLASH_FAKE_GID", "4002", 1));
+  t_check_zero(setenv("PLASH_FAKE_EUID", "4003", 1));
+  t_check_zero(setenv("PLASH_FAKE_EGID", "4004", 1));
+
+  /* Getters should return faked UID/GID values. */
+  assert(getuid() == 4001);
+  assert(getgid() == 4002);
+  assert(geteuid() == 4003);
+  assert(getegid() == 4004);
+}
+"""
+    def check(self):
+        function_names = [prefix + suffix
+                          for prefix in ("get", "gete")
+                          for suffix in ("uid", "gid")]
+        for function_name in function_names:
+            self.assertCalled("fsop_log", function_name)
+
+    def test_native(self):
+        # Test checks for hard-coded UID/GIDs, so doesn't work natively.
+        pass
+
+
+class TestUnfakedGetuid(LibcTest):
+    entry = "test_getuid_unfaked"
+    code = r"""
+#include <stdlib.h>
+#include <unistd.h>
+void test_getuid_unfaked()
+{
+  t_check_zero(unsetenv("PLASH_FAKE_UID"));
+  t_check_zero(unsetenv("PLASH_FAKE_GID"));
+  t_check_zero(unsetenv("PLASH_FAKE_EUID"));
+  t_check_zero(unsetenv("PLASH_FAKE_EGID"));
+
+  /* This is mainly checking that these do not enter infinite recursion,
+     which is a risk when getuid() calls kernel_getuid(). */
+  getuid();
+  getgid();
+  geteuid();
+  getegid();
+}
+"""
+    def check(self):
+        function_names = [prefix + suffix
+                          for prefix in ("get", "gete")
+                          for suffix in ("uid", "gid")]
+        for function_name in function_names:
+            self.assertCalled("fsop_log", function_name)
+
+
+class TestSetuid(LibcTest):
+    entry = "test_setuid"
+    code = r"""
+#include <unistd.h>
+void test_setuid()
+{
+  /* These setters should all be no-ops. */
+  t_check_zero(setuid(1234));
+  t_check_zero(setgid(1234));
+  t_check_zero(seteuid(1234));
+  t_check_zero(setegid(1234));
+  t_check_zero(setreuid(1234, 2345));
+  t_check_zero(setregid(1234, 2345));
+  t_check_zero(setresuid(1234, 2345, 3456));
+  t_check_zero(setresgid(1234, 2345, 3456));
+}
+"""
+    def test_native(self):
+        # Test doesn't work natively.  TODO: maybe these calls should
+        # only work when the UID/GID matches the current faked
+        # UID/GID?
+        pass
+
+    def check(self):
+        function_names = [prefix + suffix
+                          for prefix in ("set", "sete", "setre", "setres")
+                          for suffix in ("uid", "gid")]
+        for function_name in function_names:
+            self.assertCalled("fsop_log", function_name)
+
+
 def compile_into_one_executable(cases, tmp_dir):
     entry_points = [case.entry for case in cases]
     test_case_prototypes = ""

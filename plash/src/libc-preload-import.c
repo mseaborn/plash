@@ -58,3 +58,5 @@ IMPORT(getsockname);
 IMPORT(getsockopt);
 IMPORT(getuid);
 IMPORT(getgid);
+IMPORT(geteuid);
+IMPORT(getegid);

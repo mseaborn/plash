@@ -18,6 +18,8 @@
    USA.  */
 
 
+/* TODO: rename this file to kernel-ops.h */
+
 #define kernel_close close
 #define kernel_dup dup
 #define kernel_dup2 dup2
@@ -28,6 +30,10 @@
 #define kernel_getsockname getsockname
 #define kernel_execve execve
 #define kernel_fork fork
+#define kernel_getuid getuid
+#define kernel_getgid getgid
+#define kernel_geteuid geteuid
+#define kernel_getegid getegid
 
 
 struct stat;

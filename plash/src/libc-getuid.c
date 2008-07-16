@@ -19,17 +19,34 @@
 
 #include <unistd.h>
 
+#include "kernel-fd-ops.h"
 #include "libc-comms.h"
+
+
+__typeof__(getuid) new_getuid;
+__typeof__(getgid) new_getgid;
+__typeof__(geteuid) new_geteuid;
+__typeof__(getegid) new_getegid;
+
+__typeof__(setuid) new_setuid;
+__typeof__(setgid) new_setgid;
+__typeof__(seteuid) new_seteuid;
+__typeof__(setegid) new_setegid;
+__typeof__(setreuid) new_setreuid;
+__typeof__(setregid) new_setregid;
+__typeof__(setresuid) new_setresuid;
+__typeof__(setresgid) new_setresgid;
 
 
 export_weak_alias(new_getuid, getuid);
 export(new_getuid, __getuid);
 
-int new_getuid()
+uid_t new_getuid(void)
 {
   int uid = my_atoi(getenv("PLASH_FAKE_UID"));
   libc_log("getuid");
-  if(uid < 0) return getuid();
+  if(uid < 0)
+    return kernel_getuid();
   return uid;
 }
 
@@ -37,11 +54,12 @@ int new_getuid()
 export_weak_alias(new_getgid, getgid);
 export(new_getgid, __getgid);
 
-int new_getgid()
+gid_t new_getgid(void)
 {
   int gid = my_atoi(getenv("PLASH_FAKE_GID"));
   libc_log("getgid");
-  if(gid < 0) return getgid();
+  if(gid < 0)
+    return kernel_getgid();
   return gid;
 }
 
@@ -49,11 +67,12 @@ int new_getgid()
 export_weak_alias(new_geteuid, geteuid);
 export(new_geteuid, __geteuid);
 
-int new_geteuid()
+uid_t new_geteuid(void)
 {
   int euid = my_atoi(getenv("PLASH_FAKE_EUID"));
   libc_log("geteuid");
-  if(euid < 0) return geteuid();
+  if(euid < 0)
+    return kernel_geteuid();
   return euid;
 }
 
@@ -61,11 +80,12 @@ int new_geteuid()
 export_weak_alias(new_getegid, getegid);
 export(new_getegid, __getegid);
 
-int new_getegid()
+gid_t new_getegid(void)
 {
   int egid = my_atoi(getenv("PLASH_FAKE_EGID"));
   libc_log("getegid");
-  if(egid < 0) return getegid();
+  if(egid < 0)
+    return kernel_getegid();
   return egid;
 }
 

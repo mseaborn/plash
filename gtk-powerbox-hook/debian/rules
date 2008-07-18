@@ -4,6 +4,7 @@
 build:
 	./autogen.sh --prefix=/usr
 	make
+	./test.sh
 
 binary: binary-arch
 

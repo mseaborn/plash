@@ -3,7 +3,7 @@ Section: x11
 Priority: optional
 Maintainer: Mark Seaborn <mrs@mythic-beasts.com>
 Standards-Version: 3.7.2
-Build-Depends: debhelper (>= 5), autoconf, automake, libtool, plash-dev, libgtk2.0-dev
+Build-Depends: debhelper (>= 5), autoconf, automake, libtool, plash-dev, libgtk2.0-dev, xvfb
 
 Package: gtk-powerbox-hook
 Architecture: any

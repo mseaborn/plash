@@ -23,6 +23,11 @@
 GLIBC_BASE=glibc-2.7
 GLIBC_PATCH=$(GLIBC_BASE)-plash.patch
 
+# On Ubuntu hardy, dpkg-buildpackage sets LDFLAGS to
+# -Wl,-Bsymbolic-functions, which breaks glibc: it breaks ld.so's
+# references to libc.so's malloc/free.
+unexport LDFLAGS
+
 all: binary
 
 clean:

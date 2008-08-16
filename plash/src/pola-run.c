@@ -345,6 +345,9 @@ int handle_arguments(region_t r, struct state *state,
 			 "-fl,objrw", "/dev/null" };
 	if(handle_arguments(r, state, 0, number_args, args))
 	  return 1;
+	/* Errors from granting /lib64 are ignored. */
+	fs_resolve_populate(state->root_dir, state->root_node, state->cwd,
+			    seqf_string("/lib64"), FS_FOLLOW_SYMLINKS, &err);
 	goto arg_handled;
       }
 

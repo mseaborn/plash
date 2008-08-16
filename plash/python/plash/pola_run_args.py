@@ -204,6 +204,13 @@ class ProcessSetup(object):
                      "-fl", "/lib",
                      "-fl,objrw", "/dev/null",
                      ])
+        try:
+            self.proc.get_namespace().resolve_populate(
+                self.caller_root, "/lib64", cwd=self.cwd,
+                flags=plash.namespace.FS_FOLLOW_SYMLINKS)
+        except plash.namespace.ReturnUnmarshalError:
+            # TODO: have a proper exception to check for
+            pass
 
     def set_executable(self, arg):
         if self.proc.cmd != None:

@@ -286,6 +286,11 @@ echo "this does not get used"
             "exit 124"])
         self.assertEquals(proc.wait(), 124)
 
+    def test_ls(self):
+        proc = subprocess.Popen([self._pola_run, "-B", "-e", "ls", "--version"],
+                                stdout=subprocess.PIPE)
+        self.assertEquals(proc.wait(), 0)
+
 
 class PolaRunCTests(PolaRunTestsMixin, TestCaseChdir):
 

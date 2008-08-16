@@ -155,6 +155,28 @@ class TestEnvironment(unittest.TestCase):
         setup.caller_root = plash.env.get_root_dir()
         setup.handle_args(["-B"])
 
+    def test_granting_lib64(self):
+        proc = plash.process.ProcessSpecWithNamespace()
+        fake_root_dir = self.make_temp_dirobj()
+        fake_root_dir.dir_mkdir(0777, "usr")
+        fake_root_dir.dir_mkdir(0777, "bin")
+        fake_root_dir.dir_mkdir(0777, "lib")
+        fake_root_dir.dir_mkdir(0777, "dev")
+        fake_root_dir.dir_traverse("dev").dir_create_file(os.O_RDONLY, 0777,
+                                                          "null")
+        # Check that -B works when /lib64 does not exist.
+        setup = pola_run_args.ProcessSetup(proc)
+        setup.caller_root = fake_root_dir
+        setup.handle_args(["-B"])
+        output_root_dir = proc.get_namespace().get_root_dir()
+        # TODO: have a proper exception to check for
+        self.assertRaises(plash.marshal.UnmarshalError,
+                          lambda: output_root_dir.dir_traverse("lib64"))
+        # Check that -B works when /lib64 does exist.
+        fake_root_dir.dir_mkdir(0777, "lib64")
+        setup.handle_args(["-B"])
+        output_root_dir.dir_traverse("lib64")
+
     def test_default_cwd(self):
         proc = plash.process.ProcessSpecWithNamespace()
         setup = pola_run_args.ProcessSetup(proc)

@@ -291,6 +291,24 @@ echo "this does not get used"
                                 stdout=subprocess.PIPE)
         self.assertEquals(proc.wait(), 0)
 
+    def test_chdir_in_forked_process(self):
+        temp_dir = os.getcwd()
+        proc = subprocess.Popen(
+            [self._pola_run, "-B", "-fw", temp_dir,
+             "-e", "/bin/bash", "-c", """
+set -e
+echo Foo > test_file
+mkdir test_dir
+bash -c 'cd test_dir && echo In subprocess && pwd'
+cat test_file
+pwd
+"""],
+            stdout=subprocess.PIPE)
+        stdout, stderr = proc.communicate()
+        check_subprocess_status(proc.wait())
+        self.assertEquals(stdout, "In subprocess\n%s/test_dir\nFoo\n%s\n"
+                          % (temp_dir, temp_dir))
+
 
 class PolaRunCTests(PolaRunTestsMixin, TestCaseChdir):
 

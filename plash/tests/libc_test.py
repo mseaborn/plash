@@ -343,6 +343,28 @@ void test_openat64()
             os.O_CREAT | os.O_WRONLY | os.O_LARGEFILE, 0777, "file")
 
 
+class TestOpenCloexec(LibcTest):
+    # Linux's open() ignores flags it does not understand.
+    # We only ignore O_CLOEXEC, which is not yet implemented.
+    # TODO: implement O_CLOEXEC and test that it sets FD_CLOEXEC.
+    entry = "test_open_cloexec"
+    code = r"""
+#include <fcntl.h>
+#include <unistd.h>
+void test_open_cloexec()
+{
+  int fd = open("test_file", O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0777);
+  t_check(fd >= 0);
+  t_check_zero(close(fd));
+}
+"""
+    def check(self):
+        # O_CLOEXEC does not get passed to FsOp.
+        self.assertCalled("fsop_open", None,
+                          os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0777,
+                          "test_file")
+
+
 class TestUnlink(LibcTest):
     entry = "test_unlink"
     code = r"""

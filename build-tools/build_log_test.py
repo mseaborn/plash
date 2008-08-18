@@ -1,0 +1,131 @@
+
+# Copyright (C) 2007 Mark Seaborn
+#
+# chroot_build is free software; you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as
+# published by the Free Software Foundation; either version 2.1 of the
+# License, or (at your option) any later version.
+#
+# chroot_build is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with chroot_build; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+# 02110-1301, USA.
+
+import cStringIO as StringIO
+import os
+import shutil
+import tempfile
+import unittest
+
+import lxml.etree as etree
+
+from chroot_build import run_cmd
+import build_log
+
+
+class NodeStreamTest(unittest.TestCase):
+
+    def test(self):
+        stream = StringIO.StringIO()
+        node = build_log.NodeWriter(build_log.NodeStream(stream), "root")
+        node.add_attr("attr", "attribute value")
+        node2 = node.new_child("child_node")
+        node2.add_attr("foo", "bar")
+        xml = build_log.get_xml_from_log(StringIO.StringIO(stream.getvalue()))
+        self.assertEquals(etree.tostring(xml, pretty_print=True),
+                          """\
+<root attr="attribute value">
+  <child_node foo="bar"/>
+</root>\
+""")
+
+
+def write_file(filename, data):
+    fh = open(filename, "w")
+    try:
+        fh.write(data)
+    finally:
+        fh.close()
+
+
+class TempDirTestCase(unittest.TestCase):
+
+    def setUp(self):
+        super(TempDirTestCase, self).setUp()
+        self._temp_dirs = []
+
+    def tearDown(self):
+        for temp_dir in self._temp_dirs:
+            shutil.rmtree(temp_dir)
+        super(TempDirTestCase, self).tearDown()
+
+    def make_temp_dir(self):
+        temp_dir = tempfile.mkdtemp(prefix="tmp-%s-" % self.__class__.__name__)
+        self._temp_dirs.append(temp_dir)
+        return temp_dir
+
+
+class LogSetDirTest(TempDirTestCase):
+
+    def test_log(self):
+        logset = build_log.LogSetDir(os.path.join(self.make_temp_dir(), "logs"))
+        # It should work before the directory has been created.
+        self.assertEquals(len(list(logset.get_logs())), 0)
+        log = logset.make_logger()
+        log2 = logset.make_logger()
+        self.assertEquals(len(list(logset.get_logs())), 2)
+        list(logset.get_logs())[0].get_timestamp()
+
+
+class DummyTarget(object):
+
+    def __init__(self, logset):
+        self._logset = logset
+
+    def get_name(self):
+        return "dummy"
+
+    def get_logs(self):
+        return self._logset.get_logs()
+
+
+class FormattingTest(TempDirTestCase):
+
+    def test_log(self):
+        logset = build_log.LogSetDir(os.path.join(self.make_temp_dir(), "logs"))
+        log = logset.make_logger()
+        log.child_log("foo")
+        targets = [DummyTarget(logset)]
+        build_log.format_logs(
+            targets, os.path.join(self.make_temp_dir(), "foo.html"))
+        build_log.format_short_summary(
+            targets, os.path.join(self.make_temp_dir(), "foo.html"))
+        build_log.warn_failures(targets, stamp_time=0)
+
+
+# TODO: make into a unit test
+def main():
+    log_dir = "out-log"
+    if os.path.exists(log_dir):
+        shutil.rmtree(log_dir)
+    os.mkdir(log_dir)
+    maker = build_log.LogDir(log_dir)
+    log = maker.make_logger()
+    run_cmd(log, ["echo", "Hello world!"])
+    log2 = log.child_log("child")
+    log2.message("This is a message")
+    log2.finish(0)
+    log.finish(0)
+    print etree.tostring(maker.get_xml(), pretty_print=True)
+    html = build_log.wrap_body(build_log.format_log(maker.get_xml()))
+    write_file(os.path.join("out-log", "log.html"),
+               etree.tostring(html, pretty_print=True))
+
+
+if __name__ == "__main__":
+    unittest.main()

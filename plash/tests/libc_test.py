@@ -353,7 +353,12 @@ class TestOpenCloexec(LibcTest):
 #include <unistd.h>
 void test_open_cloexec()
 {
-  int fd = open("test_file", O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0777);
+  int flags = O_WRONLY | O_CREAT | O_TRUNC;
+  /* Support running tests on distribution releases with older glibcs. */
+#ifdef O_CLOEXEC
+  flags |= O_CLOEXEC;
+#endif
+  int fd = open("test_file", flags, 0777);
   t_check(fd >= 0);
   t_check_zero(close(fd));
 }

@@ -278,9 +278,14 @@ int new_openat(int dir_fd, const char *filename, int flags, ...)
     mode = va_arg(arg, int);
     va_end(arg);
   }
+  /* The purpose of the ifdef is to allow building the preload library
+     (used for testing) on distributions with older glibcs. */
+#ifdef O_CLOEXEC
   /* Linux's open() ignores flags it does not understand; we only ignore
      O_CLOEXEC.  TODO: implement O_CLOEXEC. */
   flags = flags & ~O_CLOEXEC;
+#endif
+
   if(libc_get_fs_op(&fs_op_server) < 0)
     goto exit;
   if(fds_get_dir_obj(dir_fd, &dir_obj) < 0)

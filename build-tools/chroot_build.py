@@ -27,6 +27,7 @@ import sys
 import time
 import traceback
 
+from buildutils import remove_prefix
 import action_tree
 import build_log
 import chroot_build_config
@@ -185,11 +186,6 @@ class LogDirMixin(object):
     def get_logs(self):
         logs = self.get_log_set().get_logs()
         return list(itertools.islice(logs, 20))
-
-
-def remove_prefix(prefix, string):
-    assert string.startswith(prefix)
-    return string[len(prefix):]
 
 
 def chroot_path(chroot_dir, path):
@@ -958,14 +954,16 @@ class ChrootSet(object):
             # Relative path needed by build_log.  TODO: fix.
             base_dir=config.state_dir,
             deb_versions=self.deb_versions)
+        self._path_mapper = build_log.PathnameMapper(config.state_dir)
 
     def get_next_version(self):
         return make_autobuild_version(self._time_now)
 
     def update_log(self, html_dir):
         targets = self.chroot_list + [self.combined]
-        build_log.format_logs(targets, os.path.join(html_dir, "summary.html"))
-        build_log.format_short_summary(targets,
+        build_log.format_logs(targets, self._path_mapper,
+                              os.path.join(html_dir, "summary.html"))
+        build_log.format_short_summary(targets, self._path_mapper,
                                        os.path.join(html_dir, "short.html"))
         warn_targets = [self.combined] + [
             target for target in self.chroot_list

@@ -122,16 +122,21 @@ class DummyTarget(object):
 class FormattingTest(TempDirTestCase, GoldenTestCase):
 
     def test_log(self):
-        logset = build_log.LogSetDir(os.path.join(self.make_temp_dir(), "logs"),
+        logs_parent_dir = self.make_temp_dir()
+        logset = build_log.LogSetDir(os.path.join(logs_parent_dir, "logs"),
                                      get_time=lambda: 0)
         log = logset.make_logger()
         log.child_log("foo")
+        fh = log.make_file()
+        fh.write("hello world\n")
+        fh.close()
         targets = [DummyTarget(logset)]
         output_dir = self.make_temp_dir()
+        mapper = build_log.PathnameMapper(logs_parent_dir)
         build_log.format_logs(
-            targets, os.path.join(output_dir, "long.html"))
+            targets, mapper, os.path.join(output_dir, "long.html"))
         build_log.format_short_summary(
-            targets, os.path.join(output_dir, "short.html"))
+            targets, mapper, os.path.join(output_dir, "short.html"))
         self.assert_golden(output_dir, os.path.join(os.path.dirname(__file__),
                                                     "golden-files"))
         build_log.warn_failures(targets, stamp_time=0)

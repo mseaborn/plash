@@ -20,6 +20,7 @@ import os
 import subprocess
 import time
 
+from buildutils import remove_prefix
 import lxml.etree as etree
 
 
@@ -219,6 +220,15 @@ class LogSetDir(object):
         return self._get_logs(self._dir)
 
 
+class PathnameMapper(object):
+
+    def __init__(self, dir_path):
+        self._dir_path = dir_path
+
+    def map_pathname(self, pathname):
+        return remove_prefix(self._dir_path + "/", pathname)
+
+
 def flatten(val):
     got = []
 
@@ -252,8 +262,8 @@ def tag(tag_name, *children):
     return tagp(tag_name, [], *children)
 
 
-def format_log(log, filter=lambda log: True):
-    sub_logs = [format_log(sublog, filter)
+def format_log(log, path_mapper, filter=lambda log: True):
+    sub_logs = [format_log(sublog, path_mapper, filter)
                 for sublog in reversed(log.xpath("log"))]
     if not filter(log):
         return sub_logs
@@ -268,8 +278,9 @@ def format_log(log, filter=lambda log: True):
     html.append(tag("span", log.attrib.get("name", "")))
     for file_node in log.xpath("file"):
         pathname = file_node.attrib["pathname"]
+        relative_name = path_mapper.map_pathname(pathname)
         if os.stat(pathname).st_size > 0:
-            html.append(tagp("a", [("href", pathname)], "[log]"))
+            html.append(tagp("a", [("href", relative_name)], "[log]"))
     html.extend(flatten(sub_logs))
     return html
 
@@ -278,17 +289,17 @@ def format_time(log, attr):
     # TODO: use local timezone without breaking golden tests
     if attr in log.attrib:
         timeval = float(log.attrib[attr])
-        return tagp("div", [("class", "time")],
-                    time.strftime("%a, %d %b %Y %H:%M",
-                                  time.gmtime(timeval)))
+        string = time.strftime("%a, %d %b %Y %H:%M",
+                               time.gmtime(timeval))
     else:
-        return "time not known"
+        string = "time not known"
+    return tagp("div", [("class", "time")], string)
 
 
-def format_top_log(log):
+def format_top_log(log, path_mapper):
     return tag("div",
                format_time(log, "end_time"),
-               format_log(log),
+               format_log(log, path_mapper),
                format_time(log, "start_time"))
 
 
@@ -311,14 +322,14 @@ def log_time(log):
         return float(log.attrib["start_time"])
 
 
-def format_logs(targets, dest_filename):
+def format_logs(targets, path_mapper, dest_filename):
     headings = tag("tr", *[tag("th", target.get_name())
                            for target in targets])
     columns = tag("tr")
     for target in targets:
         column = tag("td")
         for log in target.get_logs():
-            column.append(format_top_log(log.get_xml()))
+            column.append(format_top_log(log.get_xml(), path_mapper))
         columns.append(column)
     html = wrap_body(tagp("table", [("class", "summary")],
                           headings, columns))
@@ -343,7 +354,7 @@ def latest_logs(targets):
         yield (target, log)
 
 
-def format_short_summary(targets, dest_filename):
+def format_short_summary(targets, path_mapper, dest_filename):
     table = tagp("table", [("class", "short_results")])
     for target, log in latest_logs(targets):
         row = tag("tr")
@@ -355,7 +366,7 @@ def format_short_summary(targets, dest_filename):
         if log is not None:
             log_xml = log.get_xml()
             row.append(tag("td", format_time(log_xml, "end_time")))
-            info = flatten(format_log(log_xml, filter))
+            info = flatten(format_log(log_xml, path_mapper, filter))
             if len(info) == 0:
                 info = tagp("div", [("class", "log result_success")], "ok")
         else:

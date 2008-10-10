@@ -19,6 +19,8 @@
 import cStringIO as StringIO
 import os
 import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -70,6 +72,29 @@ class TempDirTestCase(unittest.TestCase):
         return temp_dir
 
 
+class GoldenTestCase(unittest.TestCase):
+
+    run_meld = False
+
+    # Copied from xjack/golden_test.py.  TODO: share the code.
+    def assert_golden(self, dir_got, dir_expect):
+        assert os.path.exists(dir_expect), dir_expect
+        proc = subprocess.Popen(["diff", "--recursive", "-u", "-N",
+                                 "--exclude=.*", dir_expect, dir_got],
+                                stdout=subprocess.PIPE)
+        stdout, stderr = proc.communicate()
+        if len(stdout) > 0:
+            if self.run_meld:
+                # Put expected output on the right because that is the
+                # side we usually edit.
+                subprocess.call(["meld", dir_got, dir_expect])
+            raise AssertionError(
+                "Differences from golden files found.\n"
+                "Try running with --meld to update golden files.\n"
+                "%s" % stdout)
+        self.assertEquals(proc.wait(), 0)
+
+
 class LogSetDirTest(TempDirTestCase):
 
     def test_log(self):
@@ -94,17 +119,21 @@ class DummyTarget(object):
         return self._logset.get_logs()
 
 
-class FormattingTest(TempDirTestCase):
+class FormattingTest(TempDirTestCase, GoldenTestCase):
 
     def test_log(self):
-        logset = build_log.LogSetDir(os.path.join(self.make_temp_dir(), "logs"))
+        logset = build_log.LogSetDir(os.path.join(self.make_temp_dir(), "logs"),
+                                     get_time=lambda: 0)
         log = logset.make_logger()
         log.child_log("foo")
         targets = [DummyTarget(logset)]
+        output_dir = self.make_temp_dir()
         build_log.format_logs(
-            targets, os.path.join(self.make_temp_dir(), "foo.html"))
+            targets, os.path.join(output_dir, "long.html"))
         build_log.format_short_summary(
-            targets, os.path.join(self.make_temp_dir(), "foo.html"))
+            targets, os.path.join(output_dir, "short.html"))
+        self.assert_golden(output_dir, os.path.join(os.path.dirname(__file__),
+                                                    "golden-files"))
         build_log.warn_failures(targets, stamp_time=0)
 
 
@@ -128,4 +157,7 @@ def main():
 
 
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["--meld"]:
+        GoldenTestCase.run_meld = True
+        sys.argv.pop(1)
     unittest.main()

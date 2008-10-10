@@ -103,8 +103,9 @@ def get_xml_from_log(input_file):
 
 class LogDir(object):
 
-    def __init__(self, dir_path):
+    def __init__(self, dir_path, get_time=time.time):
         self._dir_path = dir_path
+        self._get_time = get_time
         self._counter = 0
         self._log_file = os.path.join(self._dir_path, "0000-log")
 
@@ -117,7 +118,7 @@ class LogDir(object):
         assert not os.path.exists(self._log_file)
         stream = NodeStream(open(self._log_file, "w", buffering=0))
         return LogWriter(NodeWriter(stream, "root"),
-                         self, "root")
+                         self, "root", self._get_time)
 
     def get_xml(self):
         log = get_xml_from_log(open(self._log_file, "r"))
@@ -132,11 +133,12 @@ class LogDir(object):
 
 class LogWriter(object):
 
-    def __init__(self, node, log_dir, name):
+    def __init__(self, node, log_dir, name, get_time):
         self._node = node
         self._log_dir = log_dir
         self._name = name
-        self._node.add_attr("start_time", str(time.time()))
+        self._get_time = get_time
+        self._node.add_attr("start_time", str(self._get_time()))
 
     def message(self, message):
         self._node.new_child("message", [("text", message)])
@@ -144,7 +146,7 @@ class LogWriter(object):
     def child_log(self, name):
         return LogWriter(self._node.new_child("log", [("name", name)],
                                               id_name=name),
-                         self._log_dir, name)
+                         self._log_dir, name, self._get_time)
 
     def make_file(self):
         relative_name, filename = self._log_dir.make_filename(self._name)
@@ -153,7 +155,7 @@ class LogWriter(object):
         return open(filename, "w")
 
     def finish(self, result):
-        self._node.add_attr("end_time", str(time.time()))
+        self._node.add_attr("end_time", str(self._get_time()))
         self._node.add_attr("result", str(result))
 
 
@@ -174,11 +176,12 @@ class DummyLogWriter(object):
 
 class LogSetDir(object):
 
-    def __init__(self, dir_path):
+    def __init__(self, dir_path, get_time=time.time):
         self._dir = dir_path
+        self._get_time = get_time
 
     def make_logger(self):
-        time_now = time.gmtime()
+        time_now = time.gmtime(self._get_time())
         subdir_base = time.strftime("%Y/%m/%d", time_now)
         i = 0
         while True:
@@ -187,7 +190,7 @@ class LogSetDir(object):
                 break
             i += 1
         os.makedirs(log_dir)
-        return LogDir(log_dir).make_logger()
+        return LogDir(log_dir, self._get_time).make_logger()
 
     def _sorted_leafnames(self, dir_path):
         # For compatibility with existing log dirs, sort by number not
@@ -205,7 +208,7 @@ class LogSetDir(object):
 
     def _get_logs(self, dir_path):
         if os.path.exists(os.path.join(dir_path, "0000-log")):
-            yield LogDir(dir_path)
+            yield LogDir(dir_path, self._get_time)
         else:
             if os.path.exists(dir_path):
                 for leafname in self._sorted_leafnames(dir_path):
@@ -272,11 +275,12 @@ def format_log(log, filter=lambda log: True):
 
 
 def format_time(log, attr):
+    # TODO: use local timezone without breaking golden tests
     if attr in log.attrib:
         timeval = float(log.attrib[attr])
         return tagp("div", [("class", "time")],
                     time.strftime("%a, %d %b %Y %H:%M",
-                                  time.localtime(timeval)))
+                                  time.gmtime(timeval)))
     else:
         return "time not known"
 

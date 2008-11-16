@@ -154,7 +154,7 @@ def log_last_exception(log):
         message = "".join(traceback.format_exception(exc_type, value, trace))
         log_file.write(message)
         sys.stdout.write(message)
-    except:
+    finally:
         log_file.close()
 
 
@@ -1023,10 +1023,13 @@ class ChrootSet(object):
             try:
                 for action in actions:
                     getattr(target, action)(log)
-                log.finish(0)
-            except:
+            except Exception, exn:
                 log.finish(1)
                 log_last_exception(log)
+                if isinstance(exn, (KeyboardInterrupt, SystemExit)):
+                    raise
+            else:
+                log.finish(0)
 
     @action_tree.action_node
     def all(self):

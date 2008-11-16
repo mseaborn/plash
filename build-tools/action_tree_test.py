@@ -58,6 +58,47 @@ class ExampleTree(object):
         return [self.subtree1, self.subtree2]
 
 
+class TreeWithFailure(object):
+
+    def failer(self, log):
+        raise Exception("lose")
+
+    @action_tree.action_node
+    def subtree(self):
+        return [self.leaf1, self.leaf2]
+
+    def leaf1(self, log):
+        pass
+
+    def leaf2(self, log):
+        pass
+
+    @action_tree.action_node
+    def all_steps(self):
+        return [self.failer, self.subtree]
+
+
+class SimpleLog(object):
+
+    def __init__(self, name="top"):
+        self._name = name
+        self._sublogs = []
+        self._result = None
+
+    def child_log(self, name):
+        child = SimpleLog(name)
+        self._sublogs.append(child)
+        return child
+
+    def finish(self, result):
+        self._result = result
+
+    def format(self, stream, indent=0):
+        stream.write("%s%s [%s]\n" % (" " * indent, self._name, self._result))
+        for sublog in self._sublogs:
+            sublog.format(stream, indent=indent + 2)
+
+
 def pop_all(lst):
     copy = lst[:]
     lst[:] = []
@@ -69,6 +110,12 @@ def pop_all(lst):
 def assert_equals(x, y):
     if x != y:
         raise AssertionError('"%s" != "%s"' % (x, y))
+
+
+def iostring(func):
+    stream = StringIO.StringIO()
+    func(stream)
+    return stream.getvalue()
 
 
 class ActionTreeTest(unittest.TestCase):
@@ -134,6 +181,36 @@ class ActionTreeTest(unittest.TestCase):
   1: subtree2
     2: qux
     3: quux
+""")
+
+    def test_logging(self):
+        tree = ExampleTree().all_steps
+        log = SimpleLog()
+        action_tree.action_main(tree, ["0"], log=log)
+        assert_equals(iostring(log.format), """\
+top [None]
+  subtree1 [0]
+    foo [0]
+    bar [0]
+    baz [0]
+  subtree2 [0]
+    qux [0]
+    quux [0]
+""")
+
+    def test_logging_enrol_up_front(self):
+        tree = TreeWithFailure().all_steps
+        log = SimpleLog()
+        try:
+            action_tree.action_main(tree, ["0"], log=log)
+        except:
+            pass
+        assert_equals(iostring(log.format), """\
+top [None]
+  failer [1]
+  subtree [None]
+    leaf1 [None]
+    leaf2 [None]
 """)
 
 

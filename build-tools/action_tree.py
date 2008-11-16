@@ -22,24 +22,41 @@ import sys
 import build_log
 
 
+# Workaround for Python's variable binding semantics.
+def thunkify(func, *args):
+    return lambda: func(*args)
+
+
 class ActionTreeNode(object):
 
     def __init__(self, children, name):
         self.children = children
         self.__name__ = name
 
-    def __call__(self, log):
+    def two_stage_run(self, log):
+        steps = []
         for name, node in self.children:
-            child_log = log.child_log(name)
-            try:
-                node(child_log)
-            except (SystemExit, KeyboardInterrupt):
-                raise
-            except:
-                child_log.finish(1)
-                raise
+            sublog = log.child_log(name)
+            if isinstance(node, ActionTreeNode):
+                func = node.two_stage_run(sublog)
             else:
-                child_log.finish(0)
+                func = thunkify(node, sublog)
+            steps.append((sublog, func))
+        def run():
+            for sublog, func in steps:
+                try:
+                    func()
+                except (SystemExit, KeyboardInterrupt):
+                    raise
+                except:
+                    sublog.finish(1)
+                    raise
+                else:
+                    sublog.finish(0)
+        return run
+
+    def __call__(self, log):
+        self.two_stage_run(log)()
 
 
 def make_node(actions, name):

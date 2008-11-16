@@ -146,7 +146,9 @@ class FormattingTest(TempDirTestCase, GoldenTestCase):
         logset = build_log.LogSetDir(os.path.join(logs_parent_dir, "logs"),
                                      get_time=lambda: 0)
         log = logset.make_logger()
-        log.child_log("foo")
+        sublog = log.child_log("foo")
+        sublog.finish(0)
+        log.finish(0)
         fh = log.make_file()
         fh.write("hello world\n")
         fh.close()
@@ -170,6 +172,17 @@ class FormattingTest(TempDirTestCase, GoldenTestCase):
                                                       "format_log.py"),
                                log_dir, html_file])
         assert os.path.exists(html_file)
+
+    def test_time_duration_formatting(self):
+        pairs = [(0, "0s"),
+                 (0.1, "0s"),
+                 (3, "3s"),
+                 (10, "10s"),
+                 (62, "1m02s"),
+                 (60*60*2 + 60 + 3, "2h01m03s"),
+                 (24*60*60, "1d00h00m00s")]
+        for seconds, expect in pairs:
+            self.assertEquals(expect, build_log.format_duration(seconds))
 
 
 # TODO: make into a unit test

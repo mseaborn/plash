@@ -291,7 +291,7 @@ def format_log(log, path_mapper, filter=lambda log: True):
     else:
         classes.append("result_failure")
     html = tagp("div", [("class", " ".join(classes))])
-    html.append(tag("span", log.attrib.get("name", "")))
+    html.append(tag("span", log_duration(log) + log.attrib.get("name", "")))
     for file_node in log.xpath("file"):
         pathname = file_node.attrib["pathname"]
         relative_name = path_mapper.map_pathname(pathname)
@@ -310,6 +310,31 @@ def format_time(log, attr):
     else:
         string = "time not known"
     return tagp("div", [("class", "time")], string)
+
+
+def format_duration(seconds):
+    if int(seconds) == 0:
+        return "0s"
+    got = []
+    minutes, val = divmod(seconds, 60)
+    got.append("%02is" % val)
+    if minutes != 0:
+        hours, val = divmod(minutes, 60)
+        got.append("%02im" % val)
+        if hours != 0:
+            days, val = divmod(hours, 24)
+            got.append("%02ih" % val)
+            if days != 0:
+                got.append("%id" % days)
+    return "".join(reversed(got)).lstrip("0")
+
+
+def log_duration(log):
+    if "start_time" in log.attrib and "end_time" in log.attrib:
+        return "[%s] " % format_duration(float(log.attrib["end_time"]) -
+                                         float(log.attrib["start_time"]))
+    else:
+        return ""
 
 
 def format_top_log(log, path_mapper):

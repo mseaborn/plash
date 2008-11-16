@@ -16,6 +16,7 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
 # 02110-1301, USA.
 
+import gc
 import optparse
 import sys
 
@@ -23,6 +24,10 @@ import build_log
 
 
 def main(argv):
+    # Ubuntu Gutsy's version of python-lxml is buggy and sometimes
+    # segfaults during GC.  TODO: upgrade and remove this workaround.
+    gc.disable()
+
     parser = optparse.OptionParser()
     options, args = parser.parse_args(argv)
     log_dir, output_file = args

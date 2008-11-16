@@ -918,8 +918,8 @@ def get_targets(config, deb_versions):
 
 class ChrootSet(object):
 
-    supported_targets = ["i386-ubuntu-edgy-story6",
-                         "amd64-ubuntu-edgy-story6",
+    supported_targets = [# "i386-ubuntu-edgy-story6",
+                         # "amd64-ubuntu-edgy-story6",
                          "i386-ubuntu-feisty-story6",
                          "amd64-ubuntu-feisty-story6",
                          "i386-ubuntu-gutsy-story6",
@@ -936,6 +936,8 @@ class ChrootSet(object):
     known_failures = ["i386-debian-etch-story6", # has glibc 2.3.6
                       "i386-ubuntu-intrepid-story6", # build fails
                       "amd64-ubuntu-intrepid-story6", # glibc 2.8 issue
+                      "i386-ubuntu-edgy-story6", # old autotools
+                      "amd64-ubuntu-edgy-story6", # old autotools
                       ]
 
     def __init__(self, config):

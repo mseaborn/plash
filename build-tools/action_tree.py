@@ -126,7 +126,8 @@ def negative_filter_tree(action, label):
     return action
 
 
-def action_main(action, args, stdout=sys.stdout):
+def action_main(action, args, stdout=sys.stdout,
+                log=build_log.DummyLogWriter()):
     parser = optparse.OptionParser()
     parser.add_option("-f", "--filter", dest="filters", default=[],
                       action="append", help="Filter to a subset of the tree")
@@ -141,8 +142,6 @@ def action_main(action, args, stdout=sys.stdout):
     if len(args) == 0 and len(options.start_at) == 0:
         print_tree(action, stdout)
     else:
-        # TODO: support logging
-        log = build_log.DummyLogWriter()
         flattened = list(flatten_tree(action))
         by_index = {}
         for index, act in enumerate(flattened):

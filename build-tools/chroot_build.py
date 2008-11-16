@@ -1036,6 +1036,13 @@ class ChrootSet(object):
             yield name, self.chroots_by_name[name].all_steps
 
     @action_tree.action_node
+    def incremental_autobuild(self):
+        yield self.deb_versions.bump_to_next_version
+        for name in self.supported_targets:
+            yield name, self.chroots_by_name[name].all_steps
+        yield self.combined.make_repos
+
+    @action_tree.action_node
     def build_all(self):
         # TODO: svn up first
         yield self.deb_versions.bump_to_next_version

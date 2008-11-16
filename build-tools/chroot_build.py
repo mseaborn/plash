@@ -904,8 +904,7 @@ def get_targets(config, deb_versions):
             bootstrapper = Debootstrapper(distro["url"], release, arch,
                                           subdists=distro["subdists"],
                                           script=distro["script"])
-            # TODO: remove story6 suffix
-            name = "%s-%s-%s-story6" % (arch, distro["name"], release)
+            name = "%s-%s-%s" % (arch, distro["name"], release)
             base_dir = os.path.join(config.dest_dir, name)
             stamps = StampDir(os.path.join(base_dir, "stamps"))
             chroot_env = ChrootEnv(os.path.join(base_dir, "chroot"),
@@ -918,26 +917,26 @@ def get_targets(config, deb_versions):
 
 class ChrootSet(object):
 
-    supported_targets = [# "i386-ubuntu-edgy-story6",
-                         # "amd64-ubuntu-edgy-story6",
-                         "i386-ubuntu-feisty-story6",
-                         "amd64-ubuntu-feisty-story6",
-                         "i386-ubuntu-gutsy-story6",
-                         "amd64-ubuntu-gutsy-story6",
-                         "i386-ubuntu-hardy-story6",
-                         "amd64-ubuntu-hardy-story6",
-                         # "i386-ubuntu-intrepid-story6", # build fails
-                         # "amd64-ubuntu-intrepid-story6",
-                         "i386-debian-lenny-story6",
-                         "amd64-debian-lenny-story6",
+    supported_targets = [# "i386-ubuntu-edgy",
+                         # "amd64-ubuntu-edgy",
+                         "i386-ubuntu-feisty",
+                         "amd64-ubuntu-feisty",
+                         "i386-ubuntu-gutsy",
+                         "amd64-ubuntu-gutsy",
+                         "i386-ubuntu-hardy",
+                         "amd64-ubuntu-hardy",
+                         # "i386-ubuntu-intrepid", # build fails
+                         # "amd64-ubuntu-intrepid",
+                         "i386-debian-lenny",
+                         "amd64-debian-lenny",
                          ]
-    autobuild_targets = ["i386-debian-etch-story6",
+    autobuild_targets = ["i386-debian-etch",
                          ]
-    known_failures = ["i386-debian-etch-story6", # has glibc 2.3.6
-                      "i386-ubuntu-intrepid-story6", # build fails
-                      "amd64-ubuntu-intrepid-story6", # glibc 2.8 issue
-                      "i386-ubuntu-edgy-story6", # old autotools
-                      "amd64-ubuntu-edgy-story6", # old autotools
+    known_failures = ["i386-debian-etch", # has glibc 2.3.6
+                      "i386-ubuntu-intrepid", # build fails
+                      "amd64-ubuntu-intrepid", # glibc 2.8 issue
+                      "i386-ubuntu-edgy", # old autotools
+                      "amd64-ubuntu-edgy", # old autotools
                       ]
 
     def __init__(self, config):

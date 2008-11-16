@@ -17,6 +17,7 @@
 # 02110-1301, USA.
 
 import cStringIO as StringIO
+import itertools
 import os
 import shutil
 import subprocess
@@ -27,6 +28,7 @@ import unittest
 import lxml.etree as etree
 
 from chroot_build import run_cmd
+import action_tree
 import build_log
 
 
@@ -105,6 +107,24 @@ class LogSetDirTest(TempDirTestCase):
         log2 = logset.make_logger()
         self.assertEquals(len(list(logset.get_logs())), 2)
         list(logset.get_logs())[0].get_timestamp()
+
+    def test_start_times(self):
+        class Example(object):
+            def __init__(self):
+                self.count = 0
+            def step(self, log):
+                self.count += 1
+            @action_tree.action_node
+            def all_steps(self):
+                return [self.step] * 5
+        example = Example()
+        logset = build_log.LogSetDir(self.make_temp_dir(),
+                                     get_time=lambda: example.count)
+        log = logset.make_logger()
+        example.all_steps(log)
+        xml = logset.get_logs().next().get_xml()
+        self.assertEquals(xml.xpath(".//@start_time"),
+                          ["0", "0", "1", "2", "3", "4"])
 
 
 class DummyTarget(object):

@@ -36,7 +36,7 @@ class ActionTreeNode(object):
     def two_stage_run(self, log):
         steps = []
         for name, node in self.children:
-            sublog = log.child_log(name)
+            sublog = log.child_log(name, do_start=False)
             if isinstance(node, ActionTreeNode):
                 func = node.two_stage_run(sublog)
             else:
@@ -45,6 +45,7 @@ class ActionTreeNode(object):
         def run():
             for sublog, func in steps:
                 try:
+                    sublog.start()
                     func()
                 except (SystemExit, KeyboardInterrupt):
                     raise

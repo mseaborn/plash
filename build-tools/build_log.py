@@ -118,8 +118,10 @@ class LogDir(object):
     def make_logger(self):
         assert not os.path.exists(self._log_file)
         stream = NodeStream(open(self._log_file, "w", buffering=0))
-        return LogWriter(NodeWriter(stream, "root"),
-                         self, "root", self._get_time)
+        log = LogWriter(NodeWriter(stream, "root"),
+                        self, "root", self._get_time)
+        log.start()
+        return log
 
     def get_xml(self):
         log = get_xml_from_log(open(self._log_file, "r"))
@@ -139,15 +141,20 @@ class LogWriter(object):
         self._log_dir = log_dir
         self._name = name
         self._get_time = get_time
+
+    def start(self):
         self._node.add_attr("start_time", str(self._get_time()))
 
     def message(self, message):
         self._node.new_child("message", [("text", message)])
 
-    def child_log(self, name):
-        return LogWriter(self._node.new_child("log", [("name", name)],
-                                              id_name=name),
-                         self._log_dir, name, self._get_time)
+    def child_log(self, name, do_start=True):
+        sublog = LogWriter(self._node.new_child("log", [("name", name)],
+                                                id_name=name),
+                           self._log_dir, name, self._get_time)
+        if do_start:
+            sublog.start()
+        return sublog
 
     def make_file(self):
         relative_name, filename = self._log_dir.make_filename(self._name)
@@ -162,10 +169,13 @@ class LogWriter(object):
 
 class DummyLogWriter(object):
 
+    def start(self):
+        pass
+
     def message(self, message):
         pass
 
-    def child_log(self, name):
+    def child_log(self, name, do_start=True):
         return DummyLogWriter()
 
     def make_file(self):
@@ -318,8 +328,10 @@ def write_xml_file(filename, xml):
 def log_time(log):
     if "end_time" in log.attrib:
         return float(log.attrib["end_time"])
-    else:
+    elif "start_time" in log.attrib:
         return float(log.attrib["start_time"])
+    else:
+        return 0
 
 
 def format_logs(targets, path_mapper, dest_filename):

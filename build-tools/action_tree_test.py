@@ -85,7 +85,10 @@ class SimpleLog(object):
         self._sublogs = []
         self._result = None
 
-    def child_log(self, name):
+    def start(self):
+        pass
+
+    def child_log(self, name, do_start=True):
         child = SimpleLog(name)
         self._sublogs.append(child)
         return child

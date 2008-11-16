@@ -230,6 +230,12 @@ class LogSetDir(object):
         return self._get_logs(self._dir)
 
 
+class NullPathnameMapper(object):
+
+    def map_pathname(self, pathname):
+        return pathname
+
+
 class PathnameMapper(object):
 
     def __init__(self, dir_path):

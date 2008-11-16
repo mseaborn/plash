@@ -141,7 +141,7 @@ class DummyTarget(object):
 
 class FormattingTest(TempDirTestCase, GoldenTestCase):
 
-    def test_log(self):
+    def test_formatted_log_output(self):
         logs_parent_dir = self.make_temp_dir()
         logset = build_log.LogSetDir(os.path.join(logs_parent_dir, "logs"),
                                      get_time=lambda: 0)
@@ -160,6 +160,16 @@ class FormattingTest(TempDirTestCase, GoldenTestCase):
         self.assert_golden(output_dir, os.path.join(os.path.dirname(__file__),
                                                     "golden-files"))
         build_log.warn_failures(targets, stamp_time=0)
+
+    def test_format_logs_tool(self):
+        log_dir = self.make_temp_dir()
+        log = build_log.LogSetDir(log_dir).make_logger()
+        log.child_log("foo")
+        html_file = os.path.join(self.make_temp_dir(), "log.html")
+        subprocess.check_call(["python", os.path.join(os.path.dirname(__file__),
+                                                      "format_log.py"),
+                               log_dir, html_file])
+        assert os.path.exists(html_file)
 
 
 # TODO: make into a unit test

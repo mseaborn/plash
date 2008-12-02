@@ -17,42 +17,23 @@
 # 02110-1301, USA.
 
 """
-%prog [--short] <logset-dir> <output-file>
+%prog <logset-dir>
 
-Output HTML version of logs.
+Make a warning noise if the most recent completed log contains failures.
 """
 
-import gc
 import optparse
 import sys
 
-from build_log import tag
 import build_log
 
 
 def main(argv):
-    # Ubuntu Gutsy's version of python-lxml is buggy and sometimes
-    # segfaults during GC.  TODO: upgrade and remove this workaround.
-    gc.disable()
-
     parser = optparse.OptionParser(__doc__.strip())
-    parser.add_option(
-        "--short", default=False, dest="short", action="store_true",
-        help="Short version, only showing top-level items and errors")
     options, args = parser.parse_args(argv)
-    log_dir, output_file = args
+    [log_dir] = args
     logset = build_log.LogSetDir(log_dir)
-    body = build_log.tag("body")
-    for log in logset.get_logs():
-        if options.short:
-            xml = build_log.format_short_summary(
-                log.get_xml(), build_log.NullPathnameMapper())
-        else:
-            xml = build_log.format_top_log(
-                log.get_xml(), build_log.NullPathnameMapper())
-        body.append(xml)
-        body.append(tag("hr"))
-    build_log.write_xml_file(output_file, build_log.wrap_body(body))
+    build_log.warn_failures(logset.get_logs(), 0)
 
 
 if __name__ == "__main__":

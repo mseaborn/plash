@@ -17,7 +17,6 @@
 # 02110-1301, USA.
 
 import cStringIO as StringIO
-import itertools
 import os
 import shutil
 import subprocess
@@ -30,6 +29,8 @@ import lxml.etree as etree
 from chroot_build import run_cmd
 import action_tree
 import build_log
+import format_log
+import warn_log
 
 
 class NodeStreamTest(unittest.TestCase):
@@ -127,6 +128,7 @@ class LogSetDirTest(TempDirTestCase):
                           ["0", "0", "1", "2", "3", "4"])
 
 
+# TODO: remove this.
 class DummyTarget(object):
 
     def __init__(self, logset):
@@ -143,8 +145,8 @@ class FormattingTest(TempDirTestCase, GoldenTestCase):
 
     def test_formatted_log_output(self):
         logs_parent_dir = self.make_temp_dir()
-        logset = build_log.LogSetDir(os.path.join(logs_parent_dir, "logs"),
-                                     get_time=lambda: 0)
+        logs_dir = os.path.join(logs_parent_dir, "logs")
+        logset = build_log.LogSetDir(logs_dir, get_time=lambda: 0)
         log = logset.make_logger()
         sublog = log.child_log("foo")
         sublog.finish(0)
@@ -157,11 +159,11 @@ class FormattingTest(TempDirTestCase, GoldenTestCase):
         mapper = build_log.PathnameMapper(logs_parent_dir)
         build_log.format_logs(
             targets, mapper, os.path.join(output_dir, "long.html"))
-        build_log.format_short_summary(
-            targets, mapper, os.path.join(output_dir, "short.html"))
+        format_log.main(["--short", logs_dir,
+                         os.path.join(output_dir, "short.html")])
         self.assert_golden(output_dir, os.path.join(os.path.dirname(__file__),
                                                     "golden-files"))
-        build_log.warn_failures(targets, stamp_time=0)
+        warn_log.main([logs_dir])
 
     def test_format_logs_tool(self):
         log_dir = self.make_temp_dir()

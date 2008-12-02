@@ -17,7 +17,6 @@
 # 02110-1301, USA.
 
 import glob
-import itertools
 import md5
 import os
 import pwd
@@ -30,7 +29,6 @@ import traceback
 from buildutils import remove_prefix
 import action_tree
 import build_log
-import chroot_build_config
 
 # Package dependencies: debootstrap, python-lxml
 # Need the version of debootstrap from hardy in order to debootstrap hardy.
@@ -175,17 +173,6 @@ def mkdir_p(dir_path):
 def symlink_p(dest_path, symlink_path):
     if not os.path.lexists(symlink_path):
         os.symlink(dest_path, symlink_path)
-
-
-# TODO: remove this mixin and use LogSetDir directly.
-class LogDirMixin(object):
-
-    def get_log_set(self):
-        raise NotImplementedError()
-
-    def get_logs(self):
-        logs = self.get_log_set().get_logs()
-        return list(itertools.islice(logs, 20))
 
 
 def chroot_path(chroot_dir, path):
@@ -354,7 +341,7 @@ class ChrootEnv(object):
         run_cmd(log, ["sudo", "rm", "-rf", self.get_dest()])
 
 
-class Builder(LogDirMixin):
+class Builder(object):
 
     def __init__(self, chroot, base_dir, stamp_dir, name, config, deb_versions):
         self.chroot = chroot
@@ -399,9 +386,6 @@ class Builder(LogDirMixin):
 
     def get_dest(self):
         return os.path.join(self._base_dir, "chroot")
-
-    def get_log_set(self):
-        return build_log.LogSetDir(os.path.join(self._base_dir, "logs"))
 
     def get_working_dir(self):
         return os.path.join(self.get_dest(), self.chroot.get_workdir(), "plash")
@@ -772,7 +756,7 @@ class DebianVersions(object):
                  "deb_version": deb_version})
 
 
-class CombinedRepo(LogDirMixin):
+class CombinedRepo(object):
 
     def __init__(self, config, targets, dest_dir, base_dir, deb_versions):
         self._config = config
@@ -792,10 +776,6 @@ class CombinedRepo(LogDirMixin):
 
     def get_name(self):
         return "combined-repo"
-
-    def get_log_set(self):
-        return build_log.LogSetDir(
-            os.path.join(self._base_dir, "combined-repo-logs"))
 
     def make_dirs(self):
         pass
@@ -960,76 +940,6 @@ class ChrootSet(object):
     def get_next_version(self):
         return make_autobuild_version(self._time_now)
 
-    def update_log(self, html_dir):
-        targets = self.chroot_list + [self.combined]
-        build_log.format_logs(targets, self._path_mapper,
-                              os.path.join(html_dir, "summary.html"))
-        build_log.format_short_summary(targets, self._path_mapper,
-                                       os.path.join(html_dir, "short.html"))
-        warn_targets = [self.combined] + [
-            target for target in self.chroot_list
-            if target.get_name() not in self.known_failures]
-        stamp_file = "warning-stamp"
-        stamp_time = 0
-        if os.path.exists(stamp_file):
-            stamp_time = os.stat(stamp_file).st_mtime
-        build_log.warn_failures(warn_targets, stamp_time)
-
-    def main(self, args):
-        targets = []
-        actions = []
-        do_log = True
-
-        if args == ["--log"]:
-            self.update_log(html_dir=os.getcwd())
-            return
-
-        while len(args) > 0:
-            arg = args.pop(0)
-            if arg == "-c":
-                targets.extend(self.combined._targets)
-            elif arg == "-C":
-                targets.append(self.combined)
-            elif arg == "--all-targets":
-                targets.extend(self.chroot_list)
-            elif arg == "--supported":
-                targets.extend([self.chroots_by_name[name]
-                                for name in self.supported_targets])
-            elif arg == "--autobuild":
-                targets.extend([self.chroots_by_name[name]
-                                for name in self.autobuild_targets])
-            elif arg == "-t":
-                name = args.pop(0)
-                targets.append(self.chroots_by_name[name])
-            elif arg == "-a":
-                action = args.pop(0)
-                actions.append(action)
-            elif arg == "--no-log":
-                do_log = False
-            else:
-                raise Exception("Unrecognised argument: %r" % arg)
-
-        if len(targets) == 0:
-            print "No targets given"
-        if len(actions) == 0:
-            print "No actions given"
-        for target in targets:
-            target.make_dirs()
-            if do_log:
-                log = target.get_log_set().make_logger()
-            else:
-                log = build_log.DummyLogWriter()
-            try:
-                for action in actions:
-                    getattr(target, action)(log)
-            except Exception, exn:
-                log.finish(1)
-                log_last_exception(log)
-                if isinstance(exn, (KeyboardInterrupt, SystemExit)):
-                    raise
-            else:
-                log.finish(0)
-
     @action_tree.action_node
     def all(self):
         for name in self.supported_targets:
@@ -1085,11 +995,3 @@ class BuildForRelease(ChrootSet):
 
     def get_next_version(self):
         return "1.19"
-
-
-def main(args):
-    ChrootSet(chroot_build_config.ChrootConfig()).main(args)
-
-
-if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))

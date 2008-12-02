@@ -278,18 +278,21 @@ def tag(tag_name, *children):
     return tagp(tag_name, [], *children)
 
 
+def log_class(log):
+    if "result" not in log.attrib:
+        return "result_unknown"
+    elif int(log.attrib["result"]) == 0:
+        return "result_success"
+    else:
+        return "result_failure"
+
+
 def format_log(log, path_mapper, filter=lambda log: True):
     sub_logs = [format_log(sublog, path_mapper, filter)
                 for sublog in reversed(log.xpath("log"))]
     if not filter(log):
         return sub_logs
-    classes = ["log"]
-    if "result" not in log.attrib:
-        classes.append("result_unknown")
-    elif int(log.attrib["result"]) == 0:
-        classes.append("result_success")
-    else:
-        classes.append("result_failure")
+    classes = ["log", log_class(log)]
     html = tagp("div", [("class", " ".join(classes))])
     html.append(tag("span", log_duration(log) + log.attrib.get("name", "")))
     for file_node in log.xpath("file"):
@@ -356,15 +359,6 @@ def write_xml_file(filename, xml):
         fh.close()
 
 
-def log_time(log):
-    if "end_time" in log.attrib:
-        return float(log.attrib["end_time"])
-    elif "start_time" in log.attrib:
-        return float(log.attrib["start_time"])
-    else:
-        return 0
-
-
 def format_logs(targets, path_mapper, dest_filename):
     headings = tag("tr", *[tag("th", target.get_name())
                            for target in targets])
@@ -379,45 +373,23 @@ def format_logs(targets, path_mapper, dest_filename):
     write_xml_file(dest_filename, html)
 
 
-def logs_time(logs):
-    if len(logs) > 0:
-        return log_time(logs[0].get_xml())
-    else:
-        return 0
-
-
-def latest_logs(targets):
-    for target, logs in sorted([(target, list(target.get_logs()))
-                                for target in targets],
-                               key=lambda (target, logs): -logs_time(logs)):
-        if len(logs) > 0:
-            log = logs[0]
-        else:
-            log = None
-        yield (target, log)
-
-
-def format_short_summary(targets, path_mapper, dest_filename):
+def format_short_summary(log, path_mapper):
     table = tagp("table", [("class", "short_results")])
-    for target, log in latest_logs(targets):
+    for child in reversed(log.xpath("log")):
         row = tag("tr")
-        row.append(tag("td", target.get_name()))
+        row.append(tag("td", child.attrib["name"]))
+        row.append(tag("td", format_time(child, "end_time")))
+        row.append(tag("td", log_duration(child)))
 
         def filter(log):
             return int(log.attrib.get("result", "0")) != 0
 
-        if log is not None:
-            log_xml = log.get_xml()
-            row.append(tag("td", format_time(log_xml, "end_time")))
-            info = flatten(format_log(log_xml, path_mapper, filter))
-            if len(info) == 0:
-                info = tagp("div", [("class", "log result_success")], "ok")
-        else:
-            row.append(tag("td"))
-            info = "no logs"
+        info = flatten(format_log(child, path_mapper, filter))
+        if len(info) == 0:
+            info = tagp("div", [("class", "log %s" % log_class(child))], "ok")
         row.append(tag("td", info))
         table.append(row)
-    write_xml_file(dest_filename, wrap_body(table))
+    return table
 
 
 def for_some(iterator):
@@ -432,17 +404,14 @@ def log_has_failed(log):
             for_some(log_has_failed(sublog) for sublog in log.xpath("log")))
 
 
-def warn_failures(targets, stamp_time):
-    failure = False
-    for target, log in latest_logs(targets):
-        if log is not None and log_has_failed(log.get_xml()):
+def warn_failures(logs, stamp_time):
+    for log in logs:
+        if log_has_failed(log.get_xml()):
             if log.get_timestamp() > stamp_time:
-                failure = True
-                print "failed:", target.get_name()
-            else:
-                print "failed (before timestamp):", target.get_name()
-    if failure:
-        subprocess.call(["beep -l 10 -f 1000"], shell=True)
+                print "failed"
+                subprocess.call("beep -l 10 -f 1000", shell=True)
+        return
+    print "no completed logs"
 
 
 def wrap_body(body):

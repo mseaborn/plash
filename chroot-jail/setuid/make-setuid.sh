@@ -31,7 +31,10 @@ $CC -Wall -I../gensrc run-as-anonymous.c -o run-as-anonymous
 $CC -Wall -I../gensrc gc-uid-locks.c -o gc-uid-locks
 
 if which diet >/dev/null; then
-  STATIC_CC="diet $CC -fno-stack-protector"
+  # The -Wl,-z,norelro switch is a workaround for dietlibc/toolchain bugs
+  # in Ubuntu intrepid.
+  # See https://bugs.launchpad.net/ubuntu/+source/binutils/+bug/254790
+  STATIC_CC="diet $CC -fno-stack-protector -Wl,-z,norelro"
 else
   STATIC_CC="$CC"
   echo "dietlibc not found: statically linking with glibc instead"

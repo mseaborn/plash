@@ -4,9 +4,8 @@ CFLAGS = -O2 -Wall -Werror -fno-stack-protector \
 # dietlibc does not mark itself as not needing an executable stack, so
 # need "-z noexecstack" at link time.  Ideally we would only need to
 # apply this to entry.S.
-BASELINKFLAGS = -static -nostartfiles -nostdlib /usr/lib/diet/lib/libc.a \
-	-Wl,-z,noexecstack
-LINKFLAGS = $(BASELINKFLAGS) -Wl,-T,link.lds
+BASELINKFLAGS = -static -nostartfiles -nostdlib -Wl,-z,noexecstack
+LINKFLAGS = $(BASELINKFLAGS) /usr/lib/diet/lib/libc.a -Wl,-T,link.lds
 
 EXECUTABLES = chainloader chainloader-fixed test-entry test-argv test-sbrk
 

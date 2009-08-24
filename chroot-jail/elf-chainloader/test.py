@@ -171,22 +171,11 @@ env:
         assert len(maps) > 0
         return maps[0].group("start")
 
-    def assert_in(self, x, y):
-        if x not in y:
-            raise AssertionError("%r not in %r" % (x, y))
-
     def test_initial_load_position(self):
         ld_so = self._get_ld_so()
-        ld_so_address = self._find_load_address(
-            [ld_so, "/bin/cat", "/proc/self/maps"], ld_so)
         chainloader_address = self._find_load_address(
             ["bash", "-c", "exec ./chainloader 10 10<%s /bin/cat /proc/self/maps"
              % ld_so], "chainloader")
-        self.assert_in(ld_so_address,
-                       ("80000000", # 32-bit kernel
-                        "56555000", # 32-bit process on 64-bit kernel
-                        "555555554000", # 64-bit process on 64-bit kernel
-                        ))
         self.assertEquals(chainloader_address, "80000000")
 
 

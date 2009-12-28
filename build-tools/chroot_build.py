@@ -168,7 +168,7 @@ class Action(object):
 
 def mkdir_p(dir_path):
     if not os.path.exists(dir_path):
-        os.mkdir(dir_path)
+        os.makedirs(dir_path)
 
 def symlink_p(dest_path, symlink_path):
     if not os.path.lexists(symlink_path):

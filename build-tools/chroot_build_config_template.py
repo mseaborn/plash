@@ -11,6 +11,7 @@ class ChrootConfig(object):
     dest_dir = os.path.join(top_dir, "dest")
 
     work_tree = os.path.join(top_dir, "work")
+    glibc_work_tree = os.path.join(top_dir, "glibc")
 
     # SVN working dir and Git repository/working dir.
     # These can be symlinks.

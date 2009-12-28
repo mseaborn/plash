@@ -385,7 +385,7 @@ class Builder(object):
             self.copy_source,
             self.add_local_debian_repo,
             ("chroot-jail", self._jail_module.build_generic_deb),
-            self.clone_glibc_source,
+            self.copy_glibc_source,
             self._plash_module.build_plash,
             ("gtk-powerbox-hook", self._gtkhook_module.build_generic_deb)]
 
@@ -398,23 +398,15 @@ class Builder(object):
     def get_name(self):
         return self._name
 
-    def clone_glibc_source(self, log):
-        glibc_source_dir = os.path.join(self._top_abs_dir, "plash",
-                                        "glibc-source")
-        if not os.path.exists(glibc_source_dir):
-            # Might consider using --local, which hard links Git
-            # object data, instead of --shared.
-            self.chroot.run_cmd_as_normal_user(
-                log, ["git-clone", "--shared", self._config.glibc_git_repo,
-                      glibc_source_dir])
-        else:
-            self.chroot.run_cmd_as_normal_user(log, ["git-pull"],
-                                               cwd=glibc_source_dir)
-
     def copy_source(self, log):
         self.chroot.run_cmd_as_normal_user(
             log, ["cp", "-T", "-a", "--update", self._config.work_tree,
                   self._top_abs_dir])
+
+    def copy_glibc_source(self, log):
+        self.chroot.run_cmd_as_normal_user(
+            log, ["cp", "-T", "-a", "--update", self._config.glibc_work_tree,
+                  os.path.join(self._top_abs_dir, "plash", "glibc-source")])
 
     def add_local_debian_repo(self, log):
         self.chroot.in_chroot_root(

@@ -904,8 +904,8 @@ class ChrootSet(object):
                          "amd64-ubuntu-gutsy",
                          "i386-ubuntu-hardy",
                          "amd64-ubuntu-hardy",
-                         # "i386-ubuntu-intrepid", # build fails
-                         # "amd64-ubuntu-intrepid",
+                         "i386-ubuntu-intrepid",
+                         "amd64-ubuntu-intrepid",
                          "i386-debian-lenny",
                          "amd64-debian-lenny",
                          ]

@@ -10,6 +10,8 @@ class ChrootConfig(object):
     state_dir = top_dir
     dest_dir = os.path.join(top_dir, "dest")
 
+    work_tree = os.path.join(top_dir, "work")
+
     # SVN working dir and Git repository/working dir.
     # These can be symlinks.
     plash_svn_template = os.path.join(top_dir, "master/plash")

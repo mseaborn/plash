@@ -134,17 +134,6 @@ def is_mounted(path):
     return os.path.realpath(path) in list(get_all_mounts())
 
 
-def svn_update(log, run_command, dir_path):
-    # svn often fails so we need to retry
-    for i in range(5):
-        try:
-            run_command(log, ["svn", "update"], cwd=dir_path)
-        except CommandFailedError:
-            time.sleep(5)
-        else:
-            break
-
-
 def log_last_exception(log):
     log_file = log.make_file()
     try:
@@ -367,7 +356,6 @@ class Builder(object):
         self._stamp_dir = stamp_dir
         self.dist = chroot.get_debootstrapper().get_dist()
         self._name = name
-        self._template = config.plash_svn_template
         self._config = config
         top_dir = os.path.join(self.chroot.get_workdir(), "plash")
         self._top_abs_dir = os.path.join(self.get_dest(), top_dir)
@@ -394,8 +382,7 @@ class Builder(object):
     def all_steps(self):
         return [
             self.chroot.set_up,
-            self._stamp_dir.wrap_action("copy_source", self.copy_source),
-            self.svn_update,
+            self.copy_source,
             self.add_local_debian_repo,
             ("chroot-jail", self._jail_module.build_generic_deb),
             self.clone_glibc_source,
@@ -425,16 +412,9 @@ class Builder(object):
                                                cwd=glibc_source_dir)
 
     def copy_source(self, log):
-        if self._config.enable_svn:
-            svn_update(log, self.chroot.run_cmd_as_normal_user, self._template)
-        dest = self._top_abs_dir
-        assert not os.path.exists(dest)
-        run_cmd(log, ["cp", "-a", os.path.realpath(self._template), dest])
-
-    def svn_update(self, log):
-        if self._config.enable_svn:
-            svn_update(log, self.chroot.run_cmd_as_normal_user,
-                       self._top_abs_dir)
+        self.chroot.run_cmd_as_normal_user(
+            log, ["cp", "-T", "-a", "--update", self._config.work_tree,
+                  self._top_abs_dir])
 
     def add_local_debian_repo(self, log):
         self.chroot.in_chroot_root(

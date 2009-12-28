@@ -234,8 +234,10 @@ class StampDir(object):
 
 class ChrootEnv(object):
 
-    def __init__(self, chroot_dir, stamp_dir, username, debootstrapper):
+    def __init__(self, chroot_dir, real_workdir, stamp_dir,
+                 username, debootstrapper):
         self._chroot_dir = chroot_dir
+        self._real_workdir = real_workdir
         self._stamp_dir = stamp_dir
         self._username = username
         self._debootstrapper = debootstrapper
@@ -278,6 +280,20 @@ class ChrootEnv(object):
     def set_up_etc_hosts(self, log):
         self.in_chroot_root(log, write_file_cmd("/etc/hosts",
                                                 "127.0.0.1 localhost\n"))
+
+    def create_workdir(self, log):
+        if not os.path.exists(self._real_workdir):
+            run_cmd(log, ["sudo", "mkdir", self._real_workdir])
+            run_cmd(log, ["sudo", "chown", "%s:" % self._username,
+                          self._real_workdir])
+
+    def mount_workdir(self, log):
+        dest_path = os.path.join(self.get_dest(), self._workdir)
+        if not os.path.exists(dest_path):
+            os.mkdir(dest_path)
+        if not is_mounted(dest_path):
+            run_cmd(log, ["sudo", "mount", "--bind", self._real_workdir,
+                          dest_path])
 
     def create_user(self, log):
         uid = pwd.getpwnam(self._username).pw_uid
@@ -323,6 +339,8 @@ class ChrootEnv(object):
                 self.bind_mount_dev,
                 self._stamp_dir.wrap_action("install_base", self.install_base),
                 self.set_up_etc_hosts,
+                self.create_workdir,
+                self.mount_workdir,
                 self._stamp_dir.wrap_action("create_user", self.create_user)]
 
     def shell(self, log):
@@ -888,6 +906,7 @@ def get_targets(config, deb_versions):
             base_dir = os.path.join(config.dest_dir, name)
             stamps = StampDir(os.path.join(base_dir, "stamps"))
             chroot_env = ChrootEnv(os.path.join(base_dir, "chroot"),
+                                   os.path.join(base_dir, "work"),
                                    stamps, config.normal_user, bootstrapper)
             targets.append((name,
                             Builder(chroot_env, base_dir, stamps, name, config,

@@ -768,6 +768,8 @@ class CombinedRepo(object):
                             "gutsy": "ubuntu-gutsy",
                             "hardy": "ubuntu-hardy",
                             "intrepid": "ubuntu-intrepid",
+                            "jaunty": "ubuntu-jaunty",
+                            "karmic": "ubuntu-karmic",
                             "etch": "debian-etch",
                             "lenny": "debian-lenny",
                             "sid": "debian-sid"}
@@ -873,6 +875,8 @@ def get_targets(config, deb_versions):
         (ubuntu, "gutsy"),
         (ubuntu, "hardy"),
         (ubuntu, "intrepid"),
+        (ubuntu, "jaunty"),
+        (ubuntu, "karmic"),
         (debian, "etch"),
         (debian, "lenny"),
         (debian, "sid")]
@@ -906,6 +910,10 @@ class ChrootSet(object):
                          "amd64-ubuntu-hardy",
                          "i386-ubuntu-intrepid",
                          "amd64-ubuntu-intrepid",
+                         "i386-ubuntu-jaunty",
+                         "amd64-ubuntu-jaunty",
+                         "i386-ubuntu-karmic",
+                         "amd64-ubuntu-karmic",
                          "i386-debian-lenny",
                          "amd64-debian-lenny",
                          ]

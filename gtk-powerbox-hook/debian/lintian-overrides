@@ -1,0 +1,7 @@
+
+# None of these matter because we are not providing a real library,
+# just an LD_PRELOAD object.
+
+gtk-powerbox-hook: shlib-without-versioned-soname usr/lib/libgtk-powerbox-hook.so libgtk-powerbox-hook.so
+gtk-powerbox-hook: pkg-has-shlibs-control-file-but-no-actual-shared-libs
+gtk-powerbox-hook: package-name-doesnt-match-sonames libgtk-powerbox-hook

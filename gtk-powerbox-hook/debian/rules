@@ -17,6 +17,10 @@ binary-arch:
 	ln -s libgtk-powerbox-hook.so \
 		debian/gtk-powerbox-hook/usr/lib/powerbox-for-gtk.so
 
+	mkdir -p debian/gtk-powerbox-hook/usr/share/lintian/overrides
+	cp -av debian/lintian-overrides \
+	  debian/gtk-powerbox-hook/usr/share/lintian/overrides/gtk-powerbox-hook
+
 	dh_makeshlibs
 	dh_shlibdeps
 	dh_fixperms

@@ -304,6 +304,14 @@ class ChrootEnv(object):
         if not is_mounted(dest_path):
             run_cmd(log, ["sudo", "mount", "--rbind", "/dev", dest_path])
 
+    def disable_daemons(self, log):
+        # This script tells chrooted packages not to launch any daemon
+        # processes.  This is a workaround for rsyslog's behaviour in
+        # Ubuntu karmic: it tries to connect to Upstart.
+        self.in_chroot_root(log,
+            write_file_cmd("/usr/sbin/policy-rc.d", "#!/bin/sh\nexit 101"))
+        self.in_chroot_root(log, ["chmod", "+x", "/usr/sbin/policy-rc.d"])
+
     def bind_x11(self, log):
         dest_path = os.path.join(self.get_dest(), "tmp/.X11-unix")
         if not is_mounted(dest_path):
@@ -326,6 +334,7 @@ class ChrootEnv(object):
                 self._stamp_dir.wrap_action("make_chroot", self.make_chroot),
                 self.mount_proc_fs,
                 self.bind_mount_dev,
+                self.disable_daemons,
                 self._stamp_dir.wrap_action("install_base", self.install_base),
                 self.set_up_etc_hosts,
                 self.create_workdir,

@@ -773,6 +773,7 @@ class CombinedRepo(object):
                             "karmic": "ubuntu-karmic",
                             "etch": "debian-etch",
                             "lenny": "debian-lenny",
+                            "squeeze": "debian-squeeze",
                             "sid": "debian-sid"}
 
     def get_name(self):
@@ -879,7 +880,8 @@ def get_targets(config, deb_versions):
         (ubuntu, "jaunty"),
         (ubuntu, "karmic"),
         (debian, "etch"),
-        (debian, "lenny"),
+        (debian, "lenny"),   # current Debian "stable"
+        (debian, "squeeze"), # current Debian "testing"
         (debian, "sid")]
     targets = []
     for distro, release in cases:
@@ -917,6 +919,8 @@ class ChrootSet(object):
                          "amd64-ubuntu-karmic",
                          "i386-debian-lenny",
                          "amd64-debian-lenny",
+                         "i386-debian-squeeze",
+                         "amd64-debian-squeeze",
                          ]
     autobuild_targets = ["i386-debian-etch",
                          ]

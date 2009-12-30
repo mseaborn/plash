@@ -873,8 +873,8 @@ def get_targets(config, deb_versions):
               "subdists": ["main"]}
     cases = [
         (ubuntu_old, "edgy"),
-        (ubuntu, "feisty"),
-        (ubuntu, "gutsy"),
+        (ubuntu_old, "feisty"),
+        (ubuntu_old, "gutsy"),
         (ubuntu, "hardy"),
         (ubuntu, "intrepid"),
         (ubuntu, "jaunty"),
